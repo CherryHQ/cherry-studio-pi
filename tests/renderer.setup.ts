@@ -57,6 +57,42 @@ vi.mock('@data/hooks/useCache', async () => {
   return MockUseCache
 })
 
+// Mock PreferenceService globally for renderer tests
+vi.mock('@data/PreferenceService', async () => {
+  const { MockPreferenceService } = await import('./__mocks__/renderer/PreferenceService')
+  return MockPreferenceService
+})
+
+// Mock DataApiService globally for renderer tests
+vi.mock('@data/DataApiService', async () => {
+  const { MockDataApiService } = await import('./__mocks__/renderer/DataApiService')
+  return MockDataApiService
+})
+
+// Mock CacheService globally for renderer tests
+vi.mock('@data/CacheService', async () => {
+  const { MockCacheService } = await import('./__mocks__/renderer/CacheService')
+  return MockCacheService
+})
+
+// Mock useDataApi hooks globally for renderer tests
+vi.mock('@data/hooks/useDataApi', async () => {
+  const { MockUseDataApi } = await import('./__mocks__/renderer/useDataApi')
+  return MockUseDataApi
+})
+
+// Mock usePreference hooks globally for renderer tests
+vi.mock('@data/hooks/usePreference', async () => {
+  const { MockUsePreference } = await import('./__mocks__/renderer/usePreference')
+  return MockUsePreference
+})
+
+// Mock useCache hooks globally for renderer tests
+vi.mock('@data/hooks/useCache', async () => {
+  const { MockUseCache } = await import('./__mocks__/renderer/useCache')
+  return MockUseCache
+})
+
 // Mock uuid globally for renderer tests
 let uuidCounter = 0
 vi.mock('uuid', () => ({
@@ -111,12 +147,27 @@ vi.stubGlobal('api', {
   }
 })
 
+// Markdown stylesheet import is a side-effect no-op in tests
+vi.mock('@cherrystudio/ui/components/composites/markdown/styles', () => ({}))
+
 // Mock @cherrystudio/ui globally for renderer tests
 vi.mock('@cherrystudio/ui', () => {
   const React = require('react')
   const SelectContext = React.createContext({ value: undefined, onValueChange: undefined })
   const PopoverContext = React.createContext({ open: false, onOpenChange: undefined })
   return {
+    // Markdown — `@cherrystudio/ui` barrel re-exports composites/markdown (#16228).
+    // Lightweight stand-ins so tests mounting real ChatMarkdown still surface text.
+    Markdown: ({ children }) => React.createElement('div', null, children),
+    StreamingMarkdown: ({ children }) => React.createElement('div', null, children),
+    withChatPlugins: () => [],
+    withMath: (plugins) => plugins ?? [],
+    withMermaid: (plugins) => plugins ?? [],
+    withFullMarkdown: (plugins) => plugins ?? [],
+    defaultMarkdownPlugins: [],
+    useMarkdownBlockContext: () => ({ content: '' }),
+    createSlugger: () => ({ slug: (value) => String(value ?? '') }),
+    extractTextFromNode: () => '',
     Button: ({ children, onPress, disabled, isDisabled, startContent, asChild, ...props }) => {
       const buttonProps = { ...props, onClick: onPress ?? props.onClick, disabled: disabled || isDisabled }
       if (asChild && React.isValidElement(children)) {
@@ -270,14 +321,10 @@ vi.mock('@cherrystudio/ui', () => {
       ),
     ImagePreviewTrigger: ({ alt, item, ...props }) =>
       React.createElement('img', { ...props, alt: alt ?? item?.alt, src: item?.src }),
-    Dialog: ({ children, open, onOpenChange, ...props }) => {
-      void onOpenChange
-      return open ? React.createElement('div', { ...props, 'data-testid': 'dialog' }, children) : null
-    },
+    Dialog: ({ children, open, ...props }) =>
+      open ? React.createElement('div', { ...props, 'data-testid': 'dialog' }, children) : null,
     DialogContent: ({ children, ...props }) =>
       React.createElement('div', { ...props, 'data-testid': 'dialog-content' }, children),
-    Divider: ({ children, ...props }) =>
-      React.createElement('div', { ...props, role: 'separator', 'data-testid': 'divider' }, children),
     DialogHeader: ({ children, ...props }) =>
       React.createElement('div', { ...props, 'data-testid': 'dialog-header' }, children),
     DialogTitle: ({ children, ...props }) =>
@@ -368,13 +415,16 @@ vi.mock('@cherrystudio/ui', () => {
           )
         )
       ),
-    Tooltip: ({ children, title, content, mouseEnterDelay, ...props }) => {
+    Tooltip: ({ children, title, content, mouseEnterDelay, classNames, className, ...props }) => {
       // Support both old (title) and new (content) API
       const tooltipText = content || title
+      // Mirror the real Tooltip: the trigger wrapper carries classNames.placeholder.
+      const wrapperClassName = [className, classNames?.placeholder].filter(Boolean).join(' ') || undefined
       return React.createElement(
         'div',
         {
           ...props,
+          ...(wrapperClassName && { className: wrapperClassName }),
           'data-testid': 'tooltip',
           ...(tooltipText && { 'data-title': tooltipText }),
           'data-mouse-enter-delay': mouseEnterDelay
@@ -512,25 +562,24 @@ vi.mock('@cherrystudio/ui', () => {
       React.createElement('div', { ...props, 'data-testid': 'avatar-fallback' }, children),
     EmojiAvatar: ({ children, ...props }) =>
       React.createElement('div', { ...props, 'data-testid': 'emoji-avatar' }, children),
-    Switch: ({
-      checked,
-      classNames: _classNames,
-      isSelected,
-      loading,
-      onCheckedChange,
-      onValueChange,
-      size: _size,
-      ...props
-    }) =>
+    EmojiIcon: ({ emoji, className, fluid, fontSize }) =>
+      React.createElement(
+        'div',
+        {
+          className,
+          'data-testid': 'emoji-icon',
+          ...(fluid !== undefined ? { 'data-fluid': String(fluid) } : {}),
+          ...(fontSize !== undefined ? { 'data-font-size': String(fontSize) } : {})
+        },
+        React.createElement('span', { 'aria-hidden': 'true', 'data-testid': 'emoji-icon-background' }, emoji || '⭐️'),
+        emoji
+      ),
+    Switch: ({ isSelected, onValueChange, ...props }) =>
       React.createElement('input', {
         ...props,
         type: 'checkbox',
-        checked: checked ?? isSelected,
-        disabled: props.disabled || loading,
-        onChange: (e) => {
-          onCheckedChange?.(e.target.checked)
-          onValueChange?.(e.target.checked)
-        },
+        checked: isSelected,
+        onChange: (e) => onValueChange?.(e.target.checked),
         'data-testid': 'switch'
       }),
     // Popover primitives — Radix-style trigger / content split

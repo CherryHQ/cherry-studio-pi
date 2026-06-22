@@ -1,5 +1,5 @@
 import type { ModelValidationError } from '@main/ai/modelValidation'
-import type { AgentType } from '@types'
+import type { AgentType } from '@shared/data/types/agent'
 
 export type AgentModelField = 'model' | 'plan_model' | 'small_model'
 

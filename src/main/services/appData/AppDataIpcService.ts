@@ -3,7 +3,7 @@ import { storageV2AppDataKvMirrorService } from '@main/services/storageV2/AppDat
 import { storageV2AppDataRuntimeRecoveryService } from '@main/services/storageV2/AppDataRuntimeRecoveryService'
 import { describeWebDavUserFacingError } from '@main/services/WebDavRetry'
 import { IpcChannel } from '@shared/IpcChannel'
-import type { WebDavConfig } from '@types'
+import type { WebDavConfig } from '@shared/types/backup'
 import { ipcMain } from 'electron'
 
 import { createWorkbenchShortcutRecord, getAppDataDatabase } from './AppDataDatabase'

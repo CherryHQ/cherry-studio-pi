@@ -11,8 +11,8 @@ import {
   RENDERER_SET_DATA_SYNC_SETTINGS_BRIDGE
 } from '@shared/dataSyncBridge'
 import { IpcChannel } from '@shared/IpcChannel'
+import type { WebDavConfig } from '@shared/types/backup'
 import { normalizeWebDavConfig } from '@shared/webdavConfig'
-import type { WebDavConfig } from '@types'
 import { BrowserWindow } from 'electron'
 
 import { callRendererBridge, getBridgeErrorMessage } from '../rendererBridge'

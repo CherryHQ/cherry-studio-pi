@@ -4,7 +4,7 @@ import path from 'node:path'
 import { Readable } from 'node:stream'
 import { gzipSync } from 'node:zlib'
 
-import type { WebDavConfig } from '@types'
+import type { WebDavConfig } from '@shared/types/backup'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WebDAVClient } from 'webdav'
 

@@ -1,83 +1,44 @@
 import { loggerService } from '@logger'
-import { closeTransientResourceSelectors } from '@renderer/components/ResourceSelector/resourceSelectorEvents'
+import { resolveSidebarAppTabEntryUrl } from '@renderer/config/sidebar'
 import { usePersistCache } from '@renderer/data/hooks/useCache'
 import { TabLruManager } from '@renderer/services/TabLruManager'
-import { uuid } from '@renderer/utils'
-import { getDefaultRouteTitle, shouldAutoLocalizeRouteTitle } from '@renderer/utils/routeTitle'
+import { getDefaultRouteTitle, isPageTitledRoute, isTopLevelRoute } from '@renderer/utils/routeTitle'
 import type { Tab, TabSavedState, TabType } from '@shared/data/cache/cacheValueTypes'
 import { IpcChannel } from '@shared/IpcChannel'
 import type { ReactNode } from 'react'
 import { createContext, use, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { flushSync } from 'react-dom'
 import { useTranslation } from 'react-i18next'
+import { v4 as uuid } from 'uuid'
 
 const logger = loggerService.withContext('TabsContext')
 
 const DEFAULT_TAB: Tab = {
   id: 'home',
   type: 'route',
-  url: '/home',
+  url: '/app/chat',
   title: '',
   lastAccessTime: Date.now(),
   isDormant: false
 }
 
-function normalizeLegacyRouteUrl(url: string): string {
-  if (url === '/agents') return '/app/agents'
-  if (url.startsWith('/agents?') || url.startsWith('/agents#')) return `/app${url}`
-  if (!url.startsWith('/agents/')) return url
-
-  const queryStart = url.search(/[?#]/)
-  const suffix = queryStart >= 0 ? url.slice(queryStart) : ''
-  return `/app/agents${suffix}`
-}
-
-function normalizeTabRoute(tab: Tab): Tab {
-  if (tab.type !== 'route') return tab
-
-  const url = normalizeLegacyRouteUrl(tab.url)
-  return url === tab.url
-    ? tab
-    : { ...tab, url, title: shouldAutoLocalizeRouteTitle(url) ? getDefaultRouteTitle(url) : tab.title }
-}
-
 function withLocalizedRouteTitle(tab: Tab): Tab {
   if (tab.type !== 'route') return tab
-  // Only auto-localize routes whose titles come from route defaults.
-  // Parameterized routes (e.g. /app/mini-app/<id>) preserve the title supplied
-  // at openTab time so callers can pass per-entity names like a mini-app's
-  // display name.
-  if (!shouldAutoLocalizeRouteTitle(tab.url)) return tab
+  // Chat / agent tabs are page-titled (topic / session name + assistant / agent
+  // emoji set by their page) — never auto-localize, or the route title clobbers
+  // the page title even for the bare `/app/chat` default tab.
+  if (isPageTitledRoute(tab.url)) {
+    return tab.title ? tab : { ...tab, title: getDefaultRouteTitle(tab.url) }
+  }
+  if (tab.id === 'home') return { ...tab, title: getDefaultRouteTitle(tab.url) }
+  // Only auto-localize titles for top-level and settings routes. Parameterized
+  // routes (e.g. /app/mini-app/<id>) preserve the title supplied at openTab
+  // time so callers can pass per-entity names like a mini-app's display name.
+  if (!isTopLevelRoute(tab.url) && !isSettingsRouteTab(tab)) return tab
   return { ...tab, title: getDefaultRouteTitle(tab.url) }
 }
 
-function isValidCachedTab(value: unknown): value is Tab {
-  if (!value || typeof value !== 'object') return false
-
-  const tab = value as Partial<Tab>
-  return typeof tab.id === 'string' && tab.id.trim().length > 0 && typeof tab.url === 'string'
-}
-
-function sanitizeUserTabs(tabs: unknown): Tab[] {
-  if (!Array.isArray(tabs)) return []
-
-  return tabs
-    .filter(isValidCachedTab)
-    .filter((tab) => tab.id !== DEFAULT_TAB.id)
-    .map(normalizeTabRoute)
-}
-
-function hasPersistedPinnedHomeTab(tabs: unknown): boolean {
-  return Array.isArray(tabs) && tabs.some((tab) => isValidCachedTab(tab) && tab.id === DEFAULT_TAB.id)
-}
-
-function closeTransientSurfacesBeforeTabChange() {
-  // KeepAlive tabs are hidden with React Activity. If a resource selector portal
-  // is still closing when the old tab becomes hidden, it can remain attached to
-  // document.body and float over the newly active tab. Flush the close event
-  // synchronously before changing tab visibility.
-  // eslint-disable-next-line @eslint-react/dom/no-flush-sync -- close body portals before hiding the current Activity tab.
-  flushSync(closeTransientResourceSelectors)
+function isSettingsRouteTab(tab: Tab): boolean {
+  return tab.type === 'route' && tab.url.startsWith('/settings')
 }
 
 /**
@@ -94,6 +55,8 @@ export interface OpenTabOptions {
   id?: string
   /** Per-entity icon descriptor (e.g. mini-app logo string); rendered in the tab bar when set */
   icon?: string
+  /** Optional tab metadata copied into the newly-created tab. */
+  metadata?: Tab['metadata']
 }
 
 export interface TabsContextValue {
@@ -131,37 +94,45 @@ export interface TabsContextValue {
 
 const TabsContext = createContext<TabsContextValue | null>(null)
 
-export function TabsProvider({ children }: { children: ReactNode }) {
+type TabsProviderProps = {
+  children: ReactNode
+  initialDefaultTab?: Tab | null
+  includePinnedTabs?: boolean
+}
+
+export function TabsProvider({
+  children,
+  initialDefaultTab = DEFAULT_TAB,
+  includePinnedTabs = true
+}: TabsProviderProps) {
+  // Route-derived tab titles are localized, so recompute them on language change.
   const { i18n } = useTranslation()
 
   // Pinned tabs - persistent storage
   const [pinnedTabs, setPinnedTabsRaw] = usePersistCache('ui.tab.pinned_tabs')
 
-  // Normal tabs - in-memory storage (cleared on restart), excludes home tab
-  const [normalTabs, setNormalTabs] = useState<Tab[]>([])
-
-  const pinnedUserTabs = useMemo(() => sanitizeUserTabs(pinnedTabs), [pinnedTabs])
-  const normalUserTabs = useMemo(() => sanitizeUserTabs(normalTabs), [normalTabs])
-
   // Use ref to keep a reference to the latest pinnedTabs, avoiding closure issues
-  const pinnedTabsRef = useRef(pinnedUserTabs)
-  pinnedTabsRef.current = pinnedUserTabs
+  const pinnedTabsRef = useRef(pinnedTabs)
+  pinnedTabsRef.current = pinnedTabs
 
   // Wrap setter to support functional updates
   const setPinnedTabs = useCallback(
     (updater: Tab[] | ((prev: Tab[]) => Tab[])) => {
       if (typeof updater === 'function') {
-        const newValue = updater(pinnedTabsRef.current)
-        setPinnedTabsRaw(sanitizeUserTabs(newValue))
+        const newValue = updater(pinnedTabsRef.current || [])
+        setPinnedTabsRaw(newValue)
       } else {
-        setPinnedTabsRaw(sanitizeUserTabs(updater))
+        setPinnedTabsRaw(updater)
       }
     },
     [setPinnedTabsRaw]
   )
 
+  // Normal tabs - in-memory storage (cleared on restart)
+  const [normalTabs, setNormalTabs] = useState<Tab[]>(() => (initialDefaultTab ? [initialDefaultTab] : []))
+
   // Active tab ID - in-memory storage
-  const [activeTabId, setActiveTabIdState] = useState<string>(DEFAULT_TAB.id)
+  const [activeTabId, setActiveTabIdState] = useState<string>(() => initialDefaultTab?.id ?? '')
 
   // LRU manager (singleton)
   const lruManagerRef = useRef<TabLruManager | null>(null)
@@ -186,19 +157,11 @@ export function TabsProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
-  // Merge tabs: home + pinned + normal (route titles follow current i18n language)
+  // Merge tabs: pinned + normal (route titles follow current i18n language)
   const tabs = useMemo(() => {
-    const home = withLocalizedRouteTitle({ ...DEFAULT_TAB })
-    return [home, ...pinnedUserTabs.map(withLocalizedRouteTitle), ...normalUserTabs.map(withLocalizedRouteTitle)]
-    // getDefaultRouteTitle reads the shared i18n instance; language refreshes those derived titles.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pinnedUserTabs, normalUserTabs, i18n.language])
-
-  useEffect(() => {
-    if (hasPersistedPinnedHomeTab(pinnedTabs)) {
-      setPinnedTabsRaw(pinnedUserTabs)
-    }
-  }, [pinnedTabs, pinnedUserTabs, setPinnedTabsRaw])
+    const currentPinnedTabs = includePinnedTabs ? pinnedTabs || [] : []
+    return [...currentPinnedTabs.map(withLocalizedRouteTitle), ...normalTabs.map(withLocalizedRouteTitle)]
+  }, [includePinnedTabs, pinnedTabs, normalTabs, i18n.language])
 
   /**
    * Hibernate tab (manual)
@@ -247,21 +210,14 @@ export function TabsProvider({ children }: { children: ReactNode }) {
     (id: string, updates: Partial<Tab>) => {
       const tab = tabs.find((t) => t.id === id)
       if (!tab) return
-      const normalizedUpdates =
-        tab.type === 'route' && typeof updates.url === 'string'
-          ? { ...updates, url: normalizeLegacyRouteUrl(updates.url) }
-          : updates
-      if (id === activeTabId && normalizedUpdates.url && normalizedUpdates.url !== tab.url) {
-        closeTransientSurfacesBeforeTabChange()
-      }
 
       if (tab.isPinned) {
-        setPinnedTabs((prev) => prev.map((t) => (t.id === id ? normalizeTabRoute({ ...t, ...normalizedUpdates }) : t)))
+        setPinnedTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)))
       } else {
-        setNormalTabs((prev) => prev.map((t) => (t.id === id ? normalizeTabRoute({ ...t, ...normalizedUpdates }) : t)))
+        setNormalTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)))
       }
     },
-    [activeTabId, tabs, setPinnedTabs]
+    [tabs, setPinnedTabs]
   )
 
   const setActiveTab = useCallback(
@@ -270,7 +226,6 @@ export function TabsProvider({ children }: { children: ReactNode }) {
 
       const targetTab = tabs.find((t) => t.id === id)
       if (!targetTab) return
-      closeTransientSurfacesBeforeTabChange()
 
       // If a dormant tab was awakened, log it
       if (targetTab.isDormant) {
@@ -301,13 +256,12 @@ export function TabsProvider({ children }: { children: ReactNode }) {
         setActiveTab(tab.id)
         return
       }
-      closeTransientSurfacesBeforeTabChange()
 
-      const newTab: Tab = normalizeTabRoute({
+      const newTab: Tab = {
         ...tab,
         lastAccessTime: Date.now(),
         isDormant: false
-      })
+      }
 
       if (tab.isPinned) {
         setPinnedTabs((prev) => [...prev, newTab])
@@ -325,7 +279,6 @@ export function TabsProvider({ children }: { children: ReactNode }) {
     (id: string) => {
       const tab = tabs.find((t) => t.id === id)
       if (!tab) return
-      if (tab.id === DEFAULT_TAB.id || tabs.length <= 1) return
 
       // Calculate new activeTabId
       let newActiveId = activeTabId
@@ -334,9 +287,6 @@ export function TabsProvider({ children }: { children: ReactNode }) {
         const remainingTabs = tabs.filter((t) => t.id !== id)
         const nextTab = remainingTabs[index - 1] || remainingTabs[index] || remainingTabs[0]
         newActiveId = nextTab ? nextTab.id : ''
-      }
-      if (newActiveId !== activeTabId) {
-        closeTransientSurfacesBeforeTabChange()
       }
 
       if (tab.isPinned) {
@@ -353,16 +303,12 @@ export function TabsProvider({ children }: { children: ReactNode }) {
   const setTabs = useCallback(
     (newTabs: Tab[] | ((prev: Tab[]) => Tab[])) => {
       const resolvedTabs = typeof newTabs === 'function' ? newTabs(tabs) : newTabs
-      const userTabs = resolvedTabs.filter((t) => t.id !== DEFAULT_TAB.id)
-      const pinned = userTabs.filter((t) => t.isPinned)
-      const normal = userTabs.filter((t) => !t.isPinned)
+      const pinned = resolvedTabs.filter((t) => t.isPinned)
+      const normal = resolvedTabs.filter((t) => !t.isPinned)
       setPinnedTabs(pinned)
       setNormalTabs(normal)
-      if (![DEFAULT_TAB.id, ...userTabs.map((t) => t.id)].includes(activeTabId)) {
-        setActiveTabIdState(DEFAULT_TAB.id)
-      }
     },
-    [activeTabId, tabs, setPinnedTabs]
+    [tabs, setPinnedTabs]
   )
 
   /**
@@ -370,11 +316,10 @@ export function TabsProvider({ children }: { children: ReactNode }) {
    */
   const openTab = useCallback(
     (url: string, options: OpenTabOptions = {}) => {
-      const { forceNew = false, title, type = 'route', id, icon } = options
-      const normalizedUrl = type === 'route' ? normalizeLegacyRouteUrl(url) : url
+      const { forceNew = false, title, type = 'route', id, icon, metadata } = options
 
       if (!forceNew) {
-        const existingTab = tabs.find((t) => t.type === type && t.url === normalizedUrl)
+        const existingTab = tabs.find((t) => t.type === type && t.url === url)
         if (existingTab) {
           setActiveTab(existingTab.id)
           return existingTab.id
@@ -384,9 +329,10 @@ export function TabsProvider({ children }: { children: ReactNode }) {
       const newTab: Tab = {
         id: id || uuid(),
         type,
-        url: normalizedUrl,
-        title: title || getDefaultRouteTitle(normalizedUrl),
+        url,
+        title: title || getDefaultRouteTitle(url),
         icon,
+        metadata,
         lastAccessTime: Date.now(),
         isDormant: false
       }
@@ -403,7 +349,7 @@ export function TabsProvider({ children }: { children: ReactNode }) {
   const pinTab = useCallback(
     (id: string) => {
       const tab = tabs.find((t) => t.id === id)
-      if (!tab || tab.id === DEFAULT_TAB.id || tab.isPinned) return
+      if (!tab || tab.isPinned) return
 
       // Remove from normalTabs
       setNormalTabs((prev) => prev.filter((t) => t.id !== id))
@@ -467,7 +413,10 @@ export function TabsProvider({ children }: { children: ReactNode }) {
       if (!tab) return
 
       // Send IPC message to create new window
-      window.electron.ipcRenderer.send(IpcChannel.Tab_Detach, tab)
+      window.electron.ipcRenderer.send(IpcChannel.Tab_Detach, {
+        ...tab,
+        url: resolveSidebarAppTabEntryUrl(tab)
+      })
 
       // Remove tab from current window — closeTab handles both pinned and normal tabs
       closeTab(tabId)
@@ -488,14 +437,12 @@ export function TabsProvider({ children }: { children: ReactNode }) {
         return
       }
 
-      closeTransientSurfacesBeforeTabChange()
-
       // Restore tab with updated timestamp
-      const restoredTab: Tab = normalizeTabRoute({
+      const restoredTab: Tab = {
         ...tabData,
         lastAccessTime: Date.now(),
         isDormant: false
-      })
+      }
 
       // Add to appropriate storage
       if (restoredTab.isPinned) {

@@ -1659,10 +1659,10 @@
       "claude_code": "Anthropic 官方 CLI 编程助手",
       "gemini_cli": "Google Gemini 命令行助手",
       "github_copilot_cli": "GitHub Copilot 命令行版本",
-      "iflow_cli": "iFlow 推出的多模型 CLI 助手",
       "kimi_cli": "Moonshot Kimi 命令行助手",
       "openai_codex": "OpenAI 官方代码生成 CLI",
       "opencode": "开源社区的多模型代码 Agent",
+      "qoder_cli": "阿里 Qoder 的智能体命令行编程工具",
       "qwen_code": "阿里通义出品的开源 CLI 编程工具"
     },
     "update_options": "更新选项",
@@ -2155,13 +2155,13 @@
         "view_chunks": "查看 Chunks"
       },
       "add_dialog": {
-        "directory": {
-          "description": "将递归导入文件夹中的支持文件",
-          "title": "点击选择文件夹"
+        "conflict_dialog": {
+          "description": "有 {{count}} 个数据源与知识库中已存在的项目同名，请选择处理方式。",
+          "keep_all": "全部保留",
+          "replace": "替换",
+          "title": "存在同名数据源"
         },
         "footer": {
-          "selected_directories": "已选 {{count}} 个目录",
-          "selected_files": "已选 {{count}} 个文件",
           "selected_notes": "已选 {{count}} 个笔记"
         },
         "note": {
@@ -2185,6 +2185,7 @@
           "success": "数据源已添加到知识库"
         },
         "title": "添加数据源",
+        "unsupported_files_skipped": "已跳过 {{count}} 个不支持的文件",
         "url": {
           "description": "输入网页链接：",
           "help": "将自动抓取页面文本并分块索引",
@@ -2194,7 +2195,6 @@
         }
       },
       "bulk": {
-        "cancel": "取消",
         "delete": "删除",
         "delete_confirm_description": "确认删除选中的 {{count}} 个数据源？删除后无法恢复。",
         "delete_confirm_title": "确认批量删除",
@@ -2252,18 +2252,16 @@
         "select_row": "选择行"
       },
       "toolbar": {
-        "add": "添加数据源",
-        "no_search_results": "未找到匹配的数据源",
-        "search_placeholder": "搜索数据源"
+        "add": "添加数据源"
       }
     },
     "dimensions_auto_set": "自动设置嵌入维度",
     "dimensions_size_placeholder": "留空表示不设置",
-    "drag_file": "拖拽文件到这里",
     "embedding_model": "嵌入模型",
     "embedding_model_required": "知识库嵌入模型是必需的",
     "empty": "暂无知识库",
     "error": {
+      "directory_not_migrated": "该文件夹内容迁移失败，请删除后重新上传。",
       "failed_base_unknown": "该知识库迁移失败，请重建知识库并选择新的嵌入模型。",
       "failed_to_create": "知识库创建失败",
       "failed_to_delete": "知识库删除失败",
@@ -2272,7 +2270,6 @@
       "missing_embedding_model": "迁移时未找到原知识库使用的嵌入模型，请重建知识库并选择新的嵌入模型。",
       "model_invalid": "未选择模型"
     },
-    "file_hint": "支持 {{file_types}} 格式",
     "groups": {
       "add": "新建分组",
       "create_base_here": "在此分组新建",
@@ -2417,7 +2414,9 @@
   "launchpad": {
     "apps": "应用",
     "minapps": "小程序",
-    "miniApps": "小程序"
+    "miniApps": "小程序",
+    "pin_to_sidebar": "固定到侧边栏",
+    "unpin_from_sidebar": "取消固定"
   },
   "library": {
     "action": {
@@ -4821,117 +4820,6 @@
       "description": "将 Agent 连接到 Telegram、飞书、Discord 等消息平台。",
       "title": "频道"
     },
-    "componentLab": {
-      "agentSelector": {
-        "clearSelection": "清空",
-        "configDescription": "调整 props 预览组件行为",
-        "configTitle": "配置",
-        "currentProps": "当前 props",
-        "description": "AgentSelector 现在会读取真实 /agents DataApi 数据，用于验证 id/item 选择、pin、排序与搜索行为。",
-        "emptyShellNotice": "当前预览使用 /agents DataApi 返回的真实智能体列表。",
-        "lastOnChange": "最近一次 onChange",
-        "previewDescription": "点击 trigger 打开选择器",
-        "previewTitle": "预览",
-        "title": "智能体选择器",
-        "triggerPlaceholder": "选择智能体",
-        "valueProp": "当前 value"
-      },
-      "agentTodoList": {
-        "title": "Agent 任务列表"
-      },
-      "assistantSelector": {
-        "clearSelection": "清空",
-        "configDescription": "调整 props 预览组件行为",
-        "configTitle": "配置",
-        "currentProps": "当前 props",
-        "description": "直接挂载 AssistantSelector 业务组件，验证 multi/single、id/item、pin、排序与搜索行为。",
-        "lastOnChange": "最近一次 onChange",
-        "previewDescription": "点击 trigger 打开选择器",
-        "previewTitle": "预览",
-        "title": "助手选择器",
-        "triggerPlaceholder": "选择助手",
-        "triggerSelectedCount": "已选 {{count}} 个助手",
-        "valueProp": "当前 value"
-      },
-      "description": "仅在开发环境显示，用于在应用内直接联调 v2 选择器等新组件。",
-      "fileProcessing": {
-        "artifact": {
-          "file": "Markdown 文件",
-          "text": "文本结果"
-        },
-        "description": "通过真实 file processing IPC 运行所有已配置的文件处理器，并对比结果。",
-        "duration": "{{seconds}} 秒",
-        "jobId": "Job ID",
-        "markdown": {
-          "description": "选择文档，并运行所有文档转 Markdown 处理器。",
-          "fileFilterName": "文档",
-          "noFile": "未选择文档",
-          "select": "选择文档",
-          "start": "测试 Markdown",
-          "title": "Markdown"
-        },
-        "noProcessors": "没有处理器支持这个能力。",
-        "ocr": {
-          "description": "选择图片，并运行所有 OCR 处理器。",
-          "fileFilterName": "图片",
-          "noFile": "未选择图片",
-          "select": "选择图片",
-          "start": "测试 OCR",
-          "title": "OCR"
-        },
-        "processorCount": "{{count}} 个处理器",
-        "status": {
-          "cancelled": "已取消",
-          "completed": "已完成",
-          "delayed": "已延迟",
-          "failed": "失败",
-          "idle": "空闲",
-          "pending": "等待中",
-          "processing": "处理中",
-          "running": "运行中",
-          "starting": "启动中"
-        },
-        "title": "文档解析"
-      },
-      "label": "组件测试",
-      "modelSelector": {
-        "behaviorConfig": "交互与展示配置",
-        "callbackEmpty": "还没有收到组件回调",
-        "clearSelection": "清空选择",
-        "configDescription": "上方切换 ModelSelector 的关键 props，下方直接查看传入值与回调返回值。",
-        "configTitle": "Props Playground",
-        "controlMultiSelectMode": "受控 multiSelectMode",
-        "currentProps": "当前 props",
-        "defaultMultiSelectMode": "defaultMultiSelectMode",
-        "description": "这里直接挂载当前的 ModelSelector 业务组件，方便验证选择、筛选、搜索和置顶能力。",
-        "empty": "当前没有可用模型，暂时无法展示选择器。",
-        "lastModeChangeReturn": "最近一次 onMultiSelectModeChange 返回",
-        "lastSelectReturn": "最近一次 onSelect 返回",
-        "loading": "正在加载模型...",
-        "modelId": "模型 ID",
-        "multiSelectMode": "multiSelectMode",
-        "multiple": "multiple",
-        "normalizedIds": "归一化选中 ID",
-        "outputEmpty": "当前没有可展示的数据",
-        "provider": "服务商",
-        "resetOutputs": "重置输出",
-        "resultsDescription": "这里会显示组件当前接收的 value、内部归一化后的选中状态，以及最新一次回调输出。",
-        "resultsTitle": "返回数据与状态",
-        "selected": "当前选择",
-        "selectedEmpty": "尚未选择模型",
-        "selectionConfig": "选择值配置",
-        "selectionType": "selectionType",
-        "selectionTypeId": "返回模型 ID",
-        "selectionTypeModel": "返回模型对象",
-        "showPinnedModels": "showPinnedModels",
-        "showTagFilter": "showTagFilter",
-        "title": "模型选择组件",
-        "triggerPlaceholder": "选择一个模型",
-        "triggerSelectedCount": "已选 {{count}} 个模型",
-        "valueProp": "当前传入 value"
-      },
-      "title": "开发环境组件测试"
-    },
     "data": {
       "app_data": {
         "copy_data_option": "复制数据，会自动重启后将原始目录数据复制到新目录",
@@ -5716,7 +5604,19 @@
         "title": "数据备份与恢复"
       },
       "common": {
+        "menu": {
+          "presentation_mode": {
+            "cherry": "Cherry",
+            "native": "原生",
+            "restart": {
+              "content": "更改菜单样式需要重启应用才能生效，是否现在重启？",
+              "title": "需要重启应用"
+            },
+            "title": "右键菜单样式"
+          }
+        },
         "sections": {
+          "chat_settings": "对话设置",
           "custom_css": "自定义 CSS",
           "display_language": "显示与语言",
           "privacy_advanced": "隐私与高级",
@@ -6206,6 +6106,7 @@
       "disabled": "隐藏的小程序",
       "display_title": "小程序显示设置",
       "empty": "在左侧列表点击隐藏图标，小程序会移到这里",
+      "hide_app": "隐藏 {{name}}",
       "open_link_external": {
         "title": "在浏览器中打开新窗口链接"
       },
@@ -6217,6 +6118,7 @@
         "title": "小程序区域筛选"
       },
       "reset_tooltip": "重置为默认值",
+      "show_app": "显示 {{name}}",
       "sidebar_description": "设置侧边栏是否显示活跃的小程序",
       "sidebar_title": "侧边栏活跃小程序显示设置",
       "title": "小程序设置",
@@ -6519,7 +6421,8 @@
       "add": {
         "name": {
           "label": "提供商名称",
-          "placeholder": "例如 OpenAI"
+          "placeholder": "例如 OpenAI",
+          "required": "请输入提供商名称"
         },
         "title": "添加提供商",
         "type": "提供商类型"
@@ -6630,7 +6533,8 @@
       "balance": "余额",
       "base_url": {
         "label": "Base URL",
-        "placeholder": "https://api.example.com"
+        "placeholder": "https://api.example.com",
+        "required": "请输入 Base URL"
       },
       "basic_auth": {
         "label": "HTTP 认证",
@@ -6998,10 +6902,12 @@
         },
         "features": {
           "document_to_markdown": {
-            "title": "文档处理"
+            "title": "文档处理",
+            "tooltip": "用于知识库解析文档"
           },
           "image_to_text": {
-            "title": "OCR"
+            "title": "OCR",
+            "tooltip": "用于识别图片内文字内容"
           }
         },
         "fields": {
@@ -7215,10 +7121,16 @@
       "title": "缩放"
     }
   },
+  "subWindow": {
+    "back_to_main": "回到主窗口",
+    "pin": "窗口置顶",
+    "unpin": "取消置顶"
+  },
   "tab": {
     "close": "关闭标签页",
     "move_to_first": "移到最左侧",
     "new": "新标签页",
+    "open_in_new_window": "从新窗口打开",
     "pin": "固定标签页",
     "unpin": "取消固定"
   },

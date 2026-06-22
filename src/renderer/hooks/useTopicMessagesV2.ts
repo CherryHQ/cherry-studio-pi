@@ -16,7 +16,12 @@
 import { loggerService } from '@logger'
 import { useInfiniteFlatItems, useInfiniteQuery } from '@renderer/data/hooks/useDataApi'
 import type { CherryUIMessage } from '@shared/data/types/message'
-import type { BranchMessage, BranchMessagesResponse, Message as SharedMessage } from '@shared/data/types/message'
+import {
+  type BranchMessage,
+  type BranchMessagesResponse,
+  type Message as SharedMessage,
+  toContentRole
+} from '@shared/data/types/message'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { SWRInfiniteKeyedMutator } from 'swr/infinite'
 
@@ -29,7 +34,7 @@ const PAGE_SIZE = 50
 function toUIMessage(shared: SharedMessage): CherryUIMessage {
   return {
     id: shared.id,
-    role: shared.role,
+    role: toContentRole(shared.role),
     parts: (shared.data?.parts ?? []) as CherryUIMessage['parts'],
     metadata: {
       parentId: shared.parentId,
@@ -154,6 +159,8 @@ export interface UseTopicMessagesV2Result {
   isLoading: boolean
   refresh: () => Promise<CherryUIMessage[]>
   activeNodeId: string | null
+  /** The topic's virtual-root id — authoritative first-turn signal (parentId === rootId). */
+  rootId: string | null
   /** Load the next (older) page of branch history. */
   loadOlder: () => Promise<void>
   /** Whether older pages remain on the server. */
@@ -181,6 +188,7 @@ export function useTopicMessagesV2(topicId: string, options?: { enabled?: boolea
   // response — page 0 is the freshest fetch, so its value is authoritative.
   const branchItems = useInfiniteFlatItems(pages, { reversePages: true })
   const activeNodeId = pages[0]?.activeNodeId ?? null
+  const rootId = pages[0]?.rootId ?? null
 
   // On remount with stale SWR cache, isLoading=false but data is stale.
   // Force a fresh fetch and track readiness so the loading gate blocks until fresh.
@@ -233,6 +241,7 @@ export function useTopicMessagesV2(topicId: string, options?: { enabled?: boolea
     isLoading: enabled && (isLoading || !isReady),
     refresh,
     activeNodeId,
+    rootId,
     loadOlder: loadNext,
     hasOlder: hasNext,
     mutate: mutate

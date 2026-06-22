@@ -12,7 +12,7 @@ import type {
   MemoryItem,
   MemoryListOptions,
   MemorySearchOptions
-} from '@types'
+} from '@shared/types/memory'
 import crypto from 'crypto'
 import { app } from 'electron'
 import fs from 'fs'

@@ -1,13 +1,11 @@
 import { execFile } from 'node:child_process'
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
 
 import { application } from '@application'
 import { loggerService } from '@logger'
 import { isWin } from '@main/core/platform'
-import { HOME_CHERRY_DIR } from '@shared/config/constant'
 import { gte as semverGte } from 'semver'
 
 import { toAsarUnpackedPath } from '.'
@@ -17,9 +15,9 @@ const logger = loggerService.withContext('Utils:Rtk')
 
 const RTK_BINARY = isWin ? 'rtk.exe' : 'rtk'
 const RTK_VERSION_FILE = '.rtk-version'
-const MANAGED_RUNTIME_DISABLED_FILE = '.managed-runtime-disabled'
 const RTK_MIN_VERSION = '0.23.0'
 const REWRITE_TIMEOUT_MS = 3000
+const MANAGED_RUNTIME_DISABLED_FILE = '.managed-runtime-disabled'
 
 // rtk is not available for these platforms
 const UNSUPPORTED_PLATFORMS = new Set(['win32-arm64'])
@@ -41,26 +39,21 @@ function getBundledBinariesDir(): string {
 }
 
 export function getUserBinDir(): string {
-  return path.join(os.homedir(), HOME_CHERRY_DIR, 'bin')
+  return application.getPath('cherry.bin')
 }
 
 export function isManagedRuntimeDisabled(): boolean {
   return fs.existsSync(path.join(getUserBinDir(), MANAGED_RUNTIME_DISABLED_FILE))
 }
 
-export function enableManagedRuntime(): void {
-  const markerPath = path.join(getUserBinDir(), MANAGED_RUNTIME_DISABLED_FILE)
-  if (fs.existsSync(markerPath)) {
-    fs.rmSync(markerPath, { force: true })
-  }
-}
-
 export function disableManagedRuntime(): void {
   const userBinDir = getUserBinDir()
   fs.mkdirSync(userBinDir, { recursive: true })
   fs.writeFileSync(path.join(userBinDir, MANAGED_RUNTIME_DISABLED_FILE), new Date().toISOString(), 'utf8')
-  rtkPath = null
-  rtkAvailable = null
+}
+
+export function enableManagedRuntime(): void {
+  fs.rmSync(path.join(getUserBinDir(), MANAGED_RUNTIME_DISABLED_FILE), { force: true })
 }
 
 /**
@@ -68,11 +61,6 @@ export function disableManagedRuntime(): void {
  * Invoked during agent subsystem bootstrap.
  */
 export async function extractRtkBinaries(): Promise<void> {
-  if (isManagedRuntimeDisabled()) {
-    logger.debug('Managed runtime disabled by user, skipping rtk extraction')
-    return
-  }
-
   if (!isPlatformSupported()) {
     logger.debug('rtk not supported on this platform', { platform: getPlatformKey() })
     return

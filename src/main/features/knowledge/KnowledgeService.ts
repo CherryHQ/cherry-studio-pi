@@ -8,8 +8,10 @@ import { DataApiErrorFactory, ErrorCode, isDataApiError } from '@shared/data/api
 import { KNOWLEDGE_BASES_MAX_LIMIT } from '@shared/data/api/schemas/knowledges'
 import {
   type CreateKnowledgeBaseDto,
+  type KnowledgeAddConflictStrategy,
   type KnowledgeAddItemInput,
   KnowledgeAddItemInputSchema,
+  type KnowledgeAddItemsResult,
   type KnowledgeBase,
   type KnowledgeItem,
   type KnowledgeItemChunk,
@@ -17,7 +19,6 @@ import {
   type KnowledgeSearchResult,
   type RestoreKnowledgeBaseDto
 } from '@shared/data/types/knowledge'
-import { IpcChannel } from '@shared/IpcChannel'
 import { estimateTokenCount } from 'tokenx'
 
 import { createCheckFileProcessingResultJobHandler } from './jobs/checkFileProcessingResultJobHandler'
@@ -38,17 +39,9 @@ import {
   toKnowledgeItemId,
   toKnowledgeItemIds
 } from './types'
-import {
-  KnowledgeAddItemsPayloadSchema,
-  KnowledgeBasePayloadSchema,
-  KnowledgeCreateBasePayloadSchema,
-  KnowledgeItemChunksPayloadSchema,
-  KnowledgeItemsPayloadSchema,
-  KnowledgeRestoreBasePayloadSchema,
-  KnowledgeSearchPayloadSchema
-} from './types/ipc'
 import { embedKnowledgeQuery } from './utils/indexing/embed'
 import { rerankKnowledgeSearchResults } from './utils/indexing/rerank'
+import { classifyKnowledgeItemSource } from './utils/items'
 import { applyRelevanceThreshold, getInitialSearchScoreKind, withSearchRanks } from './utils/search'
 import { getKnowledgeBaseFilePath } from './utils/storage/pathStorage'
 import type { KnowledgeIndexStore } from './vectorstore/indexStore/KnowledgeIndexStore'
@@ -122,7 +115,6 @@ export class KnowledgeService extends BaseService {
       'knowledge.reindex-subtree',
       createReindexSubtreeJobHandler(this.knowledgeLockManager, this.workflowService)
     )
-    this.registerIpcHandlers()
   }
 
   protected async onAllReady(): Promise<void> {
@@ -243,9 +235,13 @@ export class KnowledgeService extends BaseService {
     return restoredBase
   }
 
-  async addItems(baseId: string, items: KnowledgeAddItemInput[]): Promise<void> {
+  async addItems(
+    baseId: string,
+    items: KnowledgeAddItemInput[],
+    conflictStrategy?: KnowledgeAddConflictStrategy
+  ): Promise<KnowledgeAddItemsResult> {
     await this.assertBaseCanRunRuntimeOperation(baseId, 'addItems')
-    await this.workflowService.addItems(baseId, items)
+    return await this.workflowService.addItems(baseId, items, conflictStrategy)
   }
 
   async deleteItems(baseId: string, itemIds: string[]): Promise<void> {
@@ -588,9 +584,30 @@ export class KnowledgeService extends BaseService {
 
   private async assertSubtreesCanReindex(baseId: string, rootItemIds: string[]): Promise<void> {
     const blockingStatusCounts = new Map<KnowledgeItemStatus, number>()
+    const missingSourceItemIds: string[] = []
+    const unverifiableSourceItemIds: string[] = []
 
     for (const rootItemId of rootItemIds) {
       const subtreeItems = await knowledgeItemService.getSubtreeItems(baseId, [rootItemId], { includeRoots: true })
+
+      // Reindex deletes the subtree's vectors before re-reading the source (reindexSubtreeJobHandler),
+      // so a root whose source is gone would lose its vectors with nothing to rebuild from — reject up
+      // front. Only the root's own source matters: a directory is rescanned from data.source and its
+      // children recreated (never read from their raw/ files), a file leaf reads its own raw/ file, and
+      // note/url always rebuild from the DB / network. A v1-migrated folder child reindexed on its own
+      // is a file root whose raw/ file never existed, so this rejects it too. Distinguish a genuinely
+      // missing source (delete-and-re-add) from one we could not verify (transient/permission error,
+      // which should retry rather than be destroyed).
+      const root = subtreeItems.find((item) => item.id === rootItemId)
+      if (root) {
+        const sourceState = await classifyKnowledgeItemSource(baseId, root)
+        if (sourceState === 'missing') {
+          missingSourceItemIds.push(rootItemId)
+        } else if (sourceState === 'unverifiable') {
+          unverifiableSourceItemIds.push(rootItemId)
+        }
+      }
+
       for (const item of subtreeItems) {
         if (REINDEX_ALLOWED_STATUSES.has(item.status)) {
           continue
@@ -598,6 +615,24 @@ export class KnowledgeService extends BaseService {
 
         blockingStatusCounts.set(item.status, (blockingStatusCounts.get(item.status) ?? 0) + 1)
       }
+    }
+
+    if (missingSourceItemIds.length > 0) {
+      throw DataApiErrorFactory.validation(
+        {
+          item: [`Knowledge item source no longer exists on disk for ${missingSourceItemIds.length} item(s)`]
+        },
+        'Cannot reindex a knowledge item whose source file or folder no longer exists; delete it and add it again to rebuild'
+      )
+    }
+
+    if (unverifiableSourceItemIds.length > 0) {
+      throw DataApiErrorFactory.validation(
+        {
+          item: [`Could not verify the knowledge item source on disk for ${unverifiableSourceItemIds.length} item(s)`]
+        },
+        'Could not verify the knowledge item source (it may be temporarily unavailable); please try again'
+      )
     }
 
     if (blockingStatusCounts.size === 0) {
@@ -670,40 +705,5 @@ export class KnowledgeService extends BaseService {
         `Cannot restore knowledge item '${item.id}' (${item.type}): ${getKnowledgeServiceErrorMessage(error)}`
       )
     }
-  }
-
-  private registerIpcHandlers(): void {
-    this.ipcHandle(IpcChannel.Knowledge_CreateBase, async (_, payload: unknown) => {
-      const { base } = KnowledgeCreateBasePayloadSchema.parse(payload)
-      return await this.createBase(base)
-    })
-    this.ipcHandle(IpcChannel.Knowledge_RestoreBase, async (_, payload: unknown) => {
-      const dto = KnowledgeRestoreBasePayloadSchema.parse(payload)
-      return await this.restoreBase(dto)
-    })
-    this.ipcHandle(IpcChannel.Knowledge_DeleteBase, async (_, payload: unknown) => {
-      const { baseId } = KnowledgeBasePayloadSchema.parse(payload)
-      return await this.deleteBase(baseId)
-    })
-    this.ipcHandle(IpcChannel.Knowledge_AddItems, async (_, payload: unknown) => {
-      const { baseId, items } = KnowledgeAddItemsPayloadSchema.parse(payload)
-      return await this.addItems(baseId, items)
-    })
-    this.ipcHandle(IpcChannel.Knowledge_DeleteItems, async (_, payload: unknown) => {
-      const { baseId, itemIds } = KnowledgeItemsPayloadSchema.parse(payload)
-      return await this.deleteItems(baseId, itemIds)
-    })
-    this.ipcHandle(IpcChannel.Knowledge_ReindexItems, async (_, payload: unknown) => {
-      const { baseId, itemIds } = KnowledgeItemsPayloadSchema.parse(payload)
-      return await this.reindexItems(baseId, itemIds)
-    })
-    this.ipcHandle(IpcChannel.Knowledge_Search, async (_, payload: unknown) => {
-      const { baseId, query } = KnowledgeSearchPayloadSchema.parse(payload)
-      return await this.search(baseId, query)
-    })
-    this.ipcHandle(IpcChannel.Knowledge_ListItemChunks, async (_, payload: unknown) => {
-      const { baseId, itemId } = KnowledgeItemChunksPayloadSchema.parse(payload)
-      return await this.listItemChunks(baseId, itemId)
-    })
   }
 }

@@ -1,4 +1,4 @@
-import { codeCLI, terminalApps } from '@shared/config/constant'
+import { codeCLI, terminalApps } from '@shared/types/codeCli'
 import { mockUsePreference, MockUsePreferenceUtils } from '@test-mocks/renderer/usePreference'
 import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -114,6 +114,14 @@ describe('useCodeCli', () => {
     it('should be true for github-copilot-cli without model', () => {
       setupOverridesMock({
         'github-copilot-cli': { enabled: true, currentDirectory: '/tmp/project' }
+      })
+      const { result } = renderHook(() => useCodeCli())
+      expect(result.current.canLaunch).toBe(true)
+    })
+
+    it('should be true for qoder-cli without model', () => {
+      setupOverridesMock({
+        'qoder-cli': { enabled: true, currentDirectory: '/tmp/project' }
       })
       const { result } = renderHook(() => useCodeCli())
       expect(result.current.canLaunch).toBe(true)

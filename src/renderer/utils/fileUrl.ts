@@ -1,5 +1,5 @@
-import type { FilePath } from '@shared/file/types/common'
-import { toFileUrl } from '@shared/file/urlUtil'
+import type { FilePath } from '@shared/types/file'
+import { toFileUrl } from '@shared/utils/file/urlUtil'
 
 export function pathToFileUrl(value: string): string {
   if (value.startsWith('file://')) return value

@@ -1,21 +1,13 @@
-import {
-  ContextMenuItem,
-  ContextMenuItemContent,
-  ContextMenuSeparator,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger
-} from '@cherrystudio/ui'
 import { useMultiplePreferences } from '@data/hooks/usePreference'
 import { loggerService } from '@logger'
+import type { CommandContextMenuExtraItem } from '@renderer/components/command'
 import { DeleteIcon } from '@renderer/components/Icons'
 import SaveToKnowledgePopup from '@renderer/components/Popups/SaveToKnowledgePopup'
 import { useKnowledgeBases } from '@renderer/hooks/useKnowledgeBase'
 import type { NotesTreeNode } from '@renderer/types/note'
-import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { exportNote } from '@renderer/utils/export'
 import { Edit3, FilePlus, FileSearch, Folder, FolderOpen, Sparkles, Star, StarOff, UploadIcon } from 'lucide-react'
-import { useCallback, useRef } from 'react'
+import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 
 const logger = loggerService.withContext('UseNotesMenu')
@@ -46,8 +38,6 @@ export const useNotesMenu = ({
 }: UseNotesMenuProps) => {
   const { t } = useTranslation()
   const { bases } = useKnowledgeBases()
-  const deleteConfirmNodeIdsRef = useRef(new Set<string>())
-  const deletingNodeIdsRef = useRef(new Set<string>())
   const [exportMenuOptions] = useMultiplePreferences({
     docx: 'data.export.menus.docx',
     image: 'data.export.menus.image',
@@ -63,17 +53,17 @@ export const useNotesMenu = ({
     async (note: NotesTreeNode) => {
       try {
         if (bases.length === 0) {
-          window.toast?.warning(t('chat.save.knowledge.empty.no_knowledge_base'))
+          window.toast.warning(t('chat.save.knowledge.empty.no_knowledge_base'))
           return
         }
 
         const result = await SaveToKnowledgePopup.showForNote(note)
 
         if (result?.success) {
-          window.toast?.success(t('notes.export_success', { count: result.savedCount }))
+          window.toast.success(t('notes.export_success', { count: result.savedCount }))
         }
       } catch (error) {
-        window.toast?.error(t('notes.export_failed'))
+        window.toast.error(t('notes.export_failed'))
         logger.error(`Failed to export note to knowledge base: ${error}`)
       }
     },
@@ -91,7 +81,7 @@ export const useNotesMenu = ({
         await exportNote({ node, platform })
       } catch (error) {
         logger.error(`Failed to ${platform === 'copyImage' ? 'copy' : 'export'} as image:`, error as Error)
-        window.toast?.error(t(platform === 'copyImage' ? 'common.copy_failed' : 'common.save_failed'))
+        window.toast.error(t('common.copy_failed'))
       }
     },
     [activeNode, onSelectNode, t]
@@ -103,7 +93,7 @@ export const useNotesMenu = ({
         await fn()
       } catch (error) {
         logger.error('note export failed', error as Error)
-        window.toast?.error(t('notes.export_failed'))
+        window.toast.error(t('notes.export_failed'))
       }
     },
     [t]
@@ -111,163 +101,155 @@ export const useNotesMenu = ({
 
   const handleDeleteNodeWrapper = useCallback(
     (node: NotesTreeNode) => {
-      if (deleteConfirmNodeIdsRef.current.has(node.id) || deletingNodeIdsRef.current.has(node.id)) {
-        return
-      }
-
       const confirmText =
         node.type === 'folder'
           ? t('notes.delete_folder_confirm', { name: node.name })
           : t('notes.delete_note_confirm', { name: node.name })
 
-      const clearDeleteGuard = () => {
-        if (deletingNodeIdsRef.current.has(node.id)) return
-        deleteConfirmNodeIdsRef.current.delete(node.id)
-      }
-
-      deleteConfirmNodeIdsRef.current.add(node.id)
       window.modal.confirm({
         title: t('notes.delete'),
         content: confirmText,
         centered: true,
         okButtonProps: { danger: true },
-        onCancel: clearDeleteGuard,
-        onOk: async () => {
-          if (deletingNodeIdsRef.current.has(node.id)) {
-            return
-          }
-
-          deletingNodeIdsRef.current.add(node.id)
-          try {
-            await Promise.resolve(onDeleteNode(node.id))
-          } finally {
-            deletingNodeIdsRef.current.delete(node.id)
-            deleteConfirmNodeIdsRef.current.delete(node.id)
-          }
+        onOk: () => {
+          onDeleteNode(node.id)
         }
       })
     },
     [onDeleteNode, t]
   )
 
-  const handleOpenOutside = useCallback(
-    (node: NotesTreeNode) => {
-      void window.api.openPath(node.externalPath).catch((error) => {
-        logger.error('Failed to open note externally', error as Error)
-        window.toast?.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
-      })
-    },
-    [t]
-  )
-
-  const renderMenuItems = useCallback(
-    (node: NotesTreeNode) => {
+  const getMenuItems = useCallback(
+    (node: NotesTreeNode): CommandContextMenuExtraItem[] => {
       const isFolder = node.type === 'folder'
-      return (
-        <>
-          {!isFolder && (
-            <ContextMenuItem disabled={renamingNodeIds.has(node.id)} onSelect={() => handleAutoRename(node)}>
-              <ContextMenuItemContent icon={<Sparkles size={14} />}>
-                {t('notes.auto_rename.label')}
-              </ContextMenuItemContent>
-            </ContextMenuItem>
-          )}
+      const items: CommandContextMenuExtraItem[] = []
 
-          {isFolder && (
-            <>
-              <ContextMenuItem onSelect={() => onCreateNote(t('notes.untitled_note'), node.id)}>
-                <ContextMenuItemContent icon={<FilePlus size={14} />}>{t('notes.new_note')}</ContextMenuItemContent>
-              </ContextMenuItem>
-              <ContextMenuItem onSelect={() => onCreateFolder(t('notes.untitled_folder'), node.id)}>
-                <ContextMenuItemContent icon={<Folder size={14} />}>{t('notes.new_folder')}</ContextMenuItemContent>
-              </ContextMenuItem>
-              <ContextMenuSeparator />
-            </>
-          )}
+      if (!isFolder) {
+        items.push({
+          type: 'item',
+          id: 'notes.auto-rename',
+          label: t('notes.auto_rename.label'),
+          icon: <Sparkles size={14} />,
+          enabled: !renamingNodeIds.has(node.id),
+          onSelect: () => handleAutoRename(node)
+        })
+      }
 
-          <ContextMenuItem onSelect={() => handleStartEdit(node)}>
-            <ContextMenuItemContent icon={<Edit3 size={14} />}>{t('notes.rename')}</ContextMenuItemContent>
-          </ContextMenuItem>
-          <ContextMenuItem onSelect={() => handleOpenOutside(node)}>
-            <ContextMenuItemContent icon={<FolderOpen size={14} />}>{t('notes.open_outside')}</ContextMenuItemContent>
-          </ContextMenuItem>
+      if (isFolder) {
+        items.push(
+          {
+            type: 'item',
+            id: 'notes.new-note',
+            label: t('notes.new_note'),
+            icon: <FilePlus size={14} />,
+            onSelect: () => onCreateNote(t('notes.untitled_note'), node.id)
+          },
+          {
+            type: 'item',
+            id: 'notes.new-folder',
+            label: t('notes.new_folder'),
+            icon: <Folder size={14} />,
+            onSelect: () => onCreateFolder(t('notes.untitled_folder'), node.id)
+          },
+          { type: 'separator' }
+        )
+      }
 
-          {!isFolder && (
-            <>
-              <ContextMenuItem onSelect={() => onToggleStar(node.id)}>
-                <ContextMenuItemContent icon={node.isStarred ? <StarOff size={14} /> : <Star size={14} />}>
-                  {node.isStarred ? t('notes.unstar') : t('notes.star')}
-                </ContextMenuItemContent>
-              </ContextMenuItem>
-              <ContextMenuItem onSelect={() => void handleExportKnowledge(node)}>
-                <ContextMenuItemContent icon={<FileSearch size={14} />}>
-                  {t('notes.export_knowledge')}
-                </ContextMenuItemContent>
-              </ContextMenuItem>
-              <ContextMenuSub>
-                <ContextMenuSubTrigger>
-                  <UploadIcon size={14} />
-                  {t('chat.topics.export.title')}
-                </ContextMenuSubTrigger>
-                <ContextMenuSubContent>
-                  {exportMenuOptions.image && (
-                    <>
-                      <ContextMenuItem onSelect={() => handleImageAction(node, 'copyImage')}>
-                        {t('chat.topics.copy.image')}
-                      </ContextMenuItem>
-                      <ContextMenuItem onSelect={() => handleImageAction(node, 'exportImage')}>
-                        {t('chat.topics.export.image')}
-                      </ContextMenuItem>
-                    </>
-                  )}
-                  {exportMenuOptions.markdown && (
-                    <ContextMenuItem onSelect={() => void runExport(() => exportNote({ node, platform: 'markdown' }))}>
-                      {t('chat.topics.export.md.label')}
-                    </ContextMenuItem>
-                  )}
-                  {exportMenuOptions.docx && (
-                    <ContextMenuItem onSelect={() => void runExport(() => exportNote({ node, platform: 'docx' }))}>
-                      {t('chat.topics.export.word')}
-                    </ContextMenuItem>
-                  )}
-                  {exportMenuOptions.notion && (
-                    <ContextMenuItem onSelect={() => void runExport(() => exportNote({ node, platform: 'notion' }))}>
-                      {t('chat.topics.export.notion')}
-                    </ContextMenuItem>
-                  )}
-                  {exportMenuOptions.yuque && (
-                    <ContextMenuItem onSelect={() => void runExport(() => exportNote({ node, platform: 'yuque' }))}>
-                      {t('chat.topics.export.yuque')}
-                    </ContextMenuItem>
-                  )}
-                  {exportMenuOptions.obsidian && (
-                    <ContextMenuItem onSelect={() => void runExport(() => exportNote({ node, platform: 'obsidian' }))}>
-                      {t('chat.topics.export.obsidian')}
-                    </ContextMenuItem>
-                  )}
-                  {exportMenuOptions.joplin && (
-                    <ContextMenuItem onSelect={() => void runExport(() => exportNote({ node, platform: 'joplin' }))}>
-                      {t('chat.topics.export.joplin')}
-                    </ContextMenuItem>
-                  )}
-                  {exportMenuOptions.siyuan && (
-                    <ContextMenuItem onSelect={() => void runExport(() => exportNote({ node, platform: 'siyuan' }))}>
-                      {t('chat.topics.export.siyuan')}
-                    </ContextMenuItem>
-                  )}
-                </ContextMenuSubContent>
-              </ContextMenuSub>
-            </>
-          )}
-
-          <ContextMenuSeparator />
-          <ContextMenuItem variant="destructive" onSelect={() => handleDeleteNodeWrapper(node)}>
-            <ContextMenuItemContent icon={<DeleteIcon size={14} className="lucide-custom" />}>
-              {t('notes.delete')}
-            </ContextMenuItemContent>
-          </ContextMenuItem>
-        </>
+      items.push(
+        {
+          type: 'item',
+          id: 'notes.rename',
+          label: t('notes.rename'),
+          icon: <Edit3 size={14} />,
+          onSelect: () => handleStartEdit(node)
+        },
+        {
+          type: 'item',
+          id: 'notes.open-outside',
+          label: t('notes.open_outside'),
+          icon: <FolderOpen size={14} />,
+          onSelect: () => void window.api.openPath(node.externalPath)
+        }
       )
+
+      if (!isFolder) {
+        items.push(
+          {
+            type: 'item',
+            id: 'notes.toggle-star',
+            label: node.isStarred ? t('notes.unstar') : t('notes.star'),
+            icon: node.isStarred ? <StarOff size={14} /> : <Star size={14} />,
+            onSelect: () => onToggleStar(node.id)
+          },
+          {
+            type: 'item',
+            id: 'notes.export-knowledge',
+            label: t('notes.export_knowledge'),
+            icon: <FileSearch size={14} />,
+            onSelect: () => void handleExportKnowledge(node)
+          }
+        )
+
+        const exportChildren: CommandContextMenuExtraItem[] = []
+        const addExport = (
+          id: string,
+          label: string,
+          platform: 'markdown' | 'docx' | 'notion' | 'yuque' | 'obsidian' | 'joplin' | 'siyuan'
+        ) =>
+          exportChildren.push({
+            type: 'item',
+            id,
+            label,
+            onSelect: () => void runExport(() => exportNote({ node, platform }))
+          })
+        if (exportMenuOptions.image) {
+          exportChildren.push(
+            {
+              type: 'item',
+              id: 'notes.export.copy-image',
+              label: t('chat.topics.copy.image'),
+              onSelect: () => handleImageAction(node, 'copyImage')
+            },
+            {
+              type: 'item',
+              id: 'notes.export.image',
+              label: t('chat.topics.export.image'),
+              onSelect: () => handleImageAction(node, 'exportImage')
+            }
+          )
+        }
+        if (exportMenuOptions.markdown) addExport('notes.export.markdown', t('chat.topics.export.md.label'), 'markdown')
+        if (exportMenuOptions.docx) addExport('notes.export.docx', t('chat.topics.export.word'), 'docx')
+        if (exportMenuOptions.notion) addExport('notes.export.notion', t('chat.topics.export.notion'), 'notion')
+        if (exportMenuOptions.yuque) addExport('notes.export.yuque', t('chat.topics.export.yuque'), 'yuque')
+        if (exportMenuOptions.obsidian) addExport('notes.export.obsidian', t('chat.topics.export.obsidian'), 'obsidian')
+        if (exportMenuOptions.joplin) addExport('notes.export.joplin', t('chat.topics.export.joplin'), 'joplin')
+        if (exportMenuOptions.siyuan) addExport('notes.export.siyuan', t('chat.topics.export.siyuan'), 'siyuan')
+
+        if (exportChildren.length > 0) {
+          items.push({
+            type: 'submenu',
+            id: 'notes.export',
+            label: t('chat.topics.export.title'),
+            icon: <UploadIcon size={14} />,
+            children: exportChildren
+          })
+        }
+      }
+
+      items.push(
+        { type: 'separator' },
+        {
+          type: 'item',
+          id: 'notes.delete',
+          label: t('notes.delete'),
+          destructive: true,
+          icon: <DeleteIcon size={14} className="lucide-custom" />,
+          onSelect: () => handleDeleteNodeWrapper(node)
+        }
+      )
+
+      return items
     },
     [
       t,
@@ -281,10 +263,9 @@ export const useNotesMenu = ({
       exportMenuOptions,
       onCreateNote,
       onCreateFolder,
-      runExport,
-      handleOpenOutside
+      runExport
     ]
   )
 
-  return { renderMenuItems }
+  return { getMenuItems }
 }

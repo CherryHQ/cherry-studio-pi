@@ -1,6 +1,5 @@
 import type { ImageModelV3File } from '@ai-sdk/provider'
-import { readResponseTextWithinLimit } from '@main/utils/readResponseText'
-import { parseDataUrl } from '@shared/utils'
+import { parseDataUrl } from '@shared/utils/dataUrl'
 
 /**
  * Shared building blocks for transports / image-model adapters.
@@ -9,8 +8,6 @@ import { parseDataUrl } from '@shared/utils'
  *     downstream key off (`error.name === 'AbortError'`).
  *   - `waitWithSignal` is the abort-aware sleep every async-polling transport
  *     needs between attempts.
- *   - `readLimitedHttpErrorText` avoids buffering unbounded upstream error
- *     bodies just to display a short diagnostic preview.
  *   - `uint8ToBase64` and `fileToDataUrl` are the AI SDK `ImageModelV3File`
  *     → wire-format (data URL) bridge — vendors that take base64 / data
  *     URLs as their `image` body field call this on `options.files[0]`.
@@ -43,7 +40,6 @@ export function waitWithSignal(delayMs: number, signal?: AbortSignal): Promise<v
       signal?.removeEventListener('abort', onAbort)
       resolve()
     }, delayMs)
-    timer.unref?.()
     const onAbort = () => {
       clearTimeout(timer)
       signal?.removeEventListener('abort', onAbort)
@@ -53,15 +49,10 @@ export function waitWithSignal(delayMs: number, signal?: AbortSignal): Promise<v
   })
 }
 
-export const MAX_HTTP_ERROR_PREVIEW_BYTES = 500
-
-export async function readLimitedHttpErrorText(
-  response: Pick<Response, 'body' | 'text'>,
-  maxBytes = MAX_HTTP_ERROR_PREVIEW_BYTES
-): Promise<string> {
+export async function readLimitedHttpErrorText(response: Response, maxBytes = 4096): Promise<string> {
   try {
-    const { text } = await readResponseTextWithinLimit(response, maxBytes)
-    return text
+    const text = await response.text()
+    return text.length > maxBytes ? `${text.slice(0, maxBytes)}...` : text
   } catch {
     return ''
   }

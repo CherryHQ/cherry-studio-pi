@@ -23,7 +23,7 @@ import { FILE_TYPE } from '@renderer/types/file'
 import { pathToFileUrl } from '@renderer/utils/fileUrl'
 import type { FileUIPart } from '@shared/data/types/message'
 import { withCherryMeta } from '@shared/data/types/uiParts'
-import type { FilePath } from '@shared/file/types/common'
+import type { FilePath } from '@shared/types/file/common'
 
 function mediaTypeFor(file: FileMetadata, ext: string): string {
   if (file.type === FILE_TYPE.IMAGE) {

@@ -2,8 +2,7 @@ import { RowFlex, Tooltip } from '@cherrystudio/ui'
 import { usePreference } from '@data/hooks/usePreference'
 import { Navbar, NavbarCenter, NavbarLeft, NavbarRight } from '@renderer/components/app/Navbar'
 import SearchPopup from '@renderer/components/Popups/SearchPopup'
-import { useCommandHandler } from '@renderer/features/command'
-import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
+import { useCommandHandler } from '@renderer/hooks/command'
 import { t } from 'i18next'
 import { PanelLeftClose, PanelRightClose, Search } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
@@ -22,15 +21,14 @@ const HeaderNavbar: FC<Props> = () => {
   const [topicPosition] = usePreference('topic.position')
   // Single source of truth for the topics sidebar (the only sidebar in v2).
   const [showSidebar, setShowSidebar] = usePreference('topic.tab.show')
-  const showSaveFailed = useSaveFailedToast()
-  const toggleShowSidebar = () => void setShowSidebar(!showSidebar).catch(showSaveFailed)
+  const toggleShowSidebar = () => void setShowSidebar(!showSidebar)
 
   useCommandHandler('app.search', () => {
     void SearchPopup.show()
   })
 
   const handleNarrowModeToggle = () => {
-    void setNarrowMode(!narrowMode).catch(showSaveFailed)
+    void setNarrowMode(!narrowMode)
   }
 
   return (

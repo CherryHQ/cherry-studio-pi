@@ -25,12 +25,17 @@ import { loggerService } from '@logger'
 import ListItem from '@renderer/components/ListItem'
 import Scrollbar from '@renderer/components/Scrollbar'
 import { useTheme } from '@renderer/context/ThemeProvider'
-import { cacheService } from '@renderer/data/CacheService'
 import { dataApiService } from '@renderer/data/DataApiService'
 import { useChannels } from '@renderer/hooks/agents/useChannels'
 import { useCreateTask, useDeleteTask, useRunTask, useTaskLogs, useUpdateTask } from '@renderer/hooks/agents/useTasks'
-import type { CreateTaskRequest, ScheduledTaskEntity, TaskRunLogEntity, UpdateTaskRequest } from '@renderer/types'
-import type { AgentEntity } from '@renderer/types/agent'
+import type { Trigger } from '@shared/data/api/schemas/jobs'
+import type {
+  AgentEntity,
+  CreateTaskRequest,
+  ScheduledTaskEntity,
+  TaskRunLogEntity,
+  UpdateTaskRequest
+} from '@shared/data/types/agent'
 import { useNavigate } from '@tanstack/react-router'
 import {
   AlertTriangle,
@@ -46,29 +51,54 @@ import {
   Trash2,
   X
 } from 'lucide-react'
-import { type FC, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type FC, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingRow, SettingRowTitle, SettingsContentColumn, SettingTitle } from '.'
-import { getAgentSessionNavigationTarget } from './taskNavigation'
-import {
-  formStateToTrigger,
-  isTaskCreateFormSubmittable,
-  parseScheduleDate,
-  resolveTaskScheduleBlur,
-  type ScheduleKind,
-  triggerToFormState
-} from './taskScheduleGuards'
-import { resolveTaskTextFieldBlur } from './taskTextFieldGuards'
-import { parseTaskTimeoutMinutes, resolveTaskTimeoutBlur } from './taskTimeoutGuards'
 
 const logger = loggerService.withContext('TasksSettings')
-const SYSTEM_TASK_WORKSPACE_SOURCE = { type: 'system' as const } satisfies CreateTaskRequest['workspace']
 
 // --------------- Types ---------------
 
 type AgentInfo = { id: string; name: string }
 type ChannelInfo = { id: string; name: string; isActive?: boolean; hasActiveChatIds?: boolean }
+
+const parseScheduleDate = (value: string) => {
+  if (!value) return undefined
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? undefined : date
+}
+
+/** UI form state ↔ wire Trigger conversions. */
+type ScheduleKind = 'cron' | 'interval' | 'once'
+
+function triggerToFormState(trigger: Trigger): { kind: ScheduleKind; value: string } {
+  switch (trigger.kind) {
+    case 'cron':
+      return { kind: 'cron', value: trigger.expr }
+    case 'interval':
+      // Wire stores ms; UI shows minutes — round to keep "every 30m" stable on round-trip.
+      return { kind: 'interval', value: String(Math.max(1, Math.round(trigger.ms / 60_000))) }
+    case 'once':
+      return { kind: 'once', value: new Date(trigger.at).toISOString() }
+  }
+}
+
+function formStateToTrigger(kind: ScheduleKind, value: string): Trigger | null {
+  const trimmed = value.trim()
+  if (kind === 'cron') {
+    if (!trimmed) return null
+    return { kind: 'cron', expr: trimmed }
+  }
+  if (kind === 'interval') {
+    const minutes = parseInt(trimmed, 10)
+    if (!Number.isFinite(minutes) || minutes <= 0) return null
+    return { kind: 'interval', ms: minutes * 60_000 }
+  }
+  const at = Date.parse(trimmed)
+  if (!Number.isFinite(at)) return null
+  return { kind: 'once', at }
+}
 
 // --------------- Shared channel selector with warnings ---------------
 
@@ -182,45 +212,15 @@ const TaskDetail: FC<{
     [task.id, onUpdate]
   )
 
-  const commitName = useCallback(() => {
-    const resolution = resolveTaskTextFieldBlur(name, task.name)
-    if (resolution.action === 'save') {
-      setName(resolution.value)
-      saveField({ name: resolution.value })
-    } else if (resolution.action === 'reset') {
-      setName(resolution.value)
-    }
-  }, [name, saveField, task.name])
-
-  const commitPrompt = useCallback(() => {
-    const resolution = resolveTaskTextFieldBlur(prompt, task.prompt)
-    if (resolution.action === 'save') {
-      setPrompt(resolution.value)
-      saveField({ prompt: resolution.value })
-    } else if (resolution.action === 'reset') {
-      setPrompt(resolution.value)
-    }
-  }, [prompt, saveField, task.prompt])
-
   const handlePromptModalOpenChange = useCallback(
     (open: boolean) => {
-      if (!open) commitPrompt()
+      if (!open && prompt.trim() && prompt !== task.prompt) {
+        saveField({ prompt: prompt.trim() })
+      }
       setPromptModalOpen(open)
     },
-    [commitPrompt]
+    [prompt, saveField, task.prompt]
   )
-
-  const commitSchedule = useCallback(() => {
-    const resolution = resolveTaskScheduleBlur(scheduleType, scheduleValue, task.trigger)
-    if (resolution.action === 'save') {
-      setScheduleType(resolution.state.kind)
-      setScheduleValue(resolution.state.value)
-      saveField({ trigger: resolution.trigger })
-    } else if (resolution.action === 'reset') {
-      setScheduleType(resolution.state.kind)
-      setScheduleValue(resolution.state.value)
-    }
-  }, [saveField, scheduleType, scheduleValue, task.trigger])
 
   const formatDateTime = (iso: string | null | undefined) => {
     if (!iso) return '-'
@@ -311,7 +311,7 @@ const TaskDetail: FC<{
             <UIInput
               value={name}
               onChange={(e) => setName(e.target.value)}
-              onBlur={commitName}
+              onBlur={() => name.trim() && name !== task.name && saveField({ name: name.trim() })}
               disabled={isCompleted}
             />
           </SettingRow>
@@ -336,7 +336,7 @@ const TaskDetail: FC<{
             <Textarea.Input
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              onBlur={commitPrompt}
+              onBlur={() => prompt.trim() && prompt !== task.prompt && saveField({ prompt: prompt.trim() })}
               disabled={isCompleted}
               rows={4}
               className="min-h-22 resize-y px-3 py-2"
@@ -369,7 +369,12 @@ const TaskDetail: FC<{
                 <UIInput
                   value={scheduleValue}
                   onChange={(e) => setScheduleValue(e.target.value)}
-                  onBlur={commitSchedule}
+                  onBlur={() => {
+                    const trigger = formStateToTrigger(scheduleType, scheduleValue)
+                    if (!trigger) return
+                    if (JSON.stringify(trigger) === JSON.stringify(task.trigger)) return
+                    saveField({ trigger })
+                  }}
                   placeholder={t('agent.cherryClaw.tasks.cronPlaceholder')}
                   disabled={isCompleted}
                 />
@@ -381,7 +386,12 @@ const TaskDetail: FC<{
                     min={1}
                     value={scheduleValue}
                     onChange={(e) => setScheduleValue(e.target.value)}
-                    onBlur={commitSchedule}
+                    onBlur={() => {
+                      const trigger = formStateToTrigger(scheduleType, scheduleValue)
+                      if (!trigger) return
+                      if (JSON.stringify(trigger) === JSON.stringify(task.trigger)) return
+                      saveField({ trigger })
+                    }}
                     placeholder={t('agent.cherryClaw.tasks.intervalPlaceholder')}
                     disabled={isCompleted}
                     className="pr-10"
@@ -416,13 +426,9 @@ const TaskDetail: FC<{
                   value={timeoutMinutes}
                   onChange={(e) => setTimeoutMinutes(e.target.value)}
                   onBlur={() => {
-                    const resolution = resolveTaskTimeoutBlur(timeoutMinutes, task.timeoutMinutes)
-                    if (resolution.action === 'save') {
-                      setTimeoutMinutes(String(resolution.value))
-                      saveField({ timeoutMinutes: resolution.value })
-                    } else if (resolution.action === 'reset') {
-                      setTimeoutMinutes(resolution.value)
-                    }
+                    const val = timeoutMinutes.trim() ? parseInt(timeoutMinutes, 10) : null
+                    const prev = task.timeoutMinutes ?? null
+                    if (val !== prev) saveField({ timeoutMinutes: val })
                   }}
                   placeholder={t('agent.cherryClaw.tasks.timeout.placeholder')}
                   disabled={isCompleted}
@@ -504,11 +510,7 @@ const TaskLogsInline: FC<{ taskId: string; agentId: string }> = ({ taskId, agent
 
   const navigateToSession = useCallback(
     (sessionId: string) => {
-      const target = getAgentSessionNavigationTarget(sessionId)
-      if (!target) return
-
-      cacheService.set('agent.active_session_id', target.search.sessionId)
-      void navigate({ to: target.to, search: target.search })
+      void navigate({ to: '/app/agents', search: { sessionId } })
     },
     [navigate]
   )
@@ -698,34 +700,29 @@ const CreateForm: FC<{
   const [name, setName] = useState('')
   const [prompt, setPrompt] = useState('')
   const [promptModalOpen, setPromptModalOpen] = useState(false)
-  const [scheduleType, setScheduleType] = useState<ScheduleKind>('interval')
+  const [scheduleType, setScheduleType] = useState<'cron' | 'interval' | 'once'>('interval')
   const [scheduleValue, setScheduleValue] = useState('')
   const [timeoutMinutes, setTimeoutMinutes] = useState('')
   const [channelIds, setChannelIds] = useState<string[]>([])
-  const workspaceSource = SYSTEM_TASK_WORKSPACE_SOURCE
+  // TODO(agent-workspace-picker): wire the workspace picker before re-enabling task creation.
+  const [workspaceSource] = useState<CreateTaskRequest['workspace'] | null>(null)
   const [saving, setSaving] = useState(false)
 
-  const isValid = isTaskCreateFormSubmittable({
-    agentId,
-    name,
-    prompt,
-    scheduleKind: scheduleType,
-    scheduleValue
-  })
+  const isValid = agentId && name.trim() && prompt.trim() && scheduleValue.trim() && workspaceSource
 
   const handleCreate = useCallback(async () => {
-    if (!agentId || !name.trim() || !prompt.trim() || !scheduleValue.trim()) return
+    if (!agentId || !name.trim() || !prompt.trim() || !scheduleValue.trim() || !workspaceSource) return
     const trigger = formStateToTrigger(scheduleType, scheduleValue.trim())
     if (!trigger) return
     setSaving(true)
     try {
-      const timeout = parseTaskTimeoutMinutes(timeoutMinutes)
+      const timeout = timeoutMinutes.trim() ? parseInt(timeoutMinutes, 10) : null
       await onCreate(agentId, {
         name: name.trim(),
         prompt: prompt.trim(),
         trigger,
         workspace: workspaceSource,
-        timeoutMinutes: timeout ?? undefined,
+        timeoutMinutes: timeout && timeout > 0 ? timeout : undefined,
         channelIds: channelIds.length > 0 ? channelIds : undefined
       })
     } finally {
@@ -806,7 +803,7 @@ const CreateForm: FC<{
               <SettingRowTitle>{t('agent.cherryClaw.tasks.scheduleType.label')}</SettingRowTitle>
               <Select
                 value={scheduleType}
-                onValueChange={(v: ScheduleKind) => {
+                onValueChange={(v: 'cron' | 'interval' | 'once') => {
                   setScheduleType(v)
                   setScheduleValue('')
                 }}>
@@ -905,18 +902,6 @@ const TasksSettings: FC = () => {
   const [loading, setLoading] = useState(true)
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
-  const mountedRef = useRef(true)
-  const runRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(() => {
-    return () => {
-      mountedRef.current = false
-      if (runRefreshTimerRef.current) {
-        clearTimeout(runRefreshTimerRef.current)
-        runRefreshTimerRef.current = null
-      }
-    }
-  }, [])
 
   const channels: ChannelInfo[] = useMemo(
     () =>
@@ -944,7 +929,6 @@ const TasksSettings: FC = () => {
           return (result as any).items ?? []
         })
       )
-      if (!mountedRef.current) return
       setTasks(tasksPerAgent.flat())
       setAgents(
         agentList
@@ -956,13 +940,10 @@ const TasksSettings: FC = () => {
           .map((a: AgentEntity) => ({ id: a.id, name: a.name ?? a.id }))
       )
     } catch (error) {
-      if (!mountedRef.current) return
       logger.error('Failed to load tasks settings', error as Error)
-      window.toast?.error(t('agent.cherryClaw.tasks.error.loadFailed'))
+      window.toast.error(t('agent.cherryClaw.tasks.error.loadFailed'))
     } finally {
-      if (mountedRef.current) {
-        setLoading(false)
-      }
+      setLoading(false)
     }
   }, [t])
 
@@ -1027,18 +1008,10 @@ const TasksSettings: FC = () => {
   const handleRun = useCallback(
     async (taskId: string) => {
       await runTask(taskId)
-      if (mountedRef.current) {
-        void loadData()
-      }
+      void loadData()
       // Task runs asynchronously — refresh again after a delay to capture completion
-      if (runRefreshTimerRef.current) {
-        clearTimeout(runRefreshTimerRef.current)
-      }
-      runRefreshTimerRef.current = setTimeout(() => {
-        runRefreshTimerRef.current = null
-        if (mountedRef.current) {
-          void loadData()
-        }
+      setTimeout(() => {
+        void loadData()
       }, 1000)
     },
     [runTask, loadData]

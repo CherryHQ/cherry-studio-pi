@@ -1,6 +1,6 @@
 import { loggerService } from '@logger'
+import type { Model, Provider } from '@main/data/migration/v2/legacyTypes'
 import { storageV2ProviderRepository } from '@main/services/storageV2/StorageV2Repositories'
-import type { Model, Provider } from '@types'
 
 const logger = loggerService.withContext('ModelsServiceCompat')
 

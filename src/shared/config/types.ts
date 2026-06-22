@@ -1,4 +1,4 @@
-import type { ProcessingStatus } from '@types'
+export type ProcessingStatus = 'pending' | 'processing' | 'completed' | 'failed'
 
 // =============================================================================
 // Code Tools Types

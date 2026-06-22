@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import type { Provider } from '@main/data/migration/v2/legacyTypes'
 import { knowledgeService } from '@main/services/KnowledgeService'
 import { storageV2SecretVaultService } from '@main/services/storageV2/SecretVaultService'
 import {
@@ -6,7 +7,7 @@ import {
   storageV2ProviderRepository
 } from '@main/services/storageV2/StorageV2Repositories'
 import type { KnowledgeBase as RuntimeKnowledgeBase } from '@shared/data/types/knowledge'
-import type { KnowledgeBase, KnowledgeBaseParams, KnowledgeItem, Provider } from '@types'
+import type { KnowledgeBase, KnowledgeBaseParams, KnowledgeItem } from '@shared/types/legacyKnowledge'
 import { v4 as uuidv4 } from 'uuid'
 
 import { normalizeBoundedIntegerInput } from '../input'

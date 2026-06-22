@@ -3,7 +3,7 @@
 
 import type { EventEmitter } from 'node:events'
 
-import type { CreateSessionMessageRequest, GetAgentSessionResponse } from '@types'
+import type { CreateSessionMessageRequest, GetAgentSessionResponse } from '@shared/data/types/agent'
 import type { TextStreamPart } from 'ai'
 
 // Generic agent stream event that works with any agent type

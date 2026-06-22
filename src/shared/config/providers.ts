@@ -5,7 +5,7 @@
  * Used by both the Code Tools page and the Anthropic SDK client.
  */
 
-import { SystemProviderIds } from '@types'
+import { SystemProviderIds } from '@shared/utils/systemProviderId'
 
 /**
  * Silicon provider models that support Anthropic API endpoint.

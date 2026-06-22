@@ -1,6 +1,6 @@
 import { readResponseTextWithinLimit } from '@main/utils/readResponseText'
 import type { WebSearchCapability, WebSearchProvider } from '@shared/data/preference/preferenceTypes'
-import { withoutTrailingSlash } from '@shared/utils'
+import { withoutTrailingSlash } from '@shared/utils/api'
 import type * as z from 'zod'
 
 import type { ApiKeyRotationState } from '../../utils/provider'

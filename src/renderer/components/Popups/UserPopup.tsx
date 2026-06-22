@@ -20,16 +20,14 @@ import { usePreference } from '@data/hooks/usePreference'
 import DefaultAvatar from '@renderer/assets/images/avatar.png'
 import useAvatar from '@renderer/hooks/useAvatar'
 import ImageStorage from '@renderer/services/ImageStorage'
-import { compressImage, isEmoji } from '@renderer/utils'
-import { getErrorMessage } from '@renderer/utils/error'
+import { fileToAvatarDataUrl, isEmoji } from '@renderer/utils'
 import React, { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import EmojiPicker from '../EmojiPicker'
 import { TopView } from '../TopView'
-import { useTopViewClose } from './useTopViewClose'
 
-const TopViewKey = 'UserPopup'
+const CLOSE_ANIMATION_MS = 200
 
 interface Props {
   resolve: (data: any) => void
@@ -46,11 +44,17 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { t } = useTranslation()
   const avatar = useAvatar()
-  const closeDialog = useTopViewClose({ resolve, setOpen, topViewKey: TopViewKey })
+
+  const closeDialog = () => {
+    setOpen(false)
+    window.setTimeout(() => {
+      resolve({})
+    }, CLOSE_ANIMATION_MS)
+  }
 
   const onOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {
-      closeDialog({})
+      closeDialog()
     }
   }
 
@@ -63,7 +67,7 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
       setAvatarPopoverOpen(false)
       setAvatarPopoverView('menu')
     } catch (error: any) {
-      window.toast?.error(getErrorMessage(error))
+      window.toast.error(error.message)
     }
   }
 
@@ -74,27 +78,21 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
       setAvatarPopoverOpen(false)
       setAvatarPopoverView('menu')
     } catch (error: any) {
-      window.toast?.error(getErrorMessage(error))
+      window.toast.error(error.message)
     }
   }
 
   const handleUploadAvatar = async (file: File) => {
     try {
-      if (file.type === 'image/gif') {
-        await ImageStorage.set('avatar', file)
-      } else {
-        const compressedFile = await compressImage(file)
-        await ImageStorage.set('avatar', compressedFile)
-      }
-      cacheService.set('app.user.avatar', await ImageStorage.get('avatar'))
+      const dataUrl = await fileToAvatarDataUrl(file)
+      await ImageStorage.set('avatar', dataUrl)
+      cacheService.set('app.user.avatar', dataUrl)
       setAvatarPopoverOpen(false)
       setAvatarPopoverView('menu')
     } catch (error: any) {
-      window.toast?.error(getErrorMessage(error))
+      window.toast.error(error.message)
     }
   }
-
-  UserPopup.hide = () => closeDialog({})
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -185,11 +183,19 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
 export default class UserPopup {
   static topviewId = 0
   static hide() {
-    TopView.hide(TopViewKey)
+    TopView.hide('UserPopup')
   }
   static show() {
     return new Promise<any>((resolve) => {
-      TopView.show(<PopupContainer resolve={resolve} />, TopViewKey)
+      TopView.show(
+        <PopupContainer
+          resolve={(v) => {
+            resolve(v)
+            this.hide()
+          }}
+        />,
+        'UserPopup'
+      )
     })
   }
 }

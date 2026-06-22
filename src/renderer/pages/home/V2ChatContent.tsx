@@ -77,6 +77,7 @@ const V2ChatContent: FC<Props> = ({ topic, setActiveTopic, onPersistTemporaryTop
     isLoading: isHistoryLoading,
     refresh,
     activeNodeId,
+    rootId,
     loadOlder,
     hasOlder,
     mutate: messagesCacheMutate
@@ -85,7 +86,7 @@ const V2ChatContent: FC<Props> = ({ topic, setActiveTopic, onPersistTemporaryTop
   if (isHistoryLoading) {
     return (
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center">
-        <div className="text-sm" style={{ color: 'var(--color-foreground-muted)' }}>
+        <div className="text-sm" style={{ color: 'var(--color-text-3)' }}>
           {t('common.loading')}
         </div>
       </div>
@@ -104,6 +105,7 @@ const V2ChatContent: FC<Props> = ({ topic, setActiveTopic, onPersistTemporaryTop
       siblingsMap={siblingsMap}
       refresh={refresh}
       activeNodeId={activeNodeId}
+      rootId={rootId}
       loadOlder={loadOlder}
       hasOlder={hasOlder}
       messagesCacheMutate={messagesCacheMutate}
@@ -125,7 +127,8 @@ interface InnerProps extends Props {
   siblingsMap: ReturnType<typeof useTopicMessagesV2>['siblingsMap']
   refresh: () => Promise<CherryUIMessage[]>
   activeNodeId: string | null
-  loadOlder: () => void | Promise<unknown>
+  rootId: string | null
+  loadOlder: () => void
   hasOlder: boolean
   messagesCacheMutate: ReturnType<typeof useTopicMessagesV2>['mutate']
 }
@@ -141,6 +144,7 @@ const V2ChatContentInner: FC<InnerProps> = ({
   siblingsMap,
   refresh,
   activeNodeId,
+  rootId,
   loadOlder,
   hasOlder,
   messagesCacheMutate
@@ -211,14 +215,7 @@ const V2ChatContentInner: FC<InnerProps> = ({
     (_executionId: string, { message, isError }: ExecutionFinishEvent) => {
       if (isError || !message.parts?.length) {
         // Error / no content: force a clean revalidate, then drop overlay.
-        void cache
-          .rollbackBranch()
-          .finally(() => disposeOverlay(message.id))
-          .catch((error) => {
-            logger.warn('Failed to rollback message cache after execution error', error as Error, {
-              messageId: message.id
-            })
-          })
+        void cache.rollbackBranch().then(() => disposeOverlay(message.id))
         return
       }
       // Success / aborted-with-content: do NOT write streamed parts to the
@@ -226,11 +223,7 @@ const V2ChatContentInner: FC<InnerProps> = ({
       // dispose the overlay so there is no gap between overlay and authoritative
       // parts. `.finally` ensures the overlay is released even if the refresh
       // rejects (otherwise it would linger).
-      void refresh()
-        .finally(() => disposeOverlay(message.id))
-        .catch((error) => {
-          logger.warn('Failed to refresh messages after execution finish', error as Error, { messageId: message.id })
-        })
+      void refresh().finally(() => disposeOverlay(message.id))
     },
     [cache, disposeOverlay, refresh]
   )
@@ -242,7 +235,7 @@ const V2ChatContentInner: FC<InnerProps> = ({
   const { overrides: v2ChatOverrides, capabilityBody } = useV2ChatOverrides({
     topic,
     uiMessages: messages,
-    projectedMessages,
+    rootId,
     regenerate,
     setMessages,
     stop,

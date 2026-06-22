@@ -29,9 +29,9 @@ import {
   isDefaultCherryStudioPiAgentInstructions,
   normalizeAgentInstructions
 } from '@shared/ai/pi/constants'
+import type { AgentPersistedMessage, MessageBlock } from '@shared/data/types/agent'
 import { ENDPOINT_TYPE, type EndpointType, MODALITY, type Model, MODEL_CAPABILITY } from '@shared/data/types/model'
 import type { Provider } from '@shared/data/types/provider'
-import type { AgentPersistedMessage, MessageBlock } from '@types'
 
 import { createPiMcpTools, createPiTools } from './tools'
 import { PiStreamState } from './transform'

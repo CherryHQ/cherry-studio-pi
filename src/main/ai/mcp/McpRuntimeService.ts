@@ -9,6 +9,7 @@ import { createInMemoryMcpServer } from '@main/ai/mcp/servers/factory'
 import { BaseService, DependsOn, Emitter, type Event, Injectable, Phase, ServicePhase } from '@main/core/lifecycle'
 import { WindowType } from '@main/core/window/types'
 import { makeSureDirExists, removeEnvProxy } from '@main/utils'
+import { defaultAppHeaders } from '@main/utils/http'
 import { findCommandInShellEnv, getBinaryName, getBinaryPath, isBinaryExists } from '@main/utils/process'
 import getLoginShellEnvironment from '@main/utils/shell-env'
 import { TraceMethod, withSpanFunc } from '@mcp-trace/trace-core'
@@ -35,32 +36,24 @@ import {
 } from '@modelcontextprotocol/sdk/types.js'
 import { nanoid } from '@reduxjs/toolkit'
 import { isMcpToolDisabledBySource } from '@shared/ai/tools/mcpSourcePolicy'
-import type { McpProgressEvent } from '@shared/config/types'
-import type { McpServerLogEntry } from '@shared/config/types'
 import type { SharedCacheKey } from '@shared/data/cache/cacheSchemas'
 import type { McpRuntimeStatus } from '@shared/data/cache/cacheValueTypes'
+import type { McpServer } from '@shared/data/types/mcpServer'
 import { IpcChannel } from '@shared/IpcChannel'
-import { defaultAppHeaders } from '@shared/utils'
+import type { McpProgressEvent, McpServerLogEntry } from '@shared/types/mcp'
+import type { McpPrompt, McpResource } from '@shared/types/mcp'
+import { BuiltinMcpServerNames, isBuiltinMcpServer } from '@shared/utils/mcp'
 import { safeSerialize } from '@shared/utils/serialize'
-import {
-  BuiltinMcpServerNames,
-  type GetResourceResponse,
-  isBuiltinMcpServer,
-  type McpCallToolResponse,
-  type McpPrompt,
-  type McpResource,
-  type McpServer
-} from '@types'
-import { net } from 'electron'
+import { app, net } from 'electron'
 import { EventEmitter } from 'events'
 import { v4 as uuidv4 } from 'uuid'
 import * as z from 'zod'
 
-import { buildMcpClientInfo, getMcpAppHeader } from './clientIdentity'
 import type { McpPackageService } from './McpPackageService'
 import { CallBackServer } from './oauth/callback'
 import { McpOAuthClientProvider } from './oauth/provider'
 import { ServerLogBuffer } from './ServerLogBuffer'
+import type { GetResourceResponse, McpCallToolResponse } from './types'
 
 // Generic type for caching wrapped functions
 type CachedFunction<T extends unknown[], R> = (...args: T) => Promise<R>
@@ -101,7 +94,6 @@ export interface McpToolListChangedEvent {
 // so a generous floor avoids false positives on slow SSE/streamableHttp handshakes while
 // still letting users raise it further via `server.timeout`.
 const MCP_CONNECT_TIMEOUT_FLOOR_MS = 180_000
-const MCP_PENDING_CLIENT_SHUTDOWN_WAIT_MS = 5_000
 
 // Redact potentially sensitive fields in objects (headers, tokens, api keys)
 export function redactSensitive(input: any): any {
@@ -394,7 +386,7 @@ export class McpRuntimeService extends BaseService {
     const initPromise = (async () => {
       try {
         // Create new client instance for each connection
-        const client = new Client(buildMcpClientInfo(), { capabilities: {} })
+        const client = new Client({ name: 'Cherry Studio', version: app.getVersion() }, { capabilities: {} })
 
         let args = [...(server.args || [])]
 
@@ -428,7 +420,7 @@ export class McpRuntimeService extends BaseService {
               requestInit: {
                 headers: {
                   ...defaultAppHeaders(),
-                  APP: getMcpAppHeader()
+                  APP: 'Cherry Studio'
                 }
               },
               authProvider
@@ -663,7 +655,6 @@ export class McpRuntimeService extends BaseService {
             getServerLogger(server).warn(`OAuth flow timed out`)
             void callbackServer.close()
           }, 300000) // 5 minutes timeout
-          timeoutId.unref?.()
 
           try {
             // Wait for the authorization code
@@ -868,31 +859,10 @@ export class McpRuntimeService extends BaseService {
     this.activeToolCalls.clear()
   }
 
-  private clearActiveToolCall(callId: string, controller: AbortController) {
-    if (this.activeToolCalls.get(callId) === controller) {
-      this.activeToolCalls.delete(callId)
-    }
-  }
-
   private async waitForPendingClients(): Promise<void> {
     const pending = [...this.pendingClients.values()]
     if (pending.length === 0) return
-
-    let timeoutId: ReturnType<typeof setTimeout> | undefined
-    const timeout = new Promise<'timeout'>((resolve) => {
-      timeoutId = setTimeout(() => resolve('timeout'), MCP_PENDING_CLIENT_SHUTDOWN_WAIT_MS)
-      timeoutId.unref?.()
-    })
-    const settled = Promise.allSettled(pending).then(() => 'settled' as const)
-    const result = await Promise.race([settled, timeout])
-
-    if (timeoutId) clearTimeout(timeoutId)
-    if (result === 'timeout') {
-      logger.warn('Timed out waiting for pending MCP clients during shutdown', {
-        pendingCount: pending.length,
-        timeoutMs: MCP_PENDING_CLIENT_SHUTDOWN_WAIT_MS
-      })
-    }
+    await Promise.allSettled(pending)
   }
 
   private async closeAllClients(): Promise<void> {
@@ -1111,7 +1081,7 @@ export class McpRuntimeService extends BaseService {
         getServerLogger(server, { tool: name, callId: toolCallId }).error(`Error calling tool`, error as Error)
         throw error
       } finally {
-        this.clearActiveToolCall(toolCallId, abortController)
+        this.activeToolCalls.delete(toolCallId)
       }
     }
 

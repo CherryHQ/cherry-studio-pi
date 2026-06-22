@@ -1,4 +1,4 @@
-import type { ApiGatewayConfig } from '@types'
+import type { ApiGatewayConfig } from '@shared/types/apiGateway'
 
 export function summarizeApiServerConfigForLog(config: ApiGatewayConfig) {
   return {

@@ -15,7 +15,7 @@ import { getMainTextContent } from '@renderer/utils/messageUtils/find'
 import { getTextFromParts } from '@renderer/utils/messageUtils/partsHelpers'
 import type { MultiModelMessageStyle } from '@shared/data/preference/preferenceTypes'
 import type { FC } from 'react'
-import { memo, useRef } from 'react'
+import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
@@ -40,8 +40,6 @@ const MessageGroupMenuBar: FC<Props> = ({
 }) => {
   const { t } = useTranslation()
   const partsMap = usePartsMap()
-  const deleteConfirmRef = useRef(false)
-  const deleteRunningRef = useRef(false)
 
   const v2Chat = useV2Chat()
 
@@ -49,16 +47,6 @@ const MessageGroupMenuBar: FC<Props> = ({
     const askId = messages[0]?.askId
     if (!askId) return
 
-    if (deleteConfirmRef.current || deleteRunningRef.current) {
-      return
-    }
-
-    const clearDeleteGuard = () => {
-      if (deleteRunningRef.current) return
-      deleteConfirmRef.current = false
-    }
-
-    deleteConfirmRef.current = true
     window.modal.confirm({
       title: t('message.group.delete.title'),
       content: t('message.group.delete.content'),
@@ -67,18 +55,12 @@ const MessageGroupMenuBar: FC<Props> = ({
         danger: true
       },
       okText: t('common.delete'),
-      onCancel: clearDeleteGuard,
+      // Await + catch so a rejected delete surfaces a toast instead of an unhandled rejection.
       onOk: async () => {
-        if (deleteRunningRef.current) {
-          return
-        }
-
-        deleteRunningRef.current = true
         try {
           await v2Chat?.deleteMessageGroup(askId)
-        } finally {
-          deleteRunningRef.current = false
-          deleteConfirmRef.current = false
+        } catch {
+          window.toast.error(t('common.delete_failed'))
         }
       }
     })
@@ -169,7 +151,7 @@ const MessageGroupMenuBar: FC<Props> = ({
         </Tooltip>
       )}
       <Button variant="ghost" size="sm" onClick={handleDeleteGroup}>
-        <DeleteOutlined style={{ color: 'var(--color-error-base)' }} />
+        <DeleteOutlined style={{ color: 'var(--color-error)' }} />
       </Button>
     </GroupMenuBar>
   )
@@ -199,10 +181,10 @@ const LayoutOption = styled.div<{ $active: boolean }>`
   cursor: pointer;
   padding: 2px 6px;
   border-radius: 4px;
-  background-color: ${({ $active }) => ($active ? 'var(--color-muted)' : 'transparent')};
+  background-color: ${({ $active }) => ($active ? 'var(--color-background-soft)' : 'transparent')};
 
   &:hover {
-    background-color: ${({ $active }) => ($active ? 'var(--color-muted)' : 'var(--color-accent)')};
+    background-color: ${({ $active }) => ($active ? 'var(--color-background-soft)' : 'var(--color-hover)')};
   }
 `
 

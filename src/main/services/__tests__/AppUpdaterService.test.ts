@@ -1,27 +1,6 @@
 import type { UpdateInfo } from 'builder-util-runtime'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mocks = vi.hoisted(() => ({
-  updateDownloadBlocker: {
-    key: 'update-download-blocker',
-    release: vi.fn()
-  },
-  updateInstallBlocker: {
-    key: 'update-install-blocker',
-    release: vi.fn()
-  },
-  powerSaveBlockerService: {
-    acquire: vi.fn()
-  },
-  applicationOnWillQuit: vi.fn(),
-  willQuitDisposable: {
-    dispose: vi.fn()
-  },
-  windowManager: {
-    broadcastToType: vi.fn()
-  }
-}))
-
 // Mock dependencies
 vi.mock('@logger', () => ({
   loggerService: {
@@ -44,35 +23,17 @@ vi.mock('@application', async () => {
   const { mockApplicationFactory } = await import('@test-mocks/main/application')
   const result = mockApplicationFactory()
   const originalGet = result.application.get.getMockImplementation()!
-  ;(result.application as any).markQuitting = vi.fn()
-  ;(result.application as any).unmarkQuitting = vi.fn()
-  ;(result.application as any).onWillQuit = mocks.applicationOnWillQuit
   result.application.get.mockImplementation((name: string) => {
     if (name === 'MainWindowService') {
       return { getMainWindow: vi.fn() }
-    }
-    if (name === 'WindowManager') {
-      return mocks.windowManager
     }
     return originalGet(name)
   })
   return result
 })
 
-vi.mock('@main/services/PowerSaveBlockerService', () => ({
-  powerSaveBlockerService: mocks.powerSaveBlockerService
-}))
-
 vi.mock('@main/core/lifecycle', () => {
-  class MockBaseService {
-    protected registerDisposable<T extends { dispose: () => void } | (() => void)>(disposable: T): T {
-      return disposable
-    }
-
-    protected ipcHandle() {
-      return { dispose: vi.fn() }
-    }
-  }
+  class MockBaseService {}
   return {
     BaseService: MockBaseService,
     Injectable: () => (target: unknown) => target,
@@ -141,14 +102,10 @@ vi.mock('electron-updater', () => ({
 
 // Import after mocks
 import { application } from '@application'
-import { WindowType } from '@main/core/window/types'
-import { UpdateMirror } from '@shared/config/constant'
-import { IpcChannel } from '@shared/IpcChannel'
 import { MockMainPreferenceServiceUtils } from '@test-mocks/main/PreferenceService'
 import { app, net } from 'electron'
-import { autoUpdater } from 'electron-updater'
 
-import { AppUpdaterService } from '../AppUpdaterService'
+import { AppUpdaterService, UpdateMirror } from '../AppUpdaterService'
 
 // Mock clientId for ConfigManager since it's not migrated yet
 vi.mock('../ConfigManager', () => ({
@@ -163,10 +120,6 @@ describe('AppUpdaterService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     MockMainPreferenceServiceUtils.resetMocks()
-    mocks.powerSaveBlockerService.acquire.mockImplementation((reason: string) =>
-      reason === 'app-update.download' ? mocks.updateDownloadBlocker : mocks.updateInstallBlocker
-    )
-    mocks.applicationOnWillQuit.mockReturnValue(mocks.willQuitDisposable)
     appUpdater = new AppUpdaterService()
   })
 
@@ -352,234 +305,6 @@ describe('AppUpdaterService', () => {
     })
   })
 
-  describe('quitAndInstall', () => {
-    it('uses visible installer flow, ignores duplicate requests, and holds the power blocker until quit', async () => {
-      appUpdater.quitAndInstall()
-      appUpdater.quitAndInstall()
-
-      await new Promise((resolve) => setImmediate(resolve))
-
-      expect(application.markQuitting).toHaveBeenCalledTimes(1)
-      expect(mocks.powerSaveBlockerService.acquire).toHaveBeenCalledTimes(1)
-      expect(mocks.powerSaveBlockerService.acquire).toHaveBeenCalledWith('app-update.install', {
-        type: 'prevent-display-sleep'
-      })
-      expect(autoUpdater.quitAndInstall).toHaveBeenCalledTimes(1)
-      expect(autoUpdater.quitAndInstall).toHaveBeenCalledWith(false, true)
-      expect(mocks.updateInstallBlocker.release).not.toHaveBeenCalled()
-
-      const willQuitHandler = mocks.applicationOnWillQuit.mock.calls[0]?.[0] as (() => void) | undefined
-
-      expect(willQuitHandler).toBeTypeOf('function')
-      willQuitHandler?.()
-
-      expect(mocks.updateInstallBlocker.release).toHaveBeenCalledTimes(1)
-      expect(mocks.willQuitDisposable.dispose).toHaveBeenCalledTimes(1)
-    })
-
-    it('clears the speculative quitting state if launching the installer fails', async () => {
-      vi.mocked(autoUpdater.quitAndInstall).mockImplementationOnce(() => {
-        throw new Error('installer launch failed')
-      })
-
-      appUpdater.quitAndInstall()
-
-      await new Promise((resolve) => setImmediate(resolve))
-
-      expect(application.markQuitting).toHaveBeenCalledTimes(1)
-      expect(application.unmarkQuitting).toHaveBeenCalledTimes(1)
-      expect(mocks.updateInstallBlocker.release).toHaveBeenCalledTimes(1)
-    })
-
-    it('reports structured installer launch failures to the renderer', async () => {
-      vi.mocked(autoUpdater.quitAndInstall).mockImplementationOnce(() => {
-        throw { response: { status: 423, statusText: 'Locked' } }
-      })
-
-      appUpdater.quitAndInstall()
-
-      await new Promise((resolve) => setImmediate(resolve))
-
-      expect(mocks.windowManager.broadcastToType).toHaveBeenCalledWith(
-        WindowType.Main,
-        IpcChannel.UpdateError,
-        expect.objectContaining({ message: '423 Locked' })
-      )
-      expect(mocks.windowManager.broadcastToType.mock.calls[0]?.[2]).toBeInstanceOf(Error)
-      expect(application.unmarkQuitting).toHaveBeenCalledTimes(1)
-      expect(mocks.updateInstallBlocker.release).toHaveBeenCalledTimes(1)
-    })
-
-    it('allows retry if the installer launch never reaches will-quit or emits an error', async () => {
-      vi.useFakeTimers()
-      try {
-        appUpdater.quitAndInstall()
-
-        expect(application.markQuitting).toHaveBeenCalledTimes(1)
-        expect(mocks.powerSaveBlockerService.acquire).toHaveBeenCalledTimes(1)
-
-        await vi.advanceTimersByTimeAsync(5 * 60 * 1000)
-
-        expect(application.unmarkQuitting).toHaveBeenCalledTimes(1)
-        expect(mocks.updateInstallBlocker.release).toHaveBeenCalledTimes(1)
-        expect(mocks.willQuitDisposable.dispose).toHaveBeenCalledTimes(1)
-
-        appUpdater.quitAndInstall()
-
-        expect(application.markQuitting).toHaveBeenCalledTimes(2)
-        expect(mocks.powerSaveBlockerService.acquire).toHaveBeenCalledTimes(2)
-      } finally {
-        vi.useRealTimers()
-      }
-    })
-
-    it('releases the install power blocker if the updater emits an async install error', async () => {
-      ;(appUpdater as any).registerAutoUpdaterListeners()
-      appUpdater.quitAndInstall()
-
-      await new Promise((resolve) => setImmediate(resolve))
-
-      const errorHandler = vi.mocked(autoUpdater.on).mock.calls.find(([event]) => event === 'error')?.[1] as
-        | ((error: Error) => void)
-        | undefined
-
-      expect(errorHandler).toBeTypeOf('function')
-      expect(mocks.updateInstallBlocker.release).not.toHaveBeenCalled()
-
-      errorHandler?.(new Error('installer failed after launch'))
-
-      expect(application.unmarkQuitting).toHaveBeenCalledTimes(1)
-      expect(mocks.updateInstallBlocker.release).toHaveBeenCalledTimes(1)
-      expect(mocks.willQuitDisposable.dispose).toHaveBeenCalledTimes(1)
-    })
-  })
-
-  describe('checkForUpdates', () => {
-    const updateInfo = {
-      version: '1.0.1',
-      files: [],
-      path: '',
-      sha512: '',
-      releaseDate: new Date().toISOString()
-    } as UpdateInfo
-
-    beforeEach(() => {
-      ;(appUpdater as any)._setFeedUrl = vi.fn().mockResolvedValue(undefined)
-      vi.mocked(autoUpdater.checkForUpdates).mockResolvedValue({
-        isUpdateAvailable: true,
-        updateInfo,
-        cancellationToken: { cancel: vi.fn() }
-      } as any)
-    })
-
-    it('reports manual background download failures to the renderer', async () => {
-      const downloadError = new Error('download failed')
-      autoUpdater.autoDownload = false
-      vi.mocked(autoUpdater.downloadUpdate).mockRejectedValueOnce(downloadError)
-
-      const result = await appUpdater.checkForUpdates()
-      await new Promise((resolve) => setImmediate(resolve))
-
-      expect(result.updateInfo).toBe(updateInfo)
-      expect(autoUpdater.downloadUpdate).toHaveBeenCalledTimes(1)
-      expect(mocks.powerSaveBlockerService.acquire).toHaveBeenCalledWith('app-update.download', {
-        type: 'prevent-app-suspension'
-      })
-      expect(mocks.updateDownloadBlocker.release).toHaveBeenCalledTimes(1)
-      expect(mocks.windowManager.broadcastToType).toHaveBeenCalledWith(
-        WindowType.Main,
-        IpcChannel.UpdateError,
-        downloadError
-      )
-    })
-
-    it('preserves structured manual download failure details', async () => {
-      autoUpdater.autoDownload = false
-      vi.mocked(autoUpdater.downloadUpdate).mockRejectedValueOnce({
-        response: {
-          status: 503,
-          statusText: 'Service Unavailable'
-        }
-      })
-
-      await appUpdater.checkForUpdates()
-      await new Promise((resolve) => setImmediate(resolve))
-
-      expect(mocks.windowManager.broadcastToType).toHaveBeenCalledWith(
-        WindowType.Main,
-        IpcChannel.UpdateError,
-        expect.objectContaining({ message: '503 Service Unavailable' })
-      )
-      expect(mocks.windowManager.broadcastToType.mock.calls[0]?.[2]).toBeInstanceOf(Error)
-      expect(mocks.updateDownloadBlocker.release).toHaveBeenCalledTimes(1)
-    })
-
-    it('releases the manual download power blocker after a successful download', async () => {
-      autoUpdater.autoDownload = false
-      vi.mocked(autoUpdater.downloadUpdate).mockResolvedValueOnce([])
-
-      await appUpdater.checkForUpdates()
-      await new Promise((resolve) => setImmediate(resolve))
-
-      expect(mocks.powerSaveBlockerService.acquire).toHaveBeenCalledWith('app-update.download', {
-        type: 'prevent-app-suspension'
-      })
-      expect(mocks.updateDownloadBlocker.release).toHaveBeenCalledTimes(1)
-    })
-
-    it('does not start duplicate manual downloads while one is still running', async () => {
-      let resolveDownload: ((value: string[]) => void) | undefined
-      autoUpdater.autoDownload = false
-      vi.mocked(autoUpdater.downloadUpdate).mockImplementation(
-        () =>
-          new Promise<string[]>((resolve) => {
-            resolveDownload = resolve
-          })
-      )
-
-      await appUpdater.checkForUpdates()
-      await appUpdater.checkForUpdates()
-
-      expect(autoUpdater.downloadUpdate).toHaveBeenCalledTimes(1)
-      expect(mocks.powerSaveBlockerService.acquire).toHaveBeenCalledTimes(1)
-      expect(mocks.updateDownloadBlocker.release).not.toHaveBeenCalled()
-
-      resolveDownload?.([])
-      await new Promise((resolve) => setImmediate(resolve))
-
-      expect(mocks.updateDownloadBlocker.release).toHaveBeenCalledTimes(1)
-
-      await appUpdater.checkForUpdates()
-
-      expect(autoUpdater.downloadUpdate).toHaveBeenCalledTimes(2)
-      expect(mocks.powerSaveBlockerService.acquire).toHaveBeenCalledTimes(2)
-    })
-
-    it('does not report an update error when the manual download is cancelled', async () => {
-      let rejectDownload: ((error: Error) => void) | undefined
-      autoUpdater.autoDownload = false
-      vi.mocked(autoUpdater.downloadUpdate).mockImplementationOnce(
-        () =>
-          new Promise<string[]>((_resolve, reject) => {
-            rejectDownload = reject
-          })
-      )
-
-      await appUpdater.checkForUpdates()
-      appUpdater.cancelDownload()
-      rejectDownload?.(new Error('cancelled'))
-      await new Promise((resolve) => setImmediate(resolve))
-
-      expect(autoUpdater.downloadUpdate).toHaveBeenCalledTimes(1)
-      expect(mocks.updateDownloadBlocker.release).toHaveBeenCalledTimes(1)
-      expect(mocks.windowManager.broadcastToType).not.toHaveBeenCalledWith(
-        WindowType.Main,
-        IpcChannel.UpdateError,
-        expect.any(Error)
-      )
-    })
-  })
-
   describe('_fetchUpdateConfig', () => {
     const mockConfig = {
       lastUpdated: '2025-01-05T00:00:00Z',
@@ -611,12 +336,7 @@ describe('AppUpdaterService', () => {
       const result = await (appUpdater as any)._fetchUpdateConfig(UpdateMirror.GITHUB)
 
       expect(result).toEqual(mockConfig)
-      expect(net.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('github'),
-        expect.objectContaining({
-          signal: expect.any(AbortSignal)
-        })
-      )
+      expect(net.fetch).toHaveBeenCalledWith(expect.stringContaining('github'), expect.any(Object))
     })
 
     it('should fetch config from GitCode mirror', async () => {

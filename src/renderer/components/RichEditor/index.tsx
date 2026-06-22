@@ -19,17 +19,121 @@ import {
   unregisterToolbarCommand
 } from './command'
 import { ActionMenu, type ActionMenuItem } from './components/ActionMenu'
+// DragContextMenuWrapper 已被 TipTap 扩展替代
 import LinkEditor from './components/LinkEditor'
 import PlusButton from './components/PlusButton'
-// DragContextMenuWrapper 已被 TipTap 扩展替代
-import { removeDraggableFromDragHandleTarget } from './helpers/dragHandleTarget'
-import { clearRichEditorHighlight, findElementByLine, scrollAndHighlight } from './highlight'
+import { findElementByLine } from './helpers/jumpToLine'
 import { EditorContent as StyledEditorContent, RichEditorWrapper } from './styles'
 import { ToC } from './TableOfContent'
 import { Toolbar } from './toolbar'
 import type { FormattingCommand, RichEditorProps, RichEditorRef } from './types'
 import { useRichEditor } from './useRichEditor'
 const logger = loggerService.withContext('RichEditor')
+
+/**
+ * Create fixed-position highlight overlay at element location
+ * with boundary detection to prevent overflow and toolbar overlap
+ */
+function createHighlightOverlay(element: HTMLElement, container: HTMLElement): void {
+  try {
+    // Remove previous overlay
+    const previousOverlay = document.body.querySelector('.highlight-overlay')
+    if (previousOverlay) {
+      previousOverlay.remove()
+    }
+
+    const editorWrapper = container.closest('.rich-editor-wrapper')
+
+    // Create overlay at element position
+    const rect = element.getBoundingClientRect()
+    const overlay = document.createElement('div')
+    overlay.className = 'highlight-overlay animation-locate-highlight'
+    overlay.style.position = 'fixed'
+    overlay.style.left = `${rect.left}px`
+    overlay.style.top = `${rect.top}px`
+    overlay.style.width = `${rect.width}px`
+    overlay.style.height = `${rect.height}px`
+    overlay.style.pointerEvents = 'none'
+    overlay.style.zIndex = '9999'
+    overlay.style.borderRadius = '4px'
+
+    document.body.appendChild(overlay)
+
+    // Update overlay position and visibility on scroll
+    const updatePosition = () => {
+      const newRect = element.getBoundingClientRect()
+      const newContainerRect = container.getBoundingClientRect()
+
+      // Update position
+      overlay.style.left = `${newRect.left}px`
+      overlay.style.top = `${newRect.top}px`
+      overlay.style.width = `${newRect.width}px`
+      overlay.style.height = `${newRect.height}px`
+
+      // Get current toolbar bottom (it might change)
+      const currentToolbar = editorWrapper?.querySelector('[class*="ToolbarWrapper"]')
+      const currentToolbarRect = currentToolbar?.getBoundingClientRect()
+      const currentToolbarBottom = currentToolbarRect ? currentToolbarRect.bottom : newContainerRect.top
+
+      // Check if overlay is within visible bounds
+      const overlayTop = newRect.top
+      const overlayBottom = newRect.bottom
+      const visibleTop = currentToolbarBottom // Don't overlap toolbar
+      const visibleBottom = newContainerRect.bottom
+
+      // Hide overlay if any part is outside the visible container area
+      if (overlayTop < visibleTop || overlayBottom > visibleBottom) {
+        overlay.style.opacity = '0'
+        overlay.style.visibility = 'hidden'
+      } else {
+        overlay.style.opacity = '1'
+        overlay.style.visibility = 'visible'
+      }
+    }
+
+    container.addEventListener('scroll', updatePosition)
+
+    // Auto-remove after animation
+    const handleAnimationEnd = () => {
+      overlay.remove()
+      container.removeEventListener('scroll', updatePosition)
+      overlay.removeEventListener('animationend', handleAnimationEnd)
+    }
+    overlay.addEventListener('animationend', handleAnimationEnd)
+  } catch (error) {
+    logger.error('Failed to create highlight overlay:', error as Error)
+  }
+}
+
+/**
+ * Scroll to element and show highlight after scroll completes
+ */
+function scrollAndHighlight(element: HTMLElement, container: HTMLElement): void {
+  element.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' })
+
+  let scrollTimeout: NodeJS.Timeout
+  const handleScroll = () => {
+    clearTimeout(scrollTimeout)
+    scrollTimeout = setTimeout(() => {
+      container.removeEventListener('scroll', handleScroll)
+      requestAnimationFrame(() => createHighlightOverlay(element, container))
+    }, 150)
+  }
+
+  container.addEventListener('scroll', handleScroll)
+
+  // Fallback: if element already in view (no scroll happens)
+  setTimeout(() => {
+    const initialScrollTop = container.scrollTop
+    setTimeout(() => {
+      if (Math.abs(container.scrollTop - initialScrollTop) < 1) {
+        container.removeEventListener('scroll', handleScroll)
+        clearTimeout(scrollTimeout)
+        requestAnimationFrame(() => createHighlightOverlay(element, container))
+      }
+    }, 200)
+  }, 50)
+}
 
 const RichEditor = ({
   ref,
@@ -56,18 +160,7 @@ const RichEditor = ({
   // toolbarItems: _toolbarItems // TODO: Implement custom toolbar items
 }: RichEditorProps & { ref?: React.RefObject<RichEditorRef | null> }) => {
   // Use the rich editor hook for complete editor management
-  const {
-    editor,
-    markdown,
-    html,
-    formattingState,
-    tableOfContentsItems,
-    linkEditor,
-    setMarkdown,
-    setHtml,
-    clear,
-    getPreviewText
-  } = useRichEditor({
+  const { editor, markdown, formattingState, tableOfContentsItems, linkEditor, setMarkdown, clear } = useRichEditor({
     initialContent,
     onChange: onMarkdownChange,
     onHtmlChange,
@@ -99,7 +192,6 @@ const RichEditor = ({
 
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
   const contentSearchRef = useRef<ContentSearchRef>(null)
-  const highlightCleanupRef = useRef<(() => void) | null>(null)
   const contentSearchFilter = useMemo<NodeFilter>(
     () => ({
       acceptNode(node) {
@@ -188,7 +280,11 @@ const RichEditor = ({
 
   // Handle drag end callback to clean up draggable attribute
   const handleDragEnd = useCallback((e: DragEvent) => {
-    removeDraggableFromDragHandleTarget(e.target)
+    // Clean up draggable attribute from the drag handle element
+    const target = e.target as HTMLElement
+    if (target && target.classList.contains('drag-handle')) {
+      target.removeAttribute('draggable')
+    }
   }, [])
 
   const closeTableActionMenu = () => {
@@ -198,14 +294,6 @@ const RichEditor = ({
       items: []
     })
   }
-
-  useEffect(() => {
-    return () => {
-      highlightCleanupRef.current?.()
-      highlightCleanupRef.current = null
-      clearRichEditorHighlight()
-    }
-  }, [])
 
   const handlePlusButtonClick = useCallback(
     (event: MouseEvent) => {
@@ -352,14 +440,7 @@ const RichEditor = ({
     ref,
     () => ({
       getContent: () => editor?.getText() || '',
-      getHtml: () => html,
       getMarkdown: () => markdown,
-      setContent: (content: string) => {
-        editor?.commands.setContent(content)
-      },
-      setHtml: (htmlContent: string) => {
-        setHtml(htmlContent)
-      },
       setMarkdown: (markdownContent: string) => {
         setMarkdown(markdownContent)
       },
@@ -378,9 +459,6 @@ const RichEditor = ({
           editor.commands[command](value)
         }
       },
-      getPreviewText: (maxLength?: number) => {
-        return getPreviewText(markdown, maxLength)
-      },
       getScrollTop: () => {
         return scrollContainerRef.current?.scrollTop ?? 0
       },
@@ -393,16 +471,13 @@ const RichEditor = ({
         if (!editor || !scrollContainerRef.current) return
 
         try {
-          const element = findElementByLine(editor.view.dom, lineNumber, options?.lineContent)
+          const totalLines = editor.getMarkdown().split('\n').length
+          const element = findElementByLine(editor.view.dom, lineNumber, options?.lineContent, totalLines)
           if (!element) return
 
-          highlightCleanupRef.current?.()
-          highlightCleanupRef.current = null
-
           if (options?.highlight) {
-            highlightCleanupRef.current = scrollAndHighlight(element, scrollContainerRef.current)
+            scrollAndHighlight(element, scrollContainerRef.current)
           } else {
-            clearRichEditorHighlight()
             element.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' })
           }
         } catch (error) {
@@ -418,7 +493,7 @@ const RichEditor = ({
       getAllCommands,
       getToolbarCommands
     }),
-    [editor, html, markdown, setHtml, setMarkdown, clear, getPreviewText]
+    [editor, markdown, setMarkdown, clear]
   )
 
   return (

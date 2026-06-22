@@ -10,7 +10,7 @@
  */
 
 import { loggerService } from '@logger'
-import type { AgentPersistedMessage } from '@types'
+import type { AgentPersistedMessage } from '@shared/data/types/agent'
 import { asc, eq } from 'drizzle-orm'
 import type { LibSQLDatabase } from 'drizzle-orm/libsql'
 

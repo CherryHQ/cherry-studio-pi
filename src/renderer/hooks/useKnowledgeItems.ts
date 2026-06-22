@@ -1,9 +1,15 @@
 import { useInvalidateCache, useQuery } from '@data/hooks/useDataApi'
 import { loggerService } from '@logger'
-import { getErrorMessage } from '@renderer/utils/error'
+import { ipcApi } from '@renderer/ipc'
 import { KNOWLEDGE_ITEMS_MAX_LIMIT } from '@shared/data/api/schemas/knowledges'
-import type { KnowledgeAddItemInput, KnowledgeItem, KnowledgeItemStatus } from '@shared/data/types/knowledge'
-import { type MutableRefObject, useCallback, useEffect, useRef, useState } from 'react'
+import type {
+  KnowledgeAddConflictStrategy,
+  KnowledgeAddItemInput,
+  KnowledgeAddItemsResult,
+  KnowledgeItem,
+  KnowledgeItemStatus
+} from '@shared/data/types/knowledge'
+import { useCallback, useState } from 'react'
 
 const KNOWLEDGE_V2_ITEMS_QUERY = {
   page: 1,
@@ -20,7 +26,7 @@ const normalizeKnowledgeError = (error: unknown): Error => {
     return error
   }
 
-  return new Error(getErrorMessage(error), { cause: error })
+  return new Error(String(error))
 }
 
 const addLogger = loggerService.withContext('useAddKnowledgeItems')
@@ -28,25 +34,6 @@ const deleteLogger = loggerService.withContext('useDeleteKnowledgeItem')
 const reindexLogger = loggerService.withContext('useReindexKnowledgeItem')
 
 type KnowledgeItemsLogger = typeof addLogger
-type MutationSequenceRef = MutableRefObject<number>
-type MountedRef = MutableRefObject<boolean>
-
-const useMountedRef = () => {
-  const mountedRef = useRef(true)
-
-  useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
-
-  return mountedRef
-}
-
-const isCurrentMutation = (mountedRef: MountedRef, mutationSeqRef: MutationSequenceRef, mutationSeq: number) =>
-  mountedRef.current && mutationSeqRef.current === mutationSeq
 
 const refreshKnowledgeItemsCaches = async (
   invalidateCache: ReturnType<typeof useInvalidateCache>,
@@ -86,11 +73,12 @@ export const useAddKnowledgeItems = (baseId: string) => {
   const [error, setError] = useState<Error | undefined>()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const invalidateCache = useInvalidateCache()
-  const mountedRef = useMountedRef()
-  const mutationSeqRef = useRef(0)
 
   const submit = useCallback(
-    async (items: KnowledgeAddItemInput[]): Promise<void> => {
+    async (
+      items: KnowledgeAddItemInput[],
+      conflictStrategy?: KnowledgeAddConflictStrategy
+    ): Promise<KnowledgeAddItemsResult> => {
       if (!baseId) {
         return Promise.reject(new Error('Knowledge base id is required'))
       }
@@ -99,15 +87,13 @@ export const useAddKnowledgeItems = (baseId: string) => {
         return Promise.reject(new Error('At least one knowledge source must be selected'))
       }
 
-      const mutationSeq = ++mutationSeqRef.current
-      if (mountedRef.current) {
-        setError(undefined)
-        setIsSubmitting(true)
-      }
+      setError(undefined)
+      setIsSubmitting(true)
 
       let submitError: Error | undefined
+      let result: KnowledgeAddItemsResult | undefined
       try {
-        await window.api.knowledge.addItems(baseId, items)
+        result = await ipcApi.request('knowledge.add_items', { baseId, items, conflictStrategy })
       } catch (error) {
         submitError = normalizeKnowledgeError(error)
 
@@ -116,28 +102,30 @@ export const useAddKnowledgeItems = (baseId: string) => {
           sourceCount: items.length
         })
 
-        if (isCurrentMutation(mountedRef, mutationSeqRef, mutationSeq)) {
-          setError(submitError)
-        }
+        setError(submitError)
       } finally {
-        await refreshKnowledgeItemsCaches(
-          invalidateCache,
-          baseId,
-          addLogger,
-          'Failed to refresh knowledge source list after submit',
-          { baseId }
-        )
-
-        if (isCurrentMutation(mountedRef, mutationSeqRef, mutationSeq)) {
-          setIsSubmitting(false)
+        // A 'conflicts' result added nothing, so skip the cache refresh; refresh
+        // on success (rows added) or on error (a partial add may have landed).
+        if (submitError || result?.status === 'added') {
+          await refreshKnowledgeItemsCaches(
+            invalidateCache,
+            baseId,
+            addLogger,
+            'Failed to refresh knowledge source list after submit',
+            { baseId }
+          )
         }
+
+        setIsSubmitting(false)
       }
 
       if (submitError) {
         throw submitError
       }
+
+      return result as KnowledgeAddItemsResult
     },
-    [baseId, invalidateCache, mountedRef]
+    [baseId, invalidateCache]
   )
 
   return {
@@ -151,8 +139,6 @@ export const useDeleteKnowledgeItem = (baseId: string) => {
   const [error, setError] = useState<Error | undefined>()
   const [isDeleting, setIsDeleting] = useState(false)
   const invalidateCache = useInvalidateCache()
-  const mountedRef = useMountedRef()
-  const mutationSeqRef = useRef(0)
 
   const deleteItem = useCallback(
     async (item: KnowledgeItem): Promise<void> => {
@@ -160,15 +146,12 @@ export const useDeleteKnowledgeItem = (baseId: string) => {
         return Promise.reject(new Error('Knowledge base id is required'))
       }
 
-      const mutationSeq = ++mutationSeqRef.current
-      if (mountedRef.current) {
-        setError(undefined)
-        setIsDeleting(true)
-      }
+      setError(undefined)
+      setIsDeleting(true)
 
       let deleteError: Error | undefined
       try {
-        await window.api.knowledge.deleteItems(baseId, [item.id])
+        await ipcApi.request('knowledge.delete_items', { baseId, itemIds: [item.id] })
       } catch (error) {
         deleteError = normalizeKnowledgeError(error)
 
@@ -177,9 +160,7 @@ export const useDeleteKnowledgeItem = (baseId: string) => {
           itemId: item.id
         })
 
-        if (isCurrentMutation(mountedRef, mutationSeqRef, mutationSeq)) {
-          setError(deleteError)
-        }
+        setError(deleteError)
       } finally {
         await refreshKnowledgeItemsCaches(
           invalidateCache,
@@ -192,16 +173,14 @@ export const useDeleteKnowledgeItem = (baseId: string) => {
           }
         )
 
-        if (isCurrentMutation(mountedRef, mutationSeqRef, mutationSeq)) {
-          setIsDeleting(false)
-        }
+        setIsDeleting(false)
       }
 
       if (deleteError) {
         throw deleteError
       }
     },
-    [baseId, invalidateCache, mountedRef]
+    [baseId, invalidateCache]
   )
 
   return {
@@ -215,8 +194,6 @@ export const useReindexKnowledgeItem = (baseId: string) => {
   const [error, setError] = useState<Error | undefined>()
   const [isReindexing, setIsReindexing] = useState(false)
   const invalidateCache = useInvalidateCache()
-  const mountedRef = useMountedRef()
-  const mutationSeqRef = useRef(0)
 
   const reindexItem = useCallback(
     async (item: KnowledgeItem): Promise<void> => {
@@ -224,15 +201,12 @@ export const useReindexKnowledgeItem = (baseId: string) => {
         return Promise.reject(new Error('Knowledge base id is required'))
       }
 
-      const mutationSeq = ++mutationSeqRef.current
-      if (mountedRef.current) {
-        setError(undefined)
-        setIsReindexing(true)
-      }
+      setError(undefined)
+      setIsReindexing(true)
 
       let reindexError: Error | undefined
       try {
-        await window.api.knowledge.reindexItems(baseId, [item.id])
+        await ipcApi.request('knowledge.reindex_items', { baseId, itemIds: [item.id] })
       } catch (error) {
         reindexError = normalizeKnowledgeError(error)
 
@@ -241,9 +215,7 @@ export const useReindexKnowledgeItem = (baseId: string) => {
           itemId: item.id
         })
 
-        if (isCurrentMutation(mountedRef, mutationSeqRef, mutationSeq)) {
-          setError(reindexError)
-        }
+        setError(reindexError)
       } finally {
         await refreshKnowledgeItemsCaches(
           invalidateCache,
@@ -256,16 +228,14 @@ export const useReindexKnowledgeItem = (baseId: string) => {
           }
         )
 
-        if (isCurrentMutation(mountedRef, mutationSeqRef, mutationSeq)) {
-          setIsReindexing(false)
-        }
+        setIsReindexing(false)
       }
 
       if (reindexError) {
         throw reindexError
       }
     },
-    [baseId, invalidateCache, mountedRef]
+    [baseId, invalidateCache]
   )
 
   return {

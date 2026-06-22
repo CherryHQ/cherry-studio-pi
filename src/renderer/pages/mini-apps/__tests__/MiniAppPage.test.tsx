@@ -1,40 +1,67 @@
+// @vitest-environment jsdom
+import '@testing-library/jest-dom/vitest'
+
 import type { MiniApp } from '@shared/data/types/miniApp'
-import { render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, render, waitFor } from '@testing-library/react'
+import type { ReactNode } from 'react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import MiniAppPage from '../MiniAppPage'
 
-const stubApp = (id: string): MiniApp => ({
-  appId: id,
-  name: id,
-  url: `https://${id}.example.com`,
-  logo: `${id}-logo`,
-  presetMiniAppId: id as MiniApp['presetMiniAppId'],
-  status: 'enabled',
-  orderKey: 'a0'
+const stubApp = (overrides: Partial<MiniApp> & Pick<MiniApp, 'appId' | 'name' | 'url'>): MiniApp => ({
+  appId: overrides.appId,
+  presetMiniAppId: overrides.presetMiniAppId ?? overrides.appId,
+  status: overrides.status ?? 'enabled',
+  orderKey: overrides.orderKey ?? 'a0',
+  name: overrides.name,
+  nameKey: overrides.nameKey,
+  url: overrides.url,
+  logo: overrides.logo ?? `${overrides.appId}-logo`,
+  bordered: overrides.bordered,
+  background: overrides.background,
+  supportedRegions: overrides.supportedRegions
 })
 
 const mocks = vi.hoisted(() => ({
-  appId: 'alpha',
   allApps: [] as MiniApp[],
-  error: null as unknown,
-  loggerError: vi.fn(),
   openedKeepAliveMiniApps: [] as MiniApp[],
-  loaded: new Map<string, boolean>(),
-  openMiniAppKeepAlive: vi.fn()
-}))
-
-vi.mock('@logger', () => ({
-  loggerService: {
-    withContext: () => ({
-      error: mocks.loggerError,
-      debug: vi.fn()
-    })
+  openMiniAppKeepAlive: vi.fn(),
+  updateTab: vi.fn(),
+  currentTab: {
+    id: 'launchpad-tab',
+    type: 'route',
+    url: '/app/mini-app/chatgpt',
+    title: 'Launchpad',
+    icon: undefined
   }
 }))
 
-vi.mock('@tanstack/react-router', () => ({
-  useParams: () => ({ appId: mocks.appId })
+vi.mock('@renderer/components/Icons', () => ({
+  LogoAvatar: () => <div data-testid="logo-avatar" />
+}))
+
+vi.mock('@renderer/components/Icons/SvgIcon', () => ({
+  OpenClawSidebarIcon: (props: React.ComponentProps<'svg'>) => <svg aria-hidden="true" {...props} />
+}))
+
+vi.mock('@renderer/pages/mini-apps/components/MinimalToolbar', () => ({
+  default: () => <div data-testid="minimal-toolbar" />
+}))
+
+vi.mock('@renderer/pages/mini-apps/components/WebviewSearch', () => ({
+  default: () => <div data-testid="webview-search" />
+}))
+
+vi.mock('@renderer/context/TabIdContext', () => ({
+  useCurrentTab: () => mocks.currentTab,
+  useCurrentTabId: () => mocks.currentTab.id
+}))
+
+vi.mock('@renderer/context/TabsContext', () => ({
+  useOptionalTabsContext: () => ({
+    tabs: [mocks.currentTab],
+    updateTab: mocks.updateTab
+  })
 }))
 
 vi.mock('@renderer/hooks/useMiniAppPopup', () => ({
@@ -48,93 +75,71 @@ vi.mock('@renderer/hooks/useMiniApps', () => ({
     allApps: mocks.allApps,
     openedKeepAliveMiniApps: mocks.openedKeepAliveMiniApps,
     isLoading: false,
-    error: mocks.error
+    error: null
   })
 }))
 
 vi.mock('@renderer/utils/webviewStateManager', () => ({
-  getWebviewLoaded: (appId: string) => mocks.loaded.get(appId) ?? false,
-  onWebviewStateChange: vi.fn(() => vi.fn()),
-  setWebviewLoaded: vi.fn((appId: string, loaded: boolean) => {
-    mocks.loaded.set(appId, loaded)
+  getWebviewLoaded: () => true,
+  onWebviewStateChange: () => vi.fn(),
+  setWebviewLoaded: vi.fn()
+}))
+
+vi.mock('@tanstack/react-router', () => ({
+  useParams: () => ({ appId: 'chatgpt' })
+}))
+
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string) => key
   })
-}))
-
-vi.mock('@renderer/components/Icons', () => ({
-  LogoAvatar: ({ logo }: { logo: string }) => <div data-testid="logo-avatar">{logo}</div>
-}))
-
-vi.mock('@renderer/config/miniApps', () => ({
-  getMiniAppsLogo: (logo: string) => logo
-}))
-
-vi.mock('../components/MinimalToolbar', () => ({
-  default: ({ app, currentUrl }: { app: MiniApp; currentUrl: string | null }) => (
-    <div data-testid="minimal-toolbar">
-      {app.appId}:{currentUrl}
-    </div>
-  )
-}))
-
-vi.mock('../components/WebviewSearch', () => ({
-  default: ({ appId, isWebviewReady }: { appId: string; isWebviewReady: boolean }) => (
-    <div data-testid="webview-search">
-      {appId}:{String(isWebviewReady)}
-    </div>
-  )
 }))
 
 vi.mock('react-spinners/BeatLoader', () => ({
   default: () => <div data-testid="beat-loader" />
 }))
 
-vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key: string) => key })
+vi.mock('@renderer/components/Scrollbar', () => ({
+  default: ({ children }: { children: ReactNode }) => <div>{children}</div>
 }))
 
 describe('MiniAppPage', () => {
   beforeEach(() => {
-    mocks.appId = 'alpha'
-    mocks.allApps = [stubApp('alpha'), stubApp('bravo')]
-    mocks.error = null
+    mocks.allApps = [
+      stubApp({
+        appId: 'chatgpt',
+        name: 'ChatGPT',
+        url: 'https://chat.openai.com',
+        logo: 'chat-logo'
+      })
+    ]
     mocks.openedKeepAliveMiniApps = []
-    mocks.loaded = new Map<string, boolean>()
-    mocks.loggerError.mockClear()
-    mocks.openMiniAppKeepAlive.mockClear()
-    ;(globalThis as unknown as { CSS: { escape: (value: string) => string } }).CSS = {
-      escape: (value: string) => value
+    mocks.currentTab = {
+      id: 'launchpad-tab',
+      type: 'route',
+      url: '/app/mini-app/chatgpt',
+      title: 'Launchpad',
+      icon: undefined
     }
+    mocks.updateTab.mockClear()
+    mocks.openMiniAppKeepAlive.mockClear()
+    globalThis.CSS = { escape: (value: string) => value } as typeof CSS
   })
 
-  it('resets loaded state and toolbar URL when the route switches mini apps', async () => {
-    mocks.loaded.set('alpha', true)
-    mocks.loaded.set('bravo', false)
-
-    const { rerender } = render(<MiniAppPage />)
-
-    expect(screen.getByTestId('webview-search')).toHaveTextContent('alpha:true')
-    expect(screen.getByTestId('minimal-toolbar')).toHaveTextContent('alpha:https://alpha.example.com')
-
-    mocks.appId = 'bravo'
-    rerender(<MiniAppPage />)
-
-    await waitFor(() => {
-      expect(screen.getByTestId('webview-search')).toHaveTextContent('bravo:false')
-      expect(screen.getByTestId('minimal-toolbar')).toHaveTextContent('bravo:https://bravo.example.com')
-    })
+  afterEach(() => {
+    cleanup()
+    vi.clearAllMocks()
   })
 
-  it('preserves nested mini-app load error details in logs', async () => {
-    mocks.error = { error: { message: 'mini app store unavailable' } }
-
+  it('syncs the owning tab title and icon to the concrete mini app', async () => {
     render(<MiniAppPage />)
 
-    await waitFor(() => {
-      expect(mocks.loggerError).toHaveBeenCalledWith(
-        'Failed to load mini apps',
-        expect.objectContaining({ message: 'mini app store unavailable' })
-      )
-    })
-    expect(mocks.openMiniAppKeepAlive).not.toHaveBeenCalled()
+    await waitFor(() =>
+      expect(mocks.updateTab).toHaveBeenCalledWith('launchpad-tab', {
+        title: 'ChatGPT',
+        icon: 'chat-logo'
+      })
+    )
+    expect(mocks.openMiniAppKeepAlive).toHaveBeenCalledWith(mocks.allApps[0])
   })
 })

@@ -102,12 +102,17 @@ type CreateModelRegistryData = ModelLookupResult & {
   defaultChatEndpoint?: EndpointType
 }
 
+type ReconcileRemovalFilterResult = {
+  toRemove: string[]
+  presetBackedRemovalIds: Set<string>
+}
+
 /**
  * Subset of user-row fields that can override registry-derived baseline values.
  *
- * Status fields (`isEnabled`, `isHidden`, `isDeprecated`) are intentionally
- * excluded: they are user state managed outside registry enrichment, not preset
- * baseline overrides. They flow through the create DTO/defaults and through the
+ * Status fields (`isEnabled`, `isHidden`) are intentionally excluded: they are
+ * user state managed via `PATCH /models/:id`, not preset baseline overrides.
+ * They flow through `...row` spread in the migrator and through the
  * `mergedModelToNewUserModel` projection in `ModelService.buildCreateValues`.
  */
 export interface UserModelOverlay {
@@ -248,10 +253,8 @@ function dtoToNewUserModel(dto: CreateModelDto): NewUserModelInput {
     reasoning: dto.reasoning ?? null,
     parameters: dto.parameterSupport ?? null,
     pricing: dto.pricing ?? null,
-    isEnabled: dto.isEnabled ?? true,
-    isHidden: dto.isHidden ?? false,
-    isDeprecated: dto.isDeprecated ?? false,
-    notes: dto.notes ?? null
+    isEnabled: true,
+    isHidden: false
   }
 }
 
@@ -282,9 +285,7 @@ function mergedModelToNewUserModel(
     parameters: merged.parameterSupport ?? null,
     pricing: merged.pricing ?? null,
     isEnabled: merged.isEnabled,
-    isHidden: merged.isHidden,
-    isDeprecated: merged.isDeprecated ?? false,
-    notes: merged.notes ?? null
+    isHidden: merged.isHidden
   }
 }
 
@@ -322,14 +323,6 @@ function rowToRuntimeModel(row: UserModelRow): Model {
 }
 
 class ModelService {
-  private get dbService() {
-    return application.get('DbService')
-  }
-
-  private get db() {
-    return this.dbService.getDb()
-  }
-
   private buildCreateValues(dto: CreateModelDto, registryData?: CreateModelRegistryData): NewUserModelInput {
     const presetModel = registryData?.presetModel ?? null
     const dtoValues = dtoToNewUserModel(dto)
@@ -344,54 +337,39 @@ class ModelService {
       )
       const merged = applyUserOverlay(baseline, { ...dtoValues, name: dto.name ?? null })
 
-      return {
-        ...mergedModelToNewUserModel(dto.providerId, dto.modelId, presetModel.id, merged),
-        isEnabled: dtoValues.isEnabled,
-        isHidden: dtoValues.isHidden,
-        isDeprecated: dtoValues.isDeprecated,
-        notes: dtoValues.notes
-      }
+      return mergedModelToNewUserModel(dto.providerId, dto.modelId, presetModel.id, merged)
     }
 
     return { ...dtoValues, presetModelId: dto.presetModelId ?? null }
   }
 
-  private async filterReconcileRemovals(providerId: string, toRemove: string[], db: DbType): Promise<string[]> {
-    if (toRemove.length === 0) return toRemove
+  private async filterReconcileRemovals(
+    providerId: string,
+    toRemove: string[],
+    db: DbType
+  ): Promise<ReconcileRemovalFilterResult> {
+    if (toRemove.length === 0) {
+      return { toRemove, presetBackedRemovalIds: new Set() }
+    }
 
     const rows = await db
       .select({
         id: userModelTable.id,
-        modelId: userModelTable.modelId,
-        presetModelId: userModelTable.presetModelId,
-        isDeprecated: userModelTable.isDeprecated
+        presetModelId: userModelTable.presetModelId
       })
       .from(userModelTable)
       .where(and(eq(userModelTable.providerId, providerId), inArray(userModelTable.id, toRemove)))
 
     const managedDefaultIds = new Set<string>()
-    const protectedIds = new Set<string>()
+    const presetBackedRemovalIds = new Set<string>()
     for (const row of rows) {
       if (providerId === CHERRYAI_PROVIDER_ID && row.id === CHERRYAI_DEFAULT_UNIQUE_MODEL_ID) {
         managedDefaultIds.add(row.id)
-        continue
-      }
-
-      if (row.presetModelId == null || row.presetModelId === '' || row.isDeprecated) {
-        continue
-      }
-      if (await providerRegistryService.isActiveProviderRegistryModel(providerId, row.presetModelId)) {
-        protectedIds.add(row.id)
+      } else if (row.presetModelId != null && row.presetModelId !== '') {
+        presetBackedRemovalIds.add(row.id)
       }
     }
 
-    if (protectedIds.size > 0) {
-      logger.warn('Skipped active registry model removal during reconcile', {
-        providerId,
-        skippedCount: protectedIds.size,
-        skippedIds: [...protectedIds]
-      })
-    }
     if (managedDefaultIds.size > 0) {
       logger.warn('Skipped managed CherryAI default model removal during reconcile', {
         providerId,
@@ -400,13 +378,18 @@ class ModelService {
       })
     }
 
-    return toRemove.filter((id) => !managedDefaultIds.has(id) && !protectedIds.has(id))
+    return {
+      toRemove: toRemove.filter((id) => !managedDefaultIds.has(id)),
+      presetBackedRemovalIds
+    }
   }
 
   /**
    * List models with optional filters
    */
   async list(query: ListModelsQuery): Promise<Model[]> {
+    const db = application.get('DbService').getDb()
+
     const conditions: SQL[] = []
 
     if (query.providerId) {
@@ -417,7 +400,7 @@ class ModelService {
       conditions.push(eq(userModelTable.isEnabled, query.enabled))
     }
 
-    const rows = await this.db
+    const rows = await db
       .select()
       .from(userModelTable)
       .where(conditions.length > 0 ? and(...conditions) : undefined)
@@ -539,7 +522,9 @@ class ModelService {
    * Get a model by composite key (providerId + modelId)
    */
   async getByKey(providerId: string, modelId: string): Promise<Model> {
-    const [row] = await this.db
+    const db = application.get('DbService').getDb()
+
+    const [row] = await db
       .select()
       .from(userModelTable)
       .where(and(eq(userModelTable.providerId, providerId), eq(userModelTable.modelId, modelId)))
@@ -581,11 +566,12 @@ class ModelService {
       )
     }
 
+    const db = application.get('DbService').getDb()
     const values = items.map(({ dto, registryData }) => this.buildCreateValues(dto, registryData))
 
     const rows = await withSqliteErrors(
       () =>
-        this.dbService.withWriteTx(async (tx) => {
+        db.transaction(async (tx) => {
           const results: UserModelRow[] = []
           for (const providerId of new Set(values.map((value) => value.providerId))) {
             const scopedValues = values.filter((value) => value.providerId === providerId)
@@ -632,51 +618,48 @@ class ModelService {
   async update(providerId: string, modelId: string, dto: UpdateModelDto): Promise<Model> {
     assertManagedCherryAiDefaultModelPatchAllowed(providerId, modelId, dto)
 
+    const db = application.get('DbService').getDb()
+
+    // Fetch existing row (also verifies existence)
+    const [existing] = await db
+      .select()
+      .from(userModelTable)
+      .where(and(eq(userModelTable.providerId, providerId), eq(userModelTable.modelId, modelId)))
+      .limit(1)
+
+    if (!existing) {
+      throw DataApiErrorFactory.notFound('Model', `${providerId}/${modelId}`)
+    }
+
+    const updates: Partial<InsertUserModelRow> = {}
+    for (const entry of UPDATE_MODEL_FIELD_MAP) {
+      const [dtoKey, dbKey] = Array.isArray(entry) ? entry : [entry, entry as keyof InsertUserModelRow]
+      if (dto[dtoKey] !== undefined) {
+        ;(updates as Record<string, unknown>)[dbKey] = dto[dtoKey]
+      }
+    }
+
+    // Track which registry-enrichable fields the user explicitly changed
+    // Map DTO keys to DB column names (e.g. parameterSupport → parameters)
     const dtoToDbKey = (key: string): string => {
       const mapping = UPDATE_MODEL_FIELD_MAP.find((entry) => (Array.isArray(entry) ? entry[0] === key : false))
       return mapping && Array.isArray(mapping) ? mapping[1] : key
     }
+    const changedEnrichableFields = Object.keys(dto).map(dtoToDbKey).filter(isRegistryEnrichableField)
+    if (changedEnrichableFields.length > 0) {
+      const existingOverrides = existing.userOverrides ?? []
+      updates.userOverrides = [...new Set([...existingOverrides, ...changedEnrichableFields])]
+    }
 
-    const row = await this.dbService.withWriteTx(async (tx) => {
-      // Fetch existing row inside the write transaction so userOverrides
-      // read-merge-write cannot lose concurrent model PATCHes.
-      const [existing] = await tx
-        .select()
-        .from(userModelTable)
-        .where(and(eq(userModelTable.providerId, providerId), eq(userModelTable.modelId, modelId)))
-        .limit(1)
+    if (Object.keys(updates).length === 0) {
+      return rowToRuntimeModel(existing)
+    }
 
-      if (!existing) {
-        throw DataApiErrorFactory.notFound('Model', `${providerId}/${modelId}`)
-      }
-
-      const updates: Partial<InsertUserModelRow> = {}
-      for (const entry of UPDATE_MODEL_FIELD_MAP) {
-        const [dtoKey, dbKey] = Array.isArray(entry) ? entry : [entry, entry as keyof InsertUserModelRow]
-        if (dto[dtoKey] !== undefined) {
-          ;(updates as Record<string, unknown>)[dbKey] = dto[dtoKey]
-        }
-      }
-
-      // Track which registry-enrichable fields the user explicitly changed.
-      const changedEnrichableFields = Object.keys(dto).map(dtoToDbKey).filter(isRegistryEnrichableField)
-      if (changedEnrichableFields.length > 0) {
-        const existingOverrides = existing.userOverrides ?? []
-        updates.userOverrides = [...new Set([...existingOverrides, ...changedEnrichableFields])]
-      }
-
-      if (Object.keys(updates).length === 0) {
-        return existing
-      }
-
-      const [updated] = await tx
-        .update(userModelTable)
-        .set(updates)
-        .where(and(eq(userModelTable.providerId, providerId), eq(userModelTable.modelId, modelId)))
-        .returning()
-
-      return updated
-    })
+    const [row] = await db
+      .update(userModelTable)
+      .set(updates)
+      .where(and(eq(userModelTable.providerId, providerId), eq(userModelTable.modelId, modelId)))
+      .returning()
 
     logger.info('Updated model', { providerId, modelId, changes: Object.keys(dto) })
 
@@ -697,6 +680,8 @@ class ModelService {
   async bulkUpdate(items: Array<{ providerId: string; modelId: string; patch: UpdateModelDto }>): Promise<Model[]> {
     if (items.length === 0) return []
 
+    const db = application.get('DbService').getDb()
+
     for (const { providerId, modelId, patch } of items) {
       assertManagedCherryAiDefaultModelPatchAllowed(providerId, modelId, patch)
     }
@@ -706,7 +691,7 @@ class ModelService {
       return mapping && Array.isArray(mapping) ? mapping[1] : key
     }
 
-    return await this.dbService.withWriteTx(async (tx) => {
+    return await db.transaction(async (tx) => {
       const results: Model[] = []
 
       for (const { providerId, modelId, patch } of items) {
@@ -774,19 +759,23 @@ class ModelService {
       return this.list({ providerId })
     }
 
+    const db = application.get('DbService').getDb()
     const values = payload.toAdd.map(({ dto, registryData }) => this.buildCreateValues(dto, registryData))
-    const toRemove = await this.filterReconcileRemovals(providerId, payload.toRemove, this.db)
+    const removalFilter = await this.filterReconcileRemovals(providerId, payload.toRemove, db)
+    const toRemove = removalFilter.toRemove
 
     let actuallyDeleted = 0
+    let deletedIds: string[] = []
     const rows = await withSqliteErrors(
       () =>
-        this.dbService.withWriteTx(async (tx) => {
+        db.transaction(async (tx) => {
           if (toRemove.length > 0) {
             const deletedRows = await tx
               .delete(userModelTable)
               .where(and(eq(userModelTable.providerId, providerId), inArray(userModelTable.id, toRemove)))
               .returning({ id: userModelTable.id })
             actuallyDeleted = deletedRows.length
+            deletedIds = deletedRows.map((row) => row.id)
 
             if (deletedRows.length > 0) {
               await pinService.purgeForEntitiesTx(
@@ -830,6 +819,15 @@ class ModelService {
       })
     }
 
+    const deletedPresetBackedIds = deletedIds.filter((id) => removalFilter.presetBackedRemovalIds.has(id))
+    if (deletedPresetBackedIds.length > 0) {
+      logger.info('Deleted preset-backed models during reconcile', {
+        providerId,
+        deletedCount: deletedPresetBackedIds.length,
+        deletedIds: deletedPresetBackedIds
+      })
+    }
+
     logger.info('Reconciled provider models', {
       providerId,
       added: values.length,
@@ -845,7 +843,7 @@ class ModelService {
   async delete(providerId: string, modelId: string): Promise<void> {
     assertManagedCherryAiDefaultModelMutationAllowed(providerId, modelId, `delete model ${providerId}/${modelId}`)
 
-    await this.dbService.withWriteTx(async (tx) => {
+    await application.get('DbService').withWriteTx(async (tx) => {
       const rows = await tx
         .delete(userModelTable)
         .where(and(eq(userModelTable.providerId, providerId), eq(userModelTable.modelId, modelId)))
@@ -877,26 +875,27 @@ class ModelService {
       )
     }
 
-    await this.dbService.withWriteTx(async (tx) => {
-      // Fetch existing userOverrides inside the write transaction so registry
-      // sync cannot overwrite user-edited fields using a stale pre-read.
-      const providerIds = [...new Set(models.map((m) => m.providerId))]
-      const existingRows = await tx
-        .select({
-          providerId: userModelTable.providerId,
-          modelId: userModelTable.modelId,
-          userOverrides: userModelTable.userOverrides
-        })
-        .from(userModelTable)
-        .where(inArray(userModelTable.providerId, providerIds))
+    const db = application.get('DbService').getDb()
 
-      const overridesMap = new Map<string, Set<string>>()
-      for (const row of existingRows) {
-        if (row.userOverrides && row.userOverrides.length > 0) {
-          overridesMap.set(`${row.providerId}:${row.modelId}`, new Set(row.userOverrides))
-        }
+    // Pre-fetch existing userOverrides for all affected models
+    const providerIds = [...new Set(models.map((m) => m.providerId))]
+    const existingRows = await db
+      .select({
+        providerId: userModelTable.providerId,
+        modelId: userModelTable.modelId,
+        userOverrides: userModelTable.userOverrides
+      })
+      .from(userModelTable)
+      .where(inArray(userModelTable.providerId, providerIds))
+
+    const overridesMap = new Map<string, Set<string>>()
+    for (const row of existingRows) {
+      if (row.userOverrides && row.userOverrides.length > 0) {
+        overridesMap.set(`${row.providerId}:${row.modelId}`, new Set(row.userOverrides))
       }
+    }
 
+    await db.transaction(async (tx) => {
       for (const model of models) {
         const userOverrides = overridesMap.get(`${model.providerId}:${model.modelId}`)
 

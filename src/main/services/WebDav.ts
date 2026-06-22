@@ -1,6 +1,6 @@
 import { loggerService } from '@logger'
+import type { WebDavConfig } from '@shared/types/backup'
 import { normalizeWebDavConfig } from '@shared/webdavConfig'
-import type { WebDavConfig } from '@types'
 import path from 'path'
 import type Stream from 'stream'
 import type {

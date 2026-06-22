@@ -6,12 +6,13 @@ import { promisify, TextDecoder } from 'node:util'
 
 import type { AgentTool, AgentToolResult } from '@earendil-works/pi-agent-core'
 import { Type } from '@earendil-works/pi-ai'
+import type { McpCallToolResponse, McpToolResultContent } from '@main/ai/mcp/types'
 import { promptForToolApproval } from '@main/services/agents/services/ToolPermissionService'
 import mcpService from '@main/services/MCPService'
 import { sanitizeRemoteUrl } from '@main/utils/remoteUrlSafety'
 import getShellEnv from '@main/utils/shell-env'
 import { HOME_CHERRY_DIR } from '@shared/config/constant'
-import type { McpCallToolResponse, McpTool, McpToolResultContent } from '@types'
+import type { McpTool } from '@shared/types/mcp'
 import fg from 'fast-glob'
 
 const execFileAsync = promisify(execFile)

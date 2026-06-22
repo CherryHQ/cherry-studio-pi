@@ -1,8 +1,9 @@
+import type { Provider } from '@main/data/migration/v2/legacyTypes'
 import {
   RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY,
   serializeRendererPersistCacheValue
 } from '@shared/data/cache/cacheSchemas'
-import type { Assistant, Provider } from '@types'
+import type { Assistant } from '@shared/data/types/assistant'
 
 import { isSensitiveHeaderName } from './SecretFieldDetection'
 import { storageV2SecretVaultService } from './SecretVaultService'

@@ -36,8 +36,6 @@
     "src/main/**/*",
     "src/main/env.d.ts",
     "src/preload/**/*",
-    "src/renderer/services/traceApi.ts",
-    "src/renderer/types/*",
     "packages/mcp-trace/**/*",
     "packages/provider-registry/**/*",
     "packages/aiCore/src/**/*",

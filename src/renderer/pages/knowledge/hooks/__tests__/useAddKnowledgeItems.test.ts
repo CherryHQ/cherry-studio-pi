@@ -5,26 +5,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockUseInvalidateCache = vi.fn()
 const mockInvalidateCache = vi.fn()
-const mockAddItems = vi.fn()
+const mockIpcRequest = vi.fn()
 let loggerErrorSpy: ReturnType<typeof vi.spyOn>
 
 vi.mock('@data/hooks/useDataApi', () => ({
   useInvalidateCache: () => mockUseInvalidateCache()
 }))
 
-type Deferred<T> = {
-  promise: Promise<T>
-  resolve: (value: T) => void
-}
-
-function deferred<T>(): Deferred<T> {
-  let resolve: (value: T) => void = () => {}
-  const promise = new Promise<T>((promiseResolve) => {
-    resolve = promiseResolve
-  })
-
-  return { promise, resolve }
-}
+vi.mock('@renderer/ipc', () => ({
+  ipcApi: {
+    request: (...args: unknown[]) => mockIpcRequest(...args)
+  }
+}))
 
 describe('useAddKnowledgeItems', () => {
   beforeEach(() => {
@@ -32,12 +24,7 @@ describe('useAddKnowledgeItems', () => {
     loggerErrorSpy = vi.spyOn(mockRendererLoggerService, 'error').mockImplementation(() => {})
     mockUseInvalidateCache.mockReturnValue(mockInvalidateCache)
     mockInvalidateCache.mockResolvedValue(undefined)
-    mockAddItems.mockResolvedValue(undefined)
-    ;(window as any).api = {
-      knowledge: {
-        addItems: mockAddItems
-      }
-    }
+    mockIpcRequest.mockResolvedValue({ status: 'added' })
   })
 
   it('submits knowledge sources through orchestration IPC and refreshes the list', async () => {
@@ -45,8 +32,7 @@ describe('useAddKnowledgeItems', () => {
       {
         type: 'directory' as const,
         data: {
-          source: '/Users/me/docs',
-          path: '/Users/me/docs'
+          source: '/Users/me/docs'
         }
       },
       {
@@ -61,18 +47,42 @@ describe('useAddKnowledgeItems', () => {
     const { result } = renderHook(() => useAddKnowledgeItems('base-1'))
 
     await act(async () => {
-      await expect(result.current.submit(items)).resolves.toBeUndefined()
+      await expect(result.current.submit(items)).resolves.toEqual({ status: 'added' })
     })
 
-    expect(mockAddItems).toHaveBeenCalledWith('base-1', items)
+    expect(mockIpcRequest).toHaveBeenCalledWith('knowledge.add_items', { baseId: 'base-1', items })
     expect(mockInvalidateCache).toHaveBeenCalledWith(['/knowledge-bases/base-1/items', '/knowledge-bases'])
+    expect(result.current.error).toBeUndefined()
+    expect(result.current.isSubmitting).toBe(false)
+  })
+
+  it('returns the conflicts result and skips the list refresh when the add reports conflicts', async () => {
+    const conflictsResult = { status: 'conflicts' as const, conflicts: [{ type: 'note' as const, title: 'Doc A' }] }
+    mockIpcRequest.mockResolvedValueOnce(conflictsResult)
+    const items = [{ type: 'note' as const, data: { source: 'Doc A', content: 'Doc A' } }]
+
+    const { result } = renderHook(() => useAddKnowledgeItems('base-1'))
+
+    let submitResult: unknown
+    await act(async () => {
+      submitResult = await result.current.submit(items, 'detect')
+    })
+
+    expect(submitResult).toEqual(conflictsResult)
+    expect(mockIpcRequest).toHaveBeenCalledWith('knowledge.add_items', {
+      baseId: 'base-1',
+      items,
+      conflictStrategy: 'detect'
+    })
+    // Nothing was added, so the list cache is not refreshed.
+    expect(mockInvalidateCache).not.toHaveBeenCalled()
     expect(result.current.error).toBeUndefined()
     expect(result.current.isSubmitting).toBe(false)
   })
 
   it('keeps submit rejected, refreshes items, and exposes inline error when orchestration rejects', async () => {
     const submitError = new Error('create failed')
-    mockAddItems.mockRejectedValueOnce(submitError)
+    mockIpcRequest.mockRejectedValueOnce(submitError)
 
     const { result } = renderHook(() => useAddKnowledgeItems('base-1'))
 
@@ -99,32 +109,10 @@ describe('useAddKnowledgeItems', () => {
     })
   })
 
-  it('preserves nested orchestration rejection details', async () => {
-    mockAddItems.mockRejectedValueOnce({ error: { message: 'knowledge source bridge failed' } })
-
-    const { result } = renderHook(() => useAddKnowledgeItems('base-1'))
-
-    await act(async () => {
-      await expect(
-        result.current.submit([
-          {
-            type: 'url' as const,
-            data: {
-              source: 'https://example.com/article',
-              url: 'https://example.com/article'
-            }
-          }
-        ])
-      ).rejects.toThrow('knowledge source bridge failed')
-    })
-
-    expect(result.current.error?.message).toBe('knowledge source bridge failed')
-  })
-
   it('preserves the submit rejection when post-failure refresh also fails', async () => {
     const submitError = new Error('create failed')
     const invalidateError = new Error('refresh failed')
-    mockAddItems.mockRejectedValueOnce(submitError)
+    mockIpcRequest.mockRejectedValueOnce(submitError)
     mockInvalidateCache.mockRejectedValueOnce(invalidateError)
 
     const { result } = renderHook(() => useAddKnowledgeItems('base-1'))
@@ -150,46 +138,5 @@ describe('useAddKnowledgeItems', () => {
         baseId: 'base-1'
       }
     )
-  })
-
-  it('keeps submitting until the latest overlapping submit completes', async () => {
-    const firstSubmit = deferred<void>()
-    const secondSubmit = deferred<void>()
-    const items = [
-      {
-        type: 'url' as const,
-        data: {
-          source: 'https://example.com/article',
-          url: 'https://example.com/article'
-        }
-      }
-    ]
-    mockAddItems.mockReturnValueOnce(firstSubmit.promise).mockReturnValueOnce(secondSubmit.promise)
-
-    const { result } = renderHook(() => useAddKnowledgeItems('base-1'))
-
-    let firstSubmitPromise!: Promise<void>
-    let secondSubmitPromise!: Promise<void>
-    await act(async () => {
-      firstSubmitPromise = result.current.submit(items)
-      secondSubmitPromise = result.current.submit(items)
-      await Promise.resolve()
-    })
-
-    expect(result.current.isSubmitting).toBe(true)
-
-    await act(async () => {
-      firstSubmit.resolve(undefined)
-      await firstSubmitPromise
-    })
-
-    expect(result.current.isSubmitting).toBe(true)
-
-    await act(async () => {
-      secondSubmit.resolve(undefined)
-      await secondSubmitPromise
-    })
-
-    expect(result.current.isSubmitting).toBe(false)
   })
 })

@@ -14,26 +14,9 @@ import type {
   StreamDonePayload,
   StreamErrorPayload
 } from '@shared/ai/transport'
-import type { CommandId, MenuAnchor, NativePopupMenuModel, NativePopupMenuResult } from '@shared/command'
-import type { GitBashPathInfo, TerminalConfig } from '@shared/config/constant'
-import type { LogLevel, LogSourceWithContext } from '@shared/config/logger'
-import type {
-  CodeToolsRunResult,
-  EnvironmentDependenciesStatus,
-  LanClientEvent,
-  LanFileCompleteMessage,
-  LanHandshakeAckMessage,
-  LanTransferConnectPayload,
-  LanTransferState,
-  McpServerLogEntry,
-  OperationResult,
-  WebviewKeyEvent
-} from '@shared/config/types'
-import type { JobSnapshot } from '@shared/data/api/schemas/jobs'
+import type { EnvironmentDependenciesStatus } from '@shared/config/types'
 import type { CacheEntry, CacheSyncMessage } from '@shared/data/cache/cacheTypes'
 import type {
-  FileProcessorFeature,
-  FileProcessorId,
   UnifiedPreferenceKeyType,
   UnifiedPreferenceMultipleResultType,
   UnifiedPreferenceType,
@@ -41,52 +24,36 @@ import type {
 } from '@shared/data/preference/preferenceTypes'
 import type { Assistant } from '@shared/data/types/assistant'
 import type { FileEntry } from '@shared/data/types/file'
-import type { FileProcessingOutputTarget, ListAvailableFileProcessorsResult } from '@shared/data/types/fileProcessing'
-import type {
-  CreateKnowledgeBaseDto,
-  KnowledgeAddItemInput,
-  KnowledgeBase,
-  KnowledgeItemChunk,
-  KnowledgeSearchResult as KnowledgeVectorSearchResult,
-  RestoreKnowledgeBaseDto
-} from '@shared/data/types/knowledge'
+import type { FileMetadata } from '@shared/data/types/file/legacyFileMetadata'
 import type { Model } from '@shared/data/types/model'
 import type { Provider } from '@shared/data/types/provider'
 import type { SettingsPath } from '@shared/data/types/settingsPath'
-import type {
-  WebSearchCheckProviderRequest,
-  WebSearchCheckProviderResponse,
-  WebSearchFetchUrlsRequest,
-  WebSearchResponse,
-  WebSearchSearchKeywordsRequest
-} from '@shared/data/types/webSearch'
-import type { ExternalAppInfo } from '@shared/externalApp/types'
-import type { FilePath, PhysicalFileMetadata } from '@shared/file/types/common'
-import type { FileHandle } from '@shared/file/types/handle'
+import { IpcChannel } from '@shared/IpcChannel'
+import type { ApiGatewayStatusResult } from '@shared/types/apiGateway'
+import type { S3Config, WebDavConfig } from '@shared/types/backup'
+import type { GitBashPathInfo, TerminalConfig } from '@shared/types/codeCli'
+import type { CodeToolsRunResult, OperationResult } from '@shared/types/codeTools'
+import type { MenuAnchor, NativePopupMenuModel, NativePopupMenuResult } from '@shared/types/command'
+import type { ExternalAppInfo } from '@shared/types/externalApp'
+import type { FilePath, PhysicalFileMetadata } from '@shared/types/file/common'
+import type { FileHandle } from '@shared/types/file/handle'
 import type {
   CreateInternalEntryIpcParams,
   EnsureExternalEntryIpcParams,
   GetPhysicalPathIpcParams
-} from '@shared/file/types/ipc'
-import type { CreateTreeIpcResult, DirectoryTreeOptions, TreeMutationPushPayload } from '@shared/file/types/tree'
-import { IpcChannel } from '@shared/IpcChannel'
-import type { ShortcutPreferenceKey } from '@shared/shortcuts/types'
-import type { StorageHealth } from '@shared/types/storageMonitor'
-import { isSafeExternalUrl } from '@shared/utils/externalUrlSafety'
+} from '@shared/types/file/ipc'
 import type {
-  ApiGatewayStatusResult,
-  FileMetadata,
-  Notification,
-  OcrProvider,
-  OcrResult,
-  S3Config,
-  SupportedOcrFile,
-  WebDavConfig
-} from '@types'
-import type { OpenDialogOptions } from 'electron'
-import { contextBridge, ipcRenderer, shell, webUtils } from 'electron'
-import type { CreateDirectoryOptions } from 'webdav'
-
+  LanClientEvent,
+  LanFileCompleteMessage,
+  LanHandshakeAckMessage,
+  LanTransferConnectPayload,
+  LanTransferState
+} from '@shared/types/lanTransfer'
+import type { LogLevel, LogSourceWithContext } from '@shared/types/logger'
+import type { McpServerLogEntry } from '@shared/types/mcp'
+import type { Notification } from '@shared/types/notification'
+import type { OcrProvider, OcrResult, SupportedOcrFile } from '@shared/types/ocr'
+import type { ShortcutPreferenceKey } from '@shared/types/shortcut'
 import type {
   InstalledSkill,
   LocalSkill,
@@ -96,7 +63,15 @@ import type {
   SkillInstallOptions,
   SkillResult,
   SkillToggleOptions
-} from '../renderer/types/skill'
+} from '@shared/types/skill'
+import type { StorageHealth } from '@shared/types/storageMonitor'
+import type { WebviewKeyEvent } from '@shared/types/webview'
+import type { CommandId } from '@shared/utils/command'
+import type { CreateTreeIpcResult, DirectoryTreeOptions, TreeMutationPushPayload } from '@shared/utils/file/tree'
+import type { OpenDialogOptions } from 'electron'
+import { contextBridge, ipcRenderer, shell, webUtils } from 'electron'
+import type { CreateDirectoryOptions } from 'webdav'
+
 import { ipcApi } from './ipc'
 
 // OpenClaw types
@@ -112,26 +87,6 @@ interface OpenClawChannelInfo {
   name: string
   type: string
   status: 'connected' | 'disconnected' | 'error'
-}
-
-type ProtocolReceiveData = {
-  url: string
-  params: Record<string, string>
-}
-
-type ProtocolReceiveOptions = {
-  hosts?: string | string[]
-}
-
-function normalizeProtocolHosts(hosts?: string | string[]): string[] {
-  const values = Array.isArray(hosts) ? hosts : hosts ? [hosts] : []
-  return Array.from(
-    new Set(
-      values
-        .map((host) => (typeof host === 'string' ? host.trim().toLowerCase() : ''))
-        .filter((host) => /^[a-z0-9.-]+$/.test(host))
-    )
-  )
 }
 
 type DirectoryListOptions = {
@@ -155,6 +110,26 @@ type SelectionLinuxEnvInfo = {
   isLinuxXWaylandMode: boolean
   hasLinuxInputDeviceAccess: boolean
   isLinuxCompositorCompatible: boolean
+}
+
+type ProtocolReceiveData = {
+  url: string
+  params: Record<string, string>
+}
+
+type ProtocolReceiveOptions = {
+  hosts?: string | string[]
+}
+
+function normalizeProtocolHosts(hosts?: string | string[]): string[] {
+  const values = Array.isArray(hosts) ? hosts : hosts ? [hosts] : []
+  return Array.from(
+    new Set(
+      values
+        .map((host) => (typeof host === 'string' ? host.trim().toLowerCase() : ''))
+        .filter((host) => /^[a-z0-9.-]+$/.test(host))
+    )
+  )
 }
 
 export function tracedInvoke(channel: string, spanContext: SpanContext | undefined, ...args: any[]) {
@@ -187,7 +162,8 @@ const api = {
     ipcRenderer.invoke(IpcChannel.App_IsPathInside, childPath, parentPath),
   setAppDataPath: (path: string) => ipcRenderer.invoke(IpcChannel.App_SetAppDataPath, path),
   getDataPathFromArgs: () => ipcRenderer.invoke(IpcChannel.App_GetDataPathFromArgs),
-  copy: (oldPath: string, newPath: string) => ipcRenderer.invoke(IpcChannel.App_Copy, oldPath, newPath),
+  copy: (oldPath: string, newPath: string, occupiedDirs: string[] = []) =>
+    ipcRenderer.invoke(IpcChannel.App_Copy, oldPath, newPath, occupiedDirs),
   quitAndInstall: () => ipcRenderer.invoke(IpcChannel.App_QuitAndInstall),
   application: {
     quit: (): Promise<void> => ipcRenderer.invoke(IpcChannel.Application_Quit),
@@ -492,27 +468,13 @@ const api = {
     getFiles: (vaultName: string) => ipcRenderer.invoke(IpcChannel.Obsidian_GetFiles, vaultName)
   },
   openPath: (path: string) => ipcRenderer.invoke(IpcChannel.Open_Path, path),
-  knowledge: {
-    createBase: (base: CreateKnowledgeBaseDto): Promise<KnowledgeBase> =>
-      ipcRenderer.invoke(IpcChannel.Knowledge_CreateBase, { base }),
-    restoreBase: (dto: RestoreKnowledgeBaseDto): Promise<KnowledgeBase> =>
-      ipcRenderer.invoke(IpcChannel.Knowledge_RestoreBase, dto),
-    deleteBase: (baseId: string): Promise<void> => ipcRenderer.invoke(IpcChannel.Knowledge_DeleteBase, { baseId }),
-    addItems: (baseId: string, items: KnowledgeAddItemInput[]): Promise<void> =>
-      ipcRenderer.invoke(IpcChannel.Knowledge_AddItems, { baseId, items }),
-    deleteItems: (baseId: string, itemIds: string[]): Promise<void> =>
-      ipcRenderer.invoke(IpcChannel.Knowledge_DeleteItems, { baseId, itemIds }),
-    reindexItems: (baseId: string, itemIds: string[]): Promise<void> =>
-      ipcRenderer.invoke(IpcChannel.Knowledge_ReindexItems, { baseId, itemIds }),
-    search: (baseId: string, query: string): Promise<KnowledgeVectorSearchResult[]> =>
-      ipcRenderer.invoke(IpcChannel.Knowledge_Search, { baseId, query }),
-    listItemChunks: (baseId: string, itemId: string): Promise<KnowledgeItemChunk[]> =>
-      ipcRenderer.invoke(IpcChannel.Knowledge_ListItemChunks, { baseId, itemId })
-  },
   window: {
     setMinimumSize: (width: number, height: number) =>
       ipcRenderer.invoke(IpcChannel.MainWindow_SetMinimumSize, width, height),
-    resetMinimumSize: () => ipcRenderer.invoke(IpcChannel.MainWindow_ResetMinimumSize)
+    resetMinimumSize: () => ipcRenderer.invoke(IpcChannel.MainWindow_ResetMinimumSize),
+    // Pin/unpin the current sub-window (always-on-top).
+    setAlwaysOnTop: (pinned: boolean): Promise<boolean> =>
+      ipcRenderer.invoke(IpcChannel.SubWindow_SetAlwaysOnTop, pinned)
   },
   command: {
     showNativePopupMenu: (
@@ -613,7 +575,14 @@ const api = {
   },
   shell: {
     openExternal: (url: string, options?: Electron.OpenExternalOptions) => {
-      if (!isSafeExternalUrl(url)) {
+      // Defense-in-depth: validate URL scheme before forwarding to shell.openExternal
+      const ALLOWED_PROTOCOLS = ['http:', 'https:', 'mailto:', 'obsidian:']
+      try {
+        const parsed = new URL(url)
+        if (!ALLOWED_PROTOCOLS.includes(parsed.protocol)) {
+          return Promise.reject(new Error(`Blocked openExternal for untrusted URL scheme: ${parsed.protocol}`))
+        }
+      } catch {
         return Promise.reject(new Error('Blocked openExternal for invalid URL'))
       }
       return shell.openExternal(url, options)
@@ -678,7 +647,6 @@ const api = {
       for (const host of hosts) {
         void ipcRenderer.invoke(IpcChannel.Protocol_RegisterHostListener, host).catch(() => undefined)
       }
-
       return () => {
         ipcRenderer.off(IpcChannel.Protocol_Data, listener)
         for (const host of hosts) {
@@ -852,30 +820,9 @@ const api = {
       ipcRenderer.invoke(IpcChannel.OCR_ocr, file, provider),
     listProviders: (): Promise<string[]> => ipcRenderer.invoke(IpcChannel.OCR_ListProviders)
   },
-  fileProcessing: {
-    startJob: (payload: {
-      feature: FileProcessorFeature
-      file: FileHandle
-      output?: FileProcessingOutputTarget
-      context?: {
-        dataId?: string
-      }
-      processorId?: FileProcessorId
-    }): Promise<JobSnapshot> => ipcRenderer.invoke(IpcChannel.FileProcessing_StartJob, payload),
-    listAvailableProcessors: (): Promise<ListAvailableFileProcessorsResult> =>
-      ipcRenderer.invoke(IpcChannel.FileProcessing_ListAvailableProcessors)
-  },
   cherryai: {
     generateSignature: (params: { method: string; path: string; query: string; body: Record<string, any> }) =>
       ipcRenderer.invoke(IpcChannel.Cherryai_GetSignature, params)
-  },
-  webSearch: {
-    searchKeywords: (request: WebSearchSearchKeywordsRequest): Promise<WebSearchResponse> =>
-      ipcRenderer.invoke(IpcChannel.WebSearch_SearchKeywords, request),
-    fetchUrls: (request: WebSearchFetchUrlsRequest): Promise<WebSearchResponse> =>
-      ipcRenderer.invoke(IpcChannel.WebSearch_FetchUrls, request),
-    checkProvider: (request: WebSearchCheckProviderRequest): Promise<WebSearchCheckProviderResponse> =>
-      ipcRenderer.invoke(IpcChannel.WebSearch_CheckProvider, request)
   },
   shortcut: {
     onRegistrationConflict: (callback: (payload: ShortcutRegistrationConflictPayload) => void): (() => void) => {

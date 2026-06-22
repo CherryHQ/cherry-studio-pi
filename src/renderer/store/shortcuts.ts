@@ -19,7 +19,7 @@ import { loggerService } from '@logger'
 import type { PayloadAction } from '@reduxjs/toolkit'
 import { createSlice } from '@reduxjs/toolkit'
 import type { Shortcut } from '@renderer/types'
-import { ZOOM_SHORTCUTS } from '@shared/config/constant'
+import { ZOOM_SHORTCUTS } from '@shared/utils/shortcut'
 
 const logger = loggerService.withContext('ShortcutsStore')
 

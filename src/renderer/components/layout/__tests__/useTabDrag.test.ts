@@ -28,7 +28,7 @@ function renderUseTabDrag() {
     useTabDrag({
       pinnedTabs: [],
       normalTabs: [tab],
-      isDetached: false,
+      canDetach: false,
       reorderTabs: vi.fn(),
       closeTab: vi.fn(),
       setActiveTab: vi.fn()

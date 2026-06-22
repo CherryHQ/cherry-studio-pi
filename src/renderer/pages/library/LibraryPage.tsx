@@ -1,27 +1,29 @@
-import { Alert, Button, Dialog, DialogContent } from '@cherrystudio/ui'
+import { Alert, Button } from '@cherrystudio/ui'
 import {
-  closeTransientResourceSelectors,
-  scheduleCloseTransientResourceSelectors
-} from '@renderer/components/ResourceSelector/resourceSelectorEvents'
+  AgentEditDialog,
+  AssistantEditDialog,
+  ResourceCreateDialog,
+  type ResourceCreateDialogKind,
+  type ResourceCreateDialogValues
+} from '@renderer/components/resource/dialogs'
+import { isSelectableAssistantModel } from '@renderer/components/resource/dialogs/form/assistantModelFilter'
+import PromptEditDialog from '@renderer/components/resource/dialogs/PromptEditDialog'
+import { useAgentModelFilter } from '@renderer/hooks/agents/useAgentModelFilter'
 import { useEnsureTags, useTagList } from '@renderer/hooks/useTags'
-import AgentSidePanelDrawer from '@renderer/pages/agents/components/AgentSidePanelDrawer'
-import { getErrorMessage } from '@renderer/utils/error'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import type { InstalledSkill } from '@shared/data/types/agent'
 import type { Assistant } from '@shared/data/types/assistant'
 import type { Prompt } from '@shared/data/types/prompt'
 import type { Tag } from '@shared/data/types/tag'
 import { useNavigate, useSearch } from '@tanstack/react-router'
-import { AnimatePresence, motion } from 'motion/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { useAgentMutations } from './adapters/agentAdapter'
 import { useAssistantMutations } from './adapters/assistantAdapter'
+import { usePromptMutations, usePromptMutationsById } from './adapters/promptAdapter'
 import { DEFAULT_TAG_COLOR, getRandomTagColor, RESOURCE_TYPE_ORDER } from './constants'
-import SkillDetailPage from './detail/skill/SkillDetailPage'
-import AgentConfigPage, { type AgentCreateResult } from './editor/agent/AgentConfigPage'
-import AssistantConfigPage from './editor/assistant/AssistantConfigPage'
-import { serializeAssistantForExport } from './editor/assistant/transfer'
-import PromptConfigPage from './editor/prompt/PromptConfigPage'
+import SkillDetailDialog from './detail/skill/SkillDetailDialog'
 import { AssistantPresetPreviewDialog } from './list/AssistantPresetPreviewDialog'
 import { DeleteConfirmDialog } from './list/DeleteConfirmDialog'
 import { ImportAssistantDialog } from './list/ImportAssistantDialog'
@@ -31,44 +33,62 @@ import { ResourceGrid } from './list/ResourceGrid'
 import {
   ASSISTANT_CATALOG_MY_TAB,
   type AssistantCatalogPreset,
+  getAssistantPresetCatalogKey,
   toCreateAssistantDtoFromCatalogPreset,
   useAssistantPresetCatalog
 } from './list/useAssistantPresetCatalog'
 import { useResourceLibrary } from './list/useResourceLibrary'
-import { buildLibraryListSearch, LIBRARY_ROUTE, parseLibraryRouteSearch } from './routeSearch'
+import type { LibraryRouteAction, LibraryRouteSearch } from './routeSearch'
 import type { AgentDetail, LibrarySidebarFilter, ResourceItem, ResourceType, TagItem } from './types'
+import { serializeAssistantForExport } from './utils/assistantTransfer'
 
-type ConfigView =
-  | { type: 'list' }
-  | { type: 'assistant-create' }
-  | { type: 'assistant-edit'; assistant: Assistant }
-  | { type: 'agent-edit'; agent: AgentDetail }
-  | { type: 'agent-create' }
-  | { type: 'skill-detail'; skill: InstalledSkill }
-  | { type: 'prompt-create' }
-  | { type: 'prompt-edit'; prompt: Prompt }
+type EditDialogState = { kind: 'assistant'; resource: Assistant } | { kind: 'agent'; resource: AgentDetail }
+
+type PromptDialogState = { prompt: Prompt | null } | null
 
 const DEFAULT_RESOURCE_TYPE = RESOURCE_TYPE_ORDER[0]
+const DIALOG_EXIT_ANIMATION_MS = 200
+
+function parseRouteResourceType(value: unknown): ResourceType | null {
+  return typeof value === 'string' && RESOURCE_TYPE_ORDER.includes(value as ResourceType)
+    ? (value as ResourceType)
+    : null
+}
+
+function parseRouteAction(value: unknown): LibraryRouteAction | null {
+  return value === 'create' || value === 'edit' ? value : null
+}
+
+function parseRouteId(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value : null
+}
 
 /**
  * Build the top-bar chip list.
  *
  * Source: `resources` (so count reflects real bindings — unbound tags stay hidden,
- * matching the spec). Color is resolved against the backend `/tags` list; only
- * if the tag isn't in the list yet (SWR cache race) do we fall back to
- * `DEFAULT_TAG_COLOR`.
+ * matching the default collapsed state). Tag id/color are resolved from the
+ * backend `/tags` list and embedded assistant tag refs; only if neither has the
+ * tag yet (SWR cache race) do we fall back to `DEFAULT_TAG_COLOR`.
  */
 function buildTags(resources: ResourceItem[], backendTags: Tag[], filterType?: ResourceType): TagItem[] {
-  const colorByName = new Map(backendTags.map((t) => [t.name, t.color] as const))
+  const backendTagByName = new Map(backendTags.map((t) => [t.name, t] as const))
   const tagMap = new Map<string, number>()
   const list = filterType ? resources.filter((r) => r.type === filterType) : resources
-  list.forEach((r) => r.tags.forEach((t) => tagMap.set(t, (tagMap.get(t) || 0) + 1)))
+  list.forEach((r) => {
+    if (r.type === 'assistant') {
+      for (const tag of r.raw.tags ?? []) {
+        if (!backendTagByName.has(tag.name)) backendTagByName.set(tag.name, tag)
+      }
+    }
+    r.tags.forEach((t) => tagMap.set(t, (tagMap.get(t) || 0) + 1))
+  })
   return Array.from(tagMap.entries())
     .sort((a, b) => b[1] - a[1])
-    .map(([name, count], i) => ({
-      id: `tag-${i}`,
+    .map(([name, count], index) => ({
+      id: backendTagByName.get(name)?.id ?? `tag-${index}`,
       name,
-      color: colorByName.get(name) ?? DEFAULT_TAG_COLOR,
+      color: backendTagByName.get(name)?.color ?? DEFAULT_TAG_COLOR,
       count
     }))
 }
@@ -76,23 +96,30 @@ function buildTags(resources: ResourceItem[], backendTags: Tag[], filterType?: R
 export default function LibraryPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const routeSearch = parseLibraryRouteSearch(useSearch({ strict: false }) as Record<string, unknown>)
-  const routeResourceType = routeSearch.resourceType
-  const routeAction = routeSearch.action
-  const routeResourceId = routeSearch.id
+  const routeSearch = useSearch({ strict: false }) as LibraryRouteSearch
+  const routeResourceType = parseRouteResourceType(routeSearch.resourceType)
+  const routeAction = parseRouteAction(routeSearch.action)
+  const routeId = parseRouteId(routeSearch.id)
+  const handledRouteActionRef = useRef<string | null>(null)
   const [sidebarFilter, setSidebarFilter] = useState<LibrarySidebarFilter>(() => ({
     resourceType: routeResourceType ?? DEFAULT_RESOURCE_TYPE
   }))
   const [search, setSearch] = useState('')
   const [activeTag, setActiveTag] = useState<string | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<ResourceItem | null>(null)
-  const [configView, setConfigView] = useState<ConfigView>({ type: 'list' })
+  const [createDialogKind, setCreateDialogKind] = useState<ResourceCreateDialogKind | null>(null)
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [editDialog, setEditDialog] = useState<EditDialogState | null>(null)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [creatingResource, setCreatingResource] = useState(false)
+  const [promptDialog, setPromptDialog] = useState<PromptDialogState>(null)
+  const [selectedSkill, setSelectedSkill] = useState<InstalledSkill | null>(null)
   const [assistantImportOpen, setAssistantImportOpen] = useState(false)
   const [skillImportOpen, setSkillImportOpen] = useState(false)
   const [activeAssistantCatalogTab, setActiveAssistantCatalogTab] = useState(ASSISTANT_CATALOG_MY_TAB)
   const [previewAssistantPreset, setPreviewAssistantPreset] = useState<AssistantCatalogPreset | null>(null)
   const [previewAssistantPresetAdding, setPreviewAssistantPresetAdding] = useState(false)
-  const ignoreNextAgentCreateDismissRef = useRef(false)
+  const [addedAssistantPresets, setAddedAssistantPresets] = useState<Record<string, string>>({})
 
   const activeResourceType = sidebarFilter.resourceType
   const isAssistantLibrary = activeResourceType === 'assistant'
@@ -102,6 +129,7 @@ export default function LibraryPage() {
     resources,
     allResources,
     typeCounts,
+    isLoading,
     error: resourceError,
     refetch
   } = useResourceLibrary({
@@ -121,8 +149,13 @@ export default function LibraryPage() {
   const assistantTagUiEnabled = isAssistantLibrary && isAssistantCatalogMine
 
   const { createAssistant, duplicateAssistant } = useAssistantMutations()
+  const { createAgent } = useAgentMutations()
+  const agentModelFilter = useAgentModelFilter('claude-code')
+  const { createPrompt } = usePromptMutations()
+  const promptDialogPrompt = promptDialog?.prompt ?? null
+  const { updatePrompt } = usePromptMutationsById(promptDialogPrompt?.id ?? '')
   // The add-tag control uses ensureTags idempotently: existing names are reused,
-  // and missing names are created before the card menu / editor binds them.
+  // and missing names are created before the card menu / dialog binds them.
   const { ensureTags } = useEnsureTags({ getDefaultColor: getRandomTagColor })
   // Single source of truth for "what tags exist anywhere" — backs the selection
   // pools (card menu / BasicSection) and feeds chip colors. Revalidated by the
@@ -143,53 +176,35 @@ export default function LibraryPage() {
   )
 
   const noop = useCallback(() => {}, [])
-  const clearRouteActionSearch = useCallback(() => {
-    if (!routeAction && !routeResourceType) return
+  const handleClosePromptDialog = useCallback(() => {
+    setPromptDialog(null)
+  }, [])
 
-    void navigate({
-      to: LIBRARY_ROUTE,
-      search: buildLibraryListSearch(routeResourceType ?? sidebarFilter.resourceType),
-      replace: true
-    })
-  }, [navigate, routeAction, routeResourceType, sidebarFilter.resourceType])
+  const handlePromptDialogSave = useCallback(
+    async (data: { title: string; content: string }) => {
+      const prompt = promptDialogPrompt
 
-  const handleBackToList = useCallback(() => {
-    ignoreNextAgentCreateDismissRef.current = false
-    closeTransientResourceSelectors()
-    setConfigView({ type: 'list' })
-    clearRouteActionSearch()
-  }, [clearRouteActionSearch])
-  const handleCreated = useCallback(() => {
-    closeTransientResourceSelectors()
-    refetch()
-    setConfigView({ type: 'list' })
-    clearRouteActionSearch()
-  }, [clearRouteActionSearch, refetch])
-  const handleAgentCreated = useCallback(
-    (_created: AgentDetail, result?: AgentCreateResult) => {
-      ignoreNextAgentCreateDismissRef.current = true
-      closeTransientResourceSelectors()
-      refetch()
-      setConfigView({ type: 'list' })
-      const sessionId = result?.initialSessionId?.trim()
-      void navigate({
-        to: '/app/agents',
-        ...(sessionId ? { search: { sessionId } } : {}),
-        replace: true
-      })
+      try {
+        if (prompt) {
+          await updatePrompt(data)
+        } else {
+          await createPrompt(data)
+        }
+
+        refetch()
+        setPromptDialog(null)
+      } catch (error) {
+        window.toast.error(
+          formatErrorMessageWithPrefix(
+            error,
+            t(prompt ? 'settings.prompts.errors.updateFailed' : 'settings.prompts.errors.createFailed')
+          )
+        )
+        throw error
+      }
     },
-    [navigate, refetch]
+    [createPrompt, promptDialogPrompt, refetch, t, updatePrompt]
   )
-
-  useEffect(() => {
-    if (!routeResourceType) return
-
-    setSidebarFilter((prev) => (prev.resourceType === routeResourceType ? prev : { resourceType: routeResourceType }))
-    setActiveTag(null)
-    if (routeResourceType !== 'assistant') {
-      setActiveAssistantCatalogTab(ASSISTANT_CATALOG_MY_TAB)
-    }
-  }, [routeResourceType])
 
   useEffect(() => {
     if (!isAssistantLibrary) return
@@ -200,66 +215,30 @@ export default function LibraryPage() {
   }, [activeAssistantCatalogTab, assistantCatalog.tabs, isAssistantLibrary])
 
   useEffect(() => {
-    if (routeAction !== 'create' || !routeResourceType) return
+    if (createDialogOpen || !createDialogKind) return
 
-    closeTransientResourceSelectors()
-
-    if (routeResourceType === 'assistant') {
-      setConfigView((prev) => (prev.type === 'assistant-create' ? prev : { type: 'assistant-create' }))
-    } else if (routeResourceType === 'agent') {
-      ignoreNextAgentCreateDismissRef.current = false
-      setConfigView((prev) => (prev.type === 'agent-create' ? prev : { type: 'agent-create' }))
-    } else if (routeResourceType === 'prompt') {
-      setConfigView((prev) => (prev.type === 'prompt-create' ? prev : { type: 'prompt-create' }))
-    }
-  }, [routeAction, routeResourceType])
+    const timeoutId = window.setTimeout(() => setCreateDialogKind(null), DIALOG_EXIT_ANIMATION_MS)
+    return () => window.clearTimeout(timeoutId)
+  }, [createDialogKind, createDialogOpen])
 
   useEffect(() => {
-    if (routeAction !== 'edit' || !routeResourceType || !routeResourceId) return
+    if (editDialogOpen || !editDialog) return
 
-    closeTransientResourceSelectors()
+    const timeoutId = window.setTimeout(() => setEditDialog(null), DIALOG_EXIT_ANIMATION_MS)
+    return () => window.clearTimeout(timeoutId)
+  }, [editDialog, editDialogOpen])
 
-    const resource = allResources.find((r) => r.type === routeResourceType && r.id === routeResourceId)
-    if (!resource) return
-
-    if (resource.type === 'assistant') {
-      const assistant = resource.raw
-      setConfigView((prev) =>
-        prev.type === 'assistant-edit' && prev.assistant.id === assistant.id
-          ? prev
-          : { type: 'assistant-edit', assistant }
-      )
-    } else if (resource.type === 'agent') {
-      const agent = resource.raw
-      setConfigView((prev) =>
-        prev.type === 'agent-edit' && prev.agent.id === agent.id ? prev : { type: 'agent-edit', agent }
-      )
-    } else if (resource.type === 'prompt') {
-      const prompt = resource.raw
-      setConfigView((prev) =>
-        prev.type === 'prompt-edit' && prev.prompt.id === prompt.id ? prev : { type: 'prompt-edit', prompt }
-      )
-    }
-  }, [allResources, routeAction, routeResourceId, routeResourceType])
-
-  useEffect(() => {
-    if (configView.type === 'list') return undefined
-
-    AgentSidePanelDrawer.hide()
-    return scheduleCloseTransientResourceSelectors()
-  }, [configView.type])
-
-  const handleEdit = useCallback((r: ResourceItem) => {
-    closeTransientResourceSelectors()
-
+  const handleOpenResource = useCallback((r: ResourceItem) => {
     if (r.type === 'assistant') {
-      setConfigView({ type: 'assistant-edit', assistant: r.raw })
+      setEditDialog({ kind: 'assistant', resource: r.raw })
+      setEditDialogOpen(true)
     } else if (r.type === 'agent') {
-      setConfigView({ type: 'agent-edit', agent: r.raw })
+      setEditDialog({ kind: 'agent', resource: r.raw })
+      setEditDialogOpen(true)
     } else if (r.type === 'skill') {
-      setConfigView({ type: 'skill-detail', skill: r.raw })
+      setSelectedSkill(r.raw)
     } else if (r.type === 'prompt') {
-      setConfigView({ type: 'prompt-edit', prompt: r.raw })
+      setPromptDialog({ prompt: r.raw })
     }
   }, [])
 
@@ -270,20 +249,25 @@ export default function LibraryPage() {
           await duplicateAssistant(r.raw)
           refetch()
         } catch (error) {
-          window.toast?.error(getErrorMessage(error))
+          window.toast.error(error instanceof Error ? error.message : t('library.duplicate_assistant_failed'))
         }
       }
     },
-    [duplicateAssistant, refetch]
+    [duplicateAssistant, refetch, t]
   )
 
   const addAssistantPreset = useCallback(
     async (preset: AssistantCatalogPreset) => {
-      await createAssistant(toCreateAssistantDtoFromCatalogPreset(preset))
+      const assistant = await createAssistant(toCreateAssistantDtoFromCatalogPreset(preset))
+      setAddedAssistantPresets((current) => ({
+        ...current,
+        [getAssistantPresetCatalogKey(preset)]: assistant.id
+      }))
       refetch()
-      window.toast?.success(t('common.add_success'))
+      window.toast.success(t('common.add_success'))
+      return assistant
     },
-    [createAssistant, refetch, t]
+    [createAssistant, refetch, setAddedAssistantPresets, t]
   )
 
   const handleAddAssistantPreset = useCallback(
@@ -291,16 +275,22 @@ export default function LibraryPage() {
       try {
         await addAssistantPreset(preset)
       } catch (error) {
-        window.toast?.error(getErrorMessage(error))
+        window.toast.error(error instanceof Error ? error.message : t('library.assistant_catalog.add_failed'))
       }
     },
-    [addAssistantPreset]
+    [addAssistantPreset, t]
   )
 
   const handlePreviewAssistantPreset = useCallback((preset: AssistantCatalogPreset) => {
-    closeTransientResourceSelectors()
     setPreviewAssistantPreset(preset)
   }, [])
+
+  const handleOpenAssistantPresetChat = useCallback(
+    (assistantId: string) => {
+      void navigate({ to: '/app/chat', search: { assistantId } })
+    },
+    [navigate]
+  )
 
   const handleAddPreviewAssistantPreset = useCallback(async () => {
     if (!previewAssistantPreset || previewAssistantPresetAdding) return
@@ -308,13 +298,12 @@ export default function LibraryPage() {
     setPreviewAssistantPresetAdding(true)
     try {
       await addAssistantPreset(previewAssistantPreset)
-      setPreviewAssistantPreset(null)
     } catch (error) {
-      window.toast?.error(getErrorMessage(error))
+      window.toast.error(error instanceof Error ? error.message : t('library.assistant_catalog.add_failed'))
     } finally {
       setPreviewAssistantPresetAdding(false)
     }
-  }, [addAssistantPreset, previewAssistantPreset, previewAssistantPresetAdding])
+  }, [addAssistantPreset, previewAssistantPreset, previewAssistantPresetAdding, t])
 
   const handlePreviewOpenChange = useCallback(
     (open: boolean) => {
@@ -324,10 +313,7 @@ export default function LibraryPage() {
     [previewAssistantPresetAdding]
   )
 
-  const handleDelete = useCallback((r: ResourceItem) => {
-    closeTransientResourceSelectors()
-    setDeleteConfirm(r)
-  }, [])
+  const handleDelete = useCallback((r: ResourceItem) => setDeleteConfirm(r), [])
 
   const handleExport = useCallback(
     async (r: ResourceItem) => {
@@ -341,38 +327,136 @@ export default function LibraryPage() {
           filters: [{ name: t('assistants.presets.import.file_filter'), extensions: ['json'] }]
         })
       } catch (error) {
-        window.toast?.error(getErrorMessage(error))
+        window.toast.error(error instanceof Error ? error.message : t('library.export_assistant_failed'))
       }
     },
     [t]
   )
 
   const handleCreate = useCallback((type: ResourceType) => {
-    closeTransientResourceSelectors()
-
     if (type === 'assistant') {
-      // Mirror the agent create flow: enter the form first, then POST only
-      // after the user fills the required fields and clicks Save.
-      setConfigView({ type: 'assistant-create' })
+      setCreateDialogKind('assistant')
+      setCreateDialogOpen(true)
     } else if (type === 'agent') {
-      // Defer DB write until the user saves in the config page. This
-      // avoids leaving half-configured agent rows behind if the user navigates away.
-      ignoreNextAgentCreateDismissRef.current = false
-      setConfigView({ type: 'agent-create' })
+      setCreateDialogKind('agent')
+      setCreateDialogOpen(true)
     } else if (type === 'skill') {
       // Skill install lives in a dialog (mirrors ImportAssistantDialog) so the
       // ZIP / directory / marketplace flows from Settings → Skills can be exposed
       // here without leaving the library page.
       setSkillImportOpen(true)
     } else if (type === 'prompt') {
-      setConfigView({ type: 'prompt-create' })
+      setPromptDialog({ prompt: null })
     }
   }, [])
 
-  const handleImportAssistant = useCallback(() => {
-    closeTransientResourceSelectors()
-    setAssistantImportOpen(true)
+  const clearLibraryRouteSearch = useCallback(() => {
+    void navigate({ to: '/app/library', search: {}, replace: true })
+  }, [navigate])
+
+  useEffect(() => {
+    if (!routeResourceType) return
+    setSidebarFilter((current) =>
+      current.resourceType === routeResourceType ? current : { resourceType: routeResourceType }
+    )
+  }, [routeResourceType])
+
+  useEffect(() => {
+    if (!routeAction || !routeResourceType) return
+
+    const actionKey = `${routeResourceType}:${routeAction}:${routeId ?? ''}`
+    if (handledRouteActionRef.current === actionKey) return
+
+    if (routeAction === 'create') {
+      handleCreate(routeResourceType)
+      handledRouteActionRef.current = actionKey
+      clearLibraryRouteSearch()
+      return
+    }
+
+    if (!routeId) {
+      handledRouteActionRef.current = actionKey
+      clearLibraryRouteSearch()
+      return
+    }
+
+    const resource = allResources.find((item) => item.type === routeResourceType && item.id === routeId)
+    if (!resource) {
+      if (!isLoading) {
+        handledRouteActionRef.current = actionKey
+        clearLibraryRouteSearch()
+      }
+      return
+    }
+
+    handleOpenResource(resource)
+    handledRouteActionRef.current = actionKey
+    clearLibraryRouteSearch()
+  }, [
+    allResources,
+    clearLibraryRouteSearch,
+    handleCreate,
+    handleOpenResource,
+    isLoading,
+    routeAction,
+    routeId,
+    routeResourceType
+  ])
+
+  const handleCreateDialogOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open && creatingResource) return
+      setCreateDialogOpen(open)
+    },
+    [creatingResource]
+  )
+
+  const handleSubmitCreateResource = useCallback(
+    async (values: ResourceCreateDialogValues) => {
+      const kind = createDialogKind
+      if (!kind || creatingResource) return
+
+      setCreatingResource(true)
+      try {
+        if (kind === 'assistant') {
+          await createAssistant({
+            name: values.name,
+            emoji: values.avatar,
+            modelId: values.modelId,
+            description: values.description
+          })
+        } else {
+          await createAgent({
+            type: 'claude-code',
+            name: values.name,
+            model: values.modelId,
+            planModel: values.modelId,
+            smallModel: values.modelId,
+            description: values.description,
+            configuration: {
+              avatar: values.avatar,
+              permission_mode: 'bypassPermissions',
+              soul_enabled: true
+            }
+          })
+        }
+
+        setCreateDialogOpen(false)
+        refetch()
+      } finally {
+        setCreatingResource(false)
+      }
+    },
+    [createAgent, createAssistant, createDialogKind, creatingResource, refetch]
+  )
+
+  const handleEditDialogOpenChange = useCallback((open: boolean) => {
+    setEditDialogOpen(open)
   }, [])
+
+  const handleEditSaved = useCallback(() => {
+    refetch()
+  }, [refetch])
 
   const handleAssistantTabChange = useCallback((tabId: string) => {
     setActiveAssistantCatalogTab(tabId)
@@ -386,118 +470,25 @@ export default function LibraryPage() {
             activeTab: activeAssistantCatalogTab,
             tabs: assistantCatalog.tabs,
             presets: assistantCatalog.presets,
+            addedAssistantPresets,
             onTabChange: handleAssistantTabChange,
             onAddPreset: handleAddAssistantPreset,
+            onOpenPresetChat: handleOpenAssistantPresetChat,
             onPreviewPreset: handlePreviewAssistantPreset
           }
         : undefined,
     [
       activeAssistantCatalogTab,
+      addedAssistantPresets,
       assistantCatalog.presets,
       assistantCatalog.tabs,
       handleAddAssistantPreset,
       handleAssistantTabChange,
+      handleOpenAssistantPresetChat,
       handlePreviewAssistantPreset,
       isAssistantLibrary
     ]
   )
-
-  if (configView.type === 'assistant-create') {
-    return (
-      <AnimatePresence mode="wait">
-        <motion.div
-          key="assistant-create"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="flex min-h-0 flex-1 flex-col bg-background">
-          <AssistantConfigPage onBack={handleBackToList} onCreated={handleCreated} />
-        </motion.div>
-      </AnimatePresence>
-    )
-  }
-
-  if (configView.type === 'assistant-edit') {
-    return (
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={`edit-${configView.assistant.id}`}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="flex min-h-0 flex-1 flex-col bg-background">
-          <AssistantConfigPage assistant={configView.assistant} onBack={handleBackToList} />
-        </motion.div>
-      </AnimatePresence>
-    )
-  }
-
-  if (configView.type === 'agent-edit') {
-    return (
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={`agent-edit-${configView.agent.id}`}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="flex min-h-0 flex-1 flex-col bg-background">
-          <AgentConfigPage agent={configView.agent} onBack={handleBackToList} />
-        </motion.div>
-      </AnimatePresence>
-    )
-  }
-
-  if (configView.type === 'prompt-create') {
-    return (
-      <AnimatePresence mode="wait">
-        <motion.div
-          key="prompt-create"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="flex min-h-0 flex-1 flex-col bg-background">
-          <PromptConfigPage onBack={handleBackToList} onCreated={handleCreated} />
-        </motion.div>
-      </AnimatePresence>
-    )
-  }
-
-  if (configView.type === 'prompt-edit') {
-    return (
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={`prompt-edit-${configView.prompt.id}`}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="flex min-h-0 flex-1 flex-col bg-background">
-          <PromptConfigPage prompt={configView.prompt} onBack={handleBackToList} />
-        </motion.div>
-      </AnimatePresence>
-    )
-  }
-
-  if (configView.type === 'skill-detail') {
-    return (
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={`skill-detail-${configView.skill.id}`}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="flex min-h-0 flex-1 flex-col bg-background">
-          <SkillDetailPage
-            skill={configView.skill}
-            onBack={handleBackToList}
-            onUninstalled={() => {
-              refetch()
-              setConfigView({ type: 'list' })
-            }}
-          />
-        </motion.div>
-      </AnimatePresence>
-    )
-  }
 
   return (
     <div className="flex min-h-0 flex-1 bg-background">
@@ -508,9 +499,6 @@ export default function LibraryPage() {
           setActiveTag(null)
           if (f.resourceType !== 'assistant') {
             setActiveAssistantCatalogTab(ASSISTANT_CATALOG_MY_TAB)
-          }
-          if (routeAction || routeResourceType) {
-            void navigate({ to: LIBRARY_ROUTE, search: buildLibraryListSearch(f.resourceType), replace: true })
           }
         }}
         typeCounts={typeCounts}
@@ -529,67 +517,95 @@ export default function LibraryPage() {
                   {t('common.retry')}
                 </Button>
               }
-              className="max-w-lg rounded-xs px-4 py-3 shadow-none"
+              className="max-w-lg rounded-md px-4 py-3 shadow-none"
             />
           </div>
         ) : (
           <ResourceGrid
             resources={resources}
+            isLoading={isLoading}
             activeResourceType={activeResourceType}
             search={search}
             onSearchChange={setSearch}
-            onEdit={handleEdit}
+            onEdit={handleOpenResource}
             onDuplicate={handleDuplicate}
             onDelete={handleDelete}
             onExport={(resource) => {
               void handleExport(resource)
             }}
             onCreate={handleCreate}
-            onImportAssistant={handleImportAssistant}
+            onImportAssistant={() => setAssistantImportOpen(true)}
             tags={scopedTags}
             activeTag={activeTag}
             onTagFilter={setActiveTag}
             onAddTag={async (tagName) => {
               // Idempotent: ensureTags reuses existing names or creates missing
-              // rows; binding stays inside card/editor tag hooks.
+              // rows; binding stays inside card/dialog tag hooks.
               await ensureTags([tagName])
             }}
             onUpdateResourceTags={noop /* binding is executed inside FixedCardMenu via the tag hooks */}
             allTagNames={allTagNames}
+            allTags={tagList.tags}
             assistantCatalog={assistantCatalogProp}
           />
         )}
       </div>
 
       <DeleteConfirmDialog resource={deleteConfirm} onClose={() => setDeleteConfirm(null)} />
-      <Dialog
-        open={configView.type === 'agent-create'}
+      <SkillDetailDialog
+        skill={selectedSkill}
+        open={Boolean(selectedSkill)}
         onOpenChange={(open) => {
-          if (open) {
-            ignoreNextAgentCreateDismissRef.current = false
-            return
-          }
-          if (ignoreNextAgentCreateDismissRef.current) {
-            ignoreNextAgentCreateDismissRef.current = false
-            return
-          }
-          handleBackToList()
-        }}>
-        <DialogContent
-          aria-describedby={undefined}
-          className="w-[min(920px,calc(100vw-2rem))] max-w-none overflow-hidden rounded-xl p-0 sm:max-w-[920px]">
-          <AgentConfigPage onBack={handleBackToList} onCreated={handleAgentCreated} presentation="dialog" />
-        </DialogContent>
-      </Dialog>
+          if (!open) setSelectedSkill(null)
+        }}
+      />
       <AssistantPresetPreviewDialog
         preset={previewAssistantPreset}
         open={Boolean(previewAssistantPreset)}
         adding={previewAssistantPresetAdding}
+        addedAssistantId={
+          previewAssistantPreset
+            ? addedAssistantPresets[getAssistantPresetCatalogKey(previewAssistantPreset)]
+            : undefined
+        }
         onOpenChange={handlePreviewOpenChange}
         onAdd={handleAddPreviewAssistantPreset}
+        onOpenChat={handleOpenAssistantPresetChat}
       />
       <ImportAssistantDialog open={assistantImportOpen} onOpenChange={setAssistantImportOpen} onImported={refetch} />
       <ImportSkillDialog open={skillImportOpen} onOpenChange={setSkillImportOpen} onInstalled={refetch} />
+      <ResourceCreateDialog
+        kind={createDialogKind ?? 'assistant'}
+        open={createDialogOpen}
+        isSubmitting={creatingResource}
+        modelFilter={createDialogKind === 'agent' ? agentModelFilter : isSelectableAssistantModel}
+        onOpenChange={handleCreateDialogOpenChange}
+        onSubmit={handleSubmitCreateResource}
+      />
+      {editDialog?.kind === 'assistant' ? (
+        <AssistantEditDialog
+          open={editDialogOpen}
+          resource={editDialog.resource}
+          modelFilter={isSelectableAssistantModel}
+          onOpenChange={handleEditDialogOpenChange}
+          onSaved={handleEditSaved}
+        />
+      ) : null}
+      {editDialog?.kind === 'agent' ? (
+        <AgentEditDialog
+          open={editDialogOpen}
+          resource={editDialog.resource}
+          modelFilter={agentModelFilter}
+          onOpenChange={handleEditDialogOpenChange}
+          onSaved={handleEditSaved}
+        />
+      ) : null}
+      <PromptEditDialog
+        open={promptDialog !== null}
+        prompt={promptDialogPrompt}
+        onSave={handlePromptDialogSave}
+        onCancel={handleClosePromptDialog}
+      />
     </div>
   )
 }

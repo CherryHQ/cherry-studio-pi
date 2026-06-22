@@ -38,6 +38,7 @@ interface Props {
   children: string
   language: string
   onSave?: (newContent: string) => void
+  editable?: boolean
 }
 
 /**
@@ -56,7 +57,7 @@ interface Props {
  * - quick 工具
  * - core 工具
  */
-export const CodeBlockView: React.FC<Props> = memo(({ children, language, onSave }) => {
+export const CodeBlockView: React.FC<Props> = memo(({ children, language, onSave, editable = true }) => {
   const { t } = useTranslation()
 
   const [codeExecutionEnabled] = usePreference('chat.code.execution.enabled')
@@ -106,15 +107,7 @@ export const CodeBlockView: React.FC<Props> = memo(({ children, language, onSave
   const [executionResult, setExecutionResult] = useState<{ text: string; image?: string } | null>(null)
 
   const [tools, setTools] = useState<ActionTool[]>([])
-  const mountedRef = useRef(true)
-
-  useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
+  const codeEditorEnabled = codeEditor.enabled && editable
 
   const isExecutable = useMemo(() => {
     return codeExecutionEnabled && language === 'python'
@@ -161,14 +154,10 @@ export const CodeBlockView: React.FC<Props> = memo(({ children, language, onSave
       // Prioritize getting content from editor, fallback to children
       const content = sourceViewRef.current?.getContent?.() ?? children
       await navigator.clipboard.writeText(content.trimEnd())
-      if (mountedRef.current) {
-        window.toast?.success(t('code_block.copy.success'))
-      }
+      window.toast.success(t('code_block.copy.success'))
     } catch (error) {
       logger.error('Failed to copy to clipboard:', { error })
-      if (mountedRef.current) {
-        window.toast?.error(t('code_block.copy.failed'))
-      }
+      window.toast.error(t('code_block.copy.failed'))
     }
   }, [children, t])
   // Note: sourceViewRef not in deps because it's a stable ref,
@@ -188,13 +177,8 @@ export const CodeBlockView: React.FC<Props> = memo(({ children, language, onSave
     }
 
     const ext = getExtensionByLanguage(language)
-    void window.api.file.save(`${fileName}${ext}`, children).catch((error) => {
-      logger.error('Failed to save code block source', error as Error)
-      if (mountedRef.current) {
-        window.toast?.error(t('common.save_failed'))
-      }
-    })
-  }, [children, language, t])
+    void window.api.file.save(`${fileName}${ext}`, children)
+  }, [children, language])
 
   const handleRunScript = useCallback(() => {
     setIsRunning(true)
@@ -203,20 +187,16 @@ export const CodeBlockView: React.FC<Props> = memo(({ children, language, onSave
     pyodideService
       .runScript(children, {}, codeExecutionTimeoutMinutes * 60000)
       .then((result) => {
-        if (!mountedRef.current) return
         setExecutionResult(result)
       })
       .catch((error) => {
-        if (!mountedRef.current) return
         logger.error('Unexpected error:', error)
         setExecutionResult({
           text: `Unexpected error: ${error.message || 'Unknown error'}`
         })
       })
       .finally(() => {
-        if (mountedRef.current) {
-          setIsRunning(false)
-        }
+        setIsRunning(false)
       })
   }, [children, codeExecutionTimeoutMinutes])
 
@@ -245,7 +225,7 @@ export const CodeBlockView: React.FC<Props> = memo(({ children, language, onSave
   // 特殊视图的编辑/查看源码按钮，在分屏模式下不可用
   useViewSourceTool({
     enabled: hasSpecialView,
-    editable: codeEditor.enabled,
+    editable: codeEditorEnabled,
     viewMode,
     onViewModeChange: setViewMode,
     setTools
@@ -287,7 +267,7 @@ export const CodeBlockView: React.FC<Props> = memo(({ children, language, onSave
 
   // 代码编辑器的保存按钮
   useSaveTool({
-    enabled: codeEditor.enabled && !isInSpecialView,
+    enabled: codeEditorEnabled && !isInSpecialView,
     sourceViewRef,
     setTools
   })
@@ -295,7 +275,7 @@ export const CodeBlockView: React.FC<Props> = memo(({ children, language, onSave
   // 源代码视图组件
   const sourceView = useMemo(
     () =>
-      codeEditor.enabled ? (
+      codeEditorEnabled ? (
         <CodeEditor
           className="source-view"
           ref={sourceViewRef}
@@ -327,6 +307,7 @@ export const CodeBlockView: React.FC<Props> = memo(({ children, language, onSave
       children,
       codeCollapsible,
       codeEditor,
+      codeEditorEnabled,
       codeShowLineNumbers,
       fontSize,
       handleHeightChange,
@@ -359,9 +340,9 @@ export const CodeBlockView: React.FC<Props> = memo(({ children, language, onSave
     const ext = getExtensionByLanguage(language)
     const iconName = getFileIconName(`file${ext}`)
     return (
-      <div className="flex h-[34px] items-center rounded-t-lg bg-muted px-2.5 font-bold text-foreground text-sm leading-none">
+      <div className="flex h-8 items-center rounded-t-lg bg-muted px-2.5 font-bold text-foreground text-sm leading-none">
         <Icon icon={`material-icon-theme:${iconName}`} style={{ fontSize: '1.1em', marginRight: 6 }} />
-        {language.charAt(0).toUpperCase() + language.slice(1)}
+        {language.toUpperCase()}
       </div>
     )
   }, [isInSpecialView, language])
@@ -374,7 +355,7 @@ export const CodeBlockView: React.FC<Props> = memo(({ children, language, onSave
     return (
       <div
         className={cn(
-          'split-view-wrapper flex [&>*]:w-full [&>*]:flex-[1_1_auto]',
+          'split-view-wrapper flex *:w-full *:flex-[1_1_auto]',
           !hasStatusBar && (showSpecialView && !showSourceView ? 'rounded-lg' : 'rounded-b-lg'),
           !hasStatusBar && '[&_.code-viewer]:rounded-[inherit]',
           showSpecialView &&

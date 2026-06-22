@@ -1,14 +1,14 @@
 import { loggerService } from '@logger'
 import { ActionIconButton } from '@renderer/components/Buttons'
-import { useResolvedCommand } from '@renderer/features/command'
 import { useCreateDefaultSession } from '@renderer/hooks/agents/useCreateDefaultSession'
+import { useResolvedCommand } from '@renderer/hooks/command'
+import { useSettings } from '@renderer/hooks/useSettings'
 import { defineTool, registerTool, TopicType } from '@renderer/pages/home/Inputbar/types'
 import { Tooltip } from 'antd'
 import { MessageSquareDiff } from 'lucide-react'
 import { useCallback } from 'react'
 
 const logger = loggerService.withContext('CreateSessionTool')
-const SYSTEM_WORKSPACE_SOURCE = { type: 'system' as const }
 
 const createSessionTool = defineTool({
   key: 'create_session',
@@ -18,12 +18,15 @@ const createSessionTool = defineTool({
   render: function CreateSessionRender(context) {
     const { t, assistant, session } = context
     const newTopicShortcut = useResolvedCommand('topic.create').shortcutLabel
+    const { apiServer } = useSettings()
     const sessionAgentId = session?.agentId
 
     const agentId = sessionAgentId || assistant.id
-    const { createDefaultSession, creatingSession } = useCreateDefaultSession(agentId, SYSTEM_WORKSPACE_SOURCE)
+    // TODO(agent-workspace-picker): wire the workspace picker before re-enabling this create entry.
+    const workspaceSource = null
+    const { createDefaultSession, creatingSession } = useCreateDefaultSession(agentId, workspaceSource)
 
-    const createSessionDisabled = creatingSession
+    const createSessionDisabled = creatingSession || !apiServer.enabled || !workspaceSource
 
     const handleCreateSession = useCallback(async () => {
       if (createSessionDisabled) {

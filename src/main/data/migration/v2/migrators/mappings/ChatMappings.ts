@@ -45,6 +45,7 @@ import path from 'node:path'
 import { fileEntryTable } from '@data/db/schemas/file'
 import type { DbType } from '@data/db/types'
 import { loggerService } from '@logger'
+import type { FileMetadata } from '@shared/data/types/file/legacyFileMetadata'
 import type {
   CherryMessagePart,
   CitationReference,
@@ -63,9 +64,7 @@ import type {
 } from '@shared/data/types/message'
 import type { CherryDataPartTypes, CherryToolMeta } from '@shared/data/types/uiParts'
 import { withCherryMeta } from '@shared/data/types/uiParts'
-import type { Base64String, FilePath } from '@shared/file/types/common'
-import { toFileUrl } from '@shared/file/urlUtil'
-import type { FileMetadata } from '@types'
+import type { Base64String, FilePath } from '@shared/types/file/common'
 import type { SourceUrlUIPart } from 'ai'
 import mime from 'mime'
 import { v7 as uuidv7 } from 'uuid'
@@ -73,10 +72,6 @@ import { v7 as uuidv7 } from 'uuid'
 import { legacyModelToUniqueId } from '../transformers/ModelTransformers'
 
 const logger = loggerService.withContext('ChatMappings')
-
-function filePathToUrl(filePath: string | null | undefined): string {
-  return filePath ? toFileUrl(filePath as FilePath) : ''
-}
 
 /**
  * Optional dependencies threaded through the mapper. Currently only used by
@@ -825,7 +820,7 @@ async function transformSingleBlockToPart(
       const basePart: FileUIPart = {
         type: 'file',
         mediaType: inferMediaType(block.file.ext, 'application/octet-stream'),
-        url: filePathToUrl(block.file.path),
+        url: block.file.path ? `file://${block.file.path}` : '',
         ...(block.file.origin_name ? { filename: block.file.origin_name } : {})
       }
       const part = block.file.id ? withCherryMeta(basePart, { fileEntryId: block.file.id }) : basePart
@@ -973,7 +968,7 @@ async function promoteBase64ToFileEntry(
     const basePart: FileUIPart = {
       type: 'file',
       mediaType: mimeType,
-      url: filePathToUrl(physicalPath),
+      url: `file://${physicalPath}`,
       filename: ext ? `${MIGRATED_IMAGE_NAME}.${ext}` : MIGRATED_IMAGE_NAME
     }
     return withCherryMeta(basePart, { fileEntryId: id })
@@ -1020,7 +1015,7 @@ async function collectImageFileParts(block: OldImageBlock, deps?: ChatMappingDep
     const basePart: FileUIPart = {
       type: 'file',
       mediaType: inferMediaType(block.file.ext, 'image/png'),
-      url: filePathToUrl(block.file.path),
+      url: block.file.path ? `file://${block.file.path}` : '',
       ...(block.file.origin_name ? { filename: block.file.origin_name } : {})
     }
     parts.push(block.file.id ? withCherryMeta(basePart, { fileEntryId: block.file.id }) : basePart)

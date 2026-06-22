@@ -3,6 +3,9 @@ import { act, renderHook } from '@testing-library/react'
 import type * as ReactI18next from 'react-i18next'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+const { ipcRequestMock } = vi.hoisted(() => ({ ipcRequestMock: vi.fn() }))
+vi.mock('@renderer/ipc', () => ({ ipcApi: { request: ipcRequestMock } }))
+
 import { useWebSearchProviderCheck } from '../hooks/useWebSearchProviderCheck'
 
 type Deferred<T> = {
@@ -51,32 +54,22 @@ const fetchProvider: WebSearchProvider = {
 }
 
 describe('useWebSearchProviderCheck', () => {
-  const searchKeywordsMock = vi.fn()
-  const fetchUrlsMock = vi.fn()
   const toastSuccessMock = vi.fn()
   const toastErrorMock = vi.fn()
 
   beforeEach(() => {
     vi.clearAllMocks()
     Object.assign(window, {
-      api: {
-        ...window.api,
-        webSearch: {
-          searchKeywords: searchKeywordsMock,
-          fetchUrls: fetchUrlsMock
-        }
-      },
       toast: {
         ...window.toast,
         success: toastSuccessMock,
         error: toastErrorMock
       }
     })
-    searchKeywordsMock.mockResolvedValue({ results: [] })
-    fetchUrlsMock.mockResolvedValue({ results: [] })
+    ipcRequestMock.mockResolvedValue({ results: [] })
   })
 
-  it('checks keyword providers through the existing web search IPC', async () => {
+  it('checks keyword providers through the web search IpcApi route', async () => {
     const { result } = renderHook(() =>
       useWebSearchProviderCheck({ provider: tavilyProvider, capability: 'searchKeywords' })
     )
@@ -85,12 +78,15 @@ describe('useWebSearchProviderCheck', () => {
       await result.current.checkProvider()
     })
 
-    expect(searchKeywordsMock).toHaveBeenCalledWith({ providerId: 'tavily', keywords: ['Cherry Studio'] })
+    expect(ipcRequestMock).toHaveBeenCalledWith('web_search.search_keywords', {
+      providerId: 'tavily',
+      keywords: ['Cherry Studio']
+    })
     expect(toastSuccessMock).toHaveBeenCalledWith('settings.tool.websearch.check_success')
   })
 
   it('includes provider check failure details in the toast', async () => {
-    searchKeywordsMock.mockRejectedValueOnce(new Error('missing API key'))
+    ipcRequestMock.mockRejectedValueOnce(new Error('missing API key'))
     const { result } = renderHook(() =>
       useWebSearchProviderCheck({ provider: tavilyProvider, capability: 'searchKeywords' })
     )
@@ -103,7 +99,7 @@ describe('useWebSearchProviderCheck', () => {
   })
 
   it('preserves nested provider check failure details in the toast', async () => {
-    searchKeywordsMock.mockRejectedValueOnce({ error: { message: 'remote provider refused the request' } })
+    ipcRequestMock.mockRejectedValueOnce({ error: { message: 'remote provider refused the request' } })
     const { result } = renderHook(() =>
       useWebSearchProviderCheck({ provider: tavilyProvider, capability: 'searchKeywords' })
     )
@@ -119,7 +115,7 @@ describe('useWebSearchProviderCheck', () => {
 
   it('ignores duplicate provider checks while one is already running', async () => {
     const runningCheck = deferred<{ results: unknown[] }>()
-    searchKeywordsMock.mockReturnValueOnce(runningCheck.promise)
+    ipcRequestMock.mockReturnValueOnce(runningCheck.promise)
     const { result } = renderHook(() =>
       useWebSearchProviderCheck({ provider: tavilyProvider, capability: 'searchKeywords' })
     )
@@ -131,7 +127,7 @@ describe('useWebSearchProviderCheck', () => {
       secondCheck = result.current.checkProvider()
     })
 
-    expect(searchKeywordsMock).toHaveBeenCalledTimes(1)
+    expect(ipcRequestMock).toHaveBeenCalledTimes(1)
 
     await act(async () => {
       runningCheck.resolve({ results: [] })
@@ -148,6 +144,6 @@ describe('useWebSearchProviderCheck', () => {
       void result.current.checkProvider()
     })
 
-    expect(fetchUrlsMock).not.toHaveBeenCalled()
+    expect(ipcRequestMock).not.toHaveBeenCalled()
   })
 })

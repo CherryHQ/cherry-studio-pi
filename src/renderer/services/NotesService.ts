@@ -1,8 +1,7 @@
 import { loggerService } from '@logger'
 import type { NotesSortType, NotesTreeNode } from '@renderer/types/note'
 import { getFileDirectory } from '@renderer/utils'
-import { getErrorMessage } from '@renderer/utils/error'
-import type { TreeDirRoot, TreeNode } from '@shared/file/types'
+import type { TreeDirRoot, TreeNode } from '@shared/utils/file'
 
 const logger = loggerService.withContext('NotesService')
 
@@ -16,10 +15,6 @@ export interface UploadResult {
   failedFiles: number
   fileCount: number
   folderCount: number
-}
-
-type FileWithPath = File & {
-  path?: string
 }
 
 /**
@@ -167,7 +162,7 @@ export async function resolveNotesPath(parentPath: string): Promise<ResolvedNote
   } catch (error) {
     logger.warn('Failed to validate notes directory, fallback to default', {
       basePath,
-      error: getErrorMessage(error)
+      error: (error as Error).message
     })
 
     return {
@@ -235,9 +230,10 @@ export async function uploadNotes(files: File[], targetPath: string): Promise<Up
     const filePaths: string[] = []
 
     for (const file of files) {
-      const filePath = (file as FileWithPath).path
-      if (filePath) {
-        filePaths.push(filePath)
+      // @ts-ignore - webkitRelativePath exists on File objects from directory uploads
+      if (file.path) {
+        // @ts-ignore - Electron File objects have .path property
+        filePaths.push(file.path)
       } else {
         // For browser File API, we'd need to use FileReader and create temp files
         // For now, fall back to the old method for these cases

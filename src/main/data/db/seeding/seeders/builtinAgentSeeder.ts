@@ -5,6 +5,7 @@ import { application } from '@application'
 import { agentTable, type InsertAgentRow } from '@data/db/schemas/agent'
 import { agentSessionTable } from '@data/db/schemas/agentSession'
 import { agentWorkspaceTable, type InsertAgentWorkspaceRow } from '@data/db/schemas/agentWorkspace'
+import { agentMcpServerTable } from '@data/db/schemas/assistantRelations'
 import { preferenceTable } from '@data/db/schemas/preference'
 import { userModelTable } from '@data/db/schemas/userModel'
 import { generateOrderKeySequence } from '@data/services/utils/orderKey'
@@ -81,7 +82,6 @@ export class BuiltinAgentSeeder implements ISeeder {
       description: pickLocalizedText(definition.description),
       instructions: pickLocalizedText(definition.instructions) || 'You are a helpful assistant.',
       model: defaultModelId,
-      mcps: definition.mcps ?? [],
       disabledTools: [],
       configuration: {
         ...definition.configuration,
@@ -96,6 +96,13 @@ export class BuiltinAgentSeeder implements ISeeder {
       orderKey: agentOrderKey
     }
     await db.insert(agentTable).values(agentRow)
+
+    const mcpServerIds = definition.mcps ?? []
+    if (mcpServerIds.length > 0) {
+      await db
+        .insert(agentMcpServerTable)
+        .values(mcpServerIds.map((mcpServerId) => ({ agentId: CHERRY_ASSISTANT_AGENT_ID, mcpServerId })))
+    }
 
     await db.insert(agentSessionTable).values({
       id: CHERRY_ASSISTANT_SESSION_ID,

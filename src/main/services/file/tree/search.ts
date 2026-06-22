@@ -13,14 +13,14 @@
  *     matching when the glob misses everything.
  */
 
+import { spawn } from 'node:child_process'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 
 import { loggerService } from '@logger'
 import { isMac, isWin } from '@main/core/platform'
 import { toAsarUnpackedPath } from '@main/utils'
-import { runRipgrep } from '@main/utils/ripgrep'
-import type { DirectoryListOptions, FilePath } from '@shared/file/types'
+import type { DirectoryListOptions, FilePath } from '@shared/types/file'
 
 import { defaultRipgrepGlobArgs } from './gitignore'
 
@@ -129,42 +129,50 @@ function getRipgrepBinaryPath(): string | null {
   }
 }
 
-async function executeRipgrep(args: string[]): Promise<{ exitCode: number; output: string }> {
-  const ripgrepBinaryPath = getRipgrepBinaryPath()
+function executeRipgrep(args: string[]): Promise<{ exitCode: number; output: string }> {
+  return new Promise((resolve, reject) => {
+    const ripgrepBinaryPath = getRipgrepBinaryPath()
 
-  if (!ripgrepBinaryPath) {
-    throw new Error('Ripgrep binary not available')
-  }
+    if (!ripgrepBinaryPath) {
+      reject(new Error('Ripgrep binary not available'))
+      return
+    }
 
-  const result = await runRipgrep(['--no-config', '--ignore-case', ...args], {
-    binaryPath: ripgrepBinaryPath
+    const child = spawn(ripgrepBinaryPath, ['--no-config', '--ignore-case', ...args], {
+      stdio: ['pipe', 'pipe', 'pipe']
+    })
+
+    let output = ''
+    let errorOutput = ''
+
+    child.stdout.on('data', (data: Buffer) => {
+      output += data.toString()
+    })
+
+    child.stderr.on('data', (data: Buffer) => {
+      errorOutput += data.toString()
+    })
+
+    child.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
+      // `code === null` happens when the process was killed by a signal
+      // (SIGKILL / SIGTERM on OOM, parent crash, etc.). Coercing it to 0
+      // would surface as "ripgrep exited successfully with no matches" =
+      // an empty directory listing, which is indistinguishable from a real
+      // empty result. Reject explicitly so callers can decide.
+      if (code === null && signal !== null) {
+        reject(new Error(`Ripgrep terminated by signal ${signal}: ${errorOutput || output}`))
+        return
+      }
+      resolve({
+        exitCode: code ?? 0,
+        output: output || errorOutput
+      })
+    })
+
+    child.on('error', (error: Error) => {
+      reject(error)
+    })
   })
-
-  if (!result.ok) {
-    throw new Error(result.output || 'Ripgrep failed')
-  }
-
-  if (result.timedOut) {
-    throw new Error(`Ripgrep timed out: ${result.output || ''}`)
-  }
-
-  // `code === null` happens when the process was killed by a signal
-  // (SIGKILL / SIGTERM on OOM, parent crash, etc.). Coercing it to 0
-  // would surface as "ripgrep exited successfully with no matches" =
-  // an empty directory listing, which is indistinguishable from a real
-  // empty result. Reject explicitly so callers can decide.
-  if (result.exitCode === null && result.signal !== null && result.signal !== undefined) {
-    throw new Error(`Ripgrep terminated by signal ${result.signal}: ${result.output || ''}`)
-  }
-
-  if (result.truncated) {
-    logger.warn('Ripgrep output truncated while listing directory', { args: args.slice(0, 6) })
-  }
-
-  return {
-    exitCode: result.exitCode ?? 0,
-    output: result.output || result.stderr || result.stdout
-  }
 }
 
 function buildRipgrepBaseArgs(options: ResolvedOptions, resolvedPath: string): string[] {

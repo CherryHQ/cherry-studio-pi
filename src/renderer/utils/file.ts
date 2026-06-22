@@ -1,16 +1,7 @@
 import type { FileMetadata, FileType } from '@renderer/types'
 import { FILE_TYPE } from '@renderer/types'
-import {
-  allFilesExt,
-  audioExts,
-  documentExts,
-  GB,
-  imageExts,
-  KB,
-  MB,
-  textExts,
-  videoExts
-} from '@shared/config/constant'
+import { GB, KB, MB } from '@shared/utils/constants'
+import { audioExts, documentExts, imageExts, textExts, videoExts } from '@shared/utils/file'
 import mime from 'mime-types'
 
 /**
@@ -96,10 +87,6 @@ export function removeSpecialCharactersForFileName(str: string): string {
  */
 export async function isSupportedFile(filePath: string, supportExts: Set<string>): Promise<boolean> {
   try {
-    if (supportExts.has(allFilesExt)) {
-      return true
-    }
-
     if (supportExts.has(getFileExtension(filePath))) {
       return true
     }

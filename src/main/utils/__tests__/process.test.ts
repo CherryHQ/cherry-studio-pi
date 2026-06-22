@@ -7,20 +7,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   autoDiscoverGitBash,
-  executeCommand,
   findCommandInShellEnv,
   findExecutable,
   findGitBash,
   findViaMise,
-  runInstallScript,
+  getBinaryName,
+  getBinaryPath,
   validateGitBashPath
 } from '../process'
-
-vi.mock('@application', () => ({
-  application: {
-    getPath: vi.fn(() => '/resources/scripts')
-  }
-}))
 
 // Mock configManager
 vi.mock('@main/services/ConfigManager', () => ({
@@ -1161,48 +1155,6 @@ function createMockChildProcess() {
   return mockChild
 }
 
-describe('runInstallScript', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    vi.mocked(path.join).mockReturnValue('/resources/scripts/install.js')
-  })
-
-  it('rejects when the install script process fails to start', async () => {
-    const mockChild = createMockChildProcess()
-    vi.mocked(spawn).mockReturnValue(mockChild as never)
-
-    const resultPromise = runInstallScript('install.js')
-
-    mockChild.emit('error', new Error('spawn ENOENT'))
-    mockChild.emit('close', 0)
-
-    await expect(resultPromise).rejects.toThrow('Failed to run script install.js: spawn ENOENT')
-  })
-})
-
-describe('executeCommand', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    vi.useRealTimers()
-  })
-
-  it('keeps the timeout failure when a killed command later closes successfully', async () => {
-    vi.useFakeTimers()
-    const mockChild = createMockChildProcess()
-    vi.mocked(spawn).mockReturnValue(mockChild as never)
-
-    const resultPromise = executeCommand('tool', ['--version'], { env: { PATH: '/usr/bin' }, timeout: 1000 })
-
-    vi.advanceTimersByTime(1000)
-    mockChild.emit('close', 0)
-
-    await expect(resultPromise).rejects.toThrow('Command timed out after 1000ms')
-    expect(mockChild.kill).toHaveBeenCalledWith('SIGKILL')
-
-    vi.useRealTimers()
-  })
-})
-
 describe('findCommandInShellEnv', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -1426,5 +1378,40 @@ describe('findCommandInShellEnv', () => {
       const result = await resultPromise
       expect(result).toBeNull()
     })
+  })
+})
+
+describe('getBinaryPath', () => {
+  // The global '@application' mock resolves 'cherry.bin' to '/mock/cherry.bin'.
+  const binDir = '/mock/cherry.bin'
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(path.join).mockImplementation((...args) => args.join('/'))
+  })
+
+  it('returns the cherry bin directory when no name is given', async () => {
+    const result = await getBinaryPath()
+    expect(result).toBe(binDir)
+  })
+
+  it('returns the managed binary path when that binary exists in the bin dir', async () => {
+    const binaryName = await getBinaryName('bun')
+    vi.mocked(fs.existsSync).mockReturnValue(true)
+
+    const result = await getBinaryPath('bun')
+
+    expect(result).toBe(`${binDir}/${binaryName}`)
+    // Existence is gated on the binary file itself, not merely the bin dir.
+    expect(fs.existsSync).toHaveBeenCalledWith(`${binDir}/${binaryName}`)
+  })
+
+  it('falls back to the bare name (resolved via system PATH) when the binary is absent', async () => {
+    const binaryName = await getBinaryName('bun')
+    vi.mocked(fs.existsSync).mockReturnValue(false)
+
+    const result = await getBinaryPath('bun')
+
+    expect(result).toBe(binaryName)
   })
 })

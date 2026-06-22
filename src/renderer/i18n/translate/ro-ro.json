@@ -390,9 +390,6 @@
       },
       "label_one": "Sesiune",
       "label_other": "Sesiuni",
-      "orphan": {
-        "message": "[to be translated]:This session's agent is missing. The conversation is read-only until you switch to another session or create a new one."
-      },
       "reorder": {
         "error": {
           "failed": "Nu s-a putut reordona sesiunile"
@@ -403,17 +400,20 @@
           "failed": "Nu s-a putut actualiza sesiunea"
         }
       },
+      "workspace_status": {
+        "inaccessible": "Calea către spațiul de lucru nu este accesibilă: {{path}}",
+        "missing": "Calea către spațiul de lucru nu există: {{path}}",
+        "not_directory": "Calea spațiului de lucru nu este un director: {{path}}"
+      },
+      "orphan": {
+        "message": "[to be translated]:This session's agent is missing. The conversation is read-only until you switch to another session or create a new one."
+      },
       "workspace": {
         "change": "[to be translated]:Change workspace",
         "create_failed": "[to be translated]:Failed to create workspace",
         "select": "[to be translated]:Select workspace",
         "select_failed": "[to be translated]:Failed to select workspace",
         "updated": "[to be translated]:Workspace updated"
-      },
-      "workspace_status": {
-        "inaccessible": "Calea către spațiul de lucru nu este accesibilă: {{path}}",
-        "missing": "Calea către spațiul de lucru nu există: {{path}}",
-        "not_directory": "Calea spațiului de lucru nu este un director: {{path}}"
       }
     },
     "settings": {
@@ -593,9 +593,6 @@
       }
     },
     "sidebar_title": "Agenți",
-    "system_agent": {
-      "auto_triggered": "[to be translated]:System Agent checked automatically"
-    },
     "todo": {
       "mock": {
         "actions": {
@@ -789,10 +786,21 @@
       "error": {
         "failed": "Nu s-a putut actualiza agentul"
       }
+    },
+    "warning": {
+      "enable_and_start": "Activează și pornește",
+      "enable_server": "Activează serverul API pentru a folosi agenți.",
+      "enable_server_description": "Serverul API trebuie activat pentru ca agenții să funcționeze. Îl poți activa direct sau îl poți configura în setări.",
+      "server_not_running": "Serverul API este activat, dar nu rulează. Vă rugăm să verificați configurația serverului.",
+      "server_not_running_description": "Serverul API trebuie să fie pornit pentru ca agenții să funcționeze. Îl poți porni direct sau verifica setările."
+    },
+    "system_agent": {
+      "auto_triggered": "[to be translated]:System Agent checked automatically"
     }
   },
   "apiGateway": {
     "actions": {
+      "copy": "Copiază",
       "regenerate": "Regenerează",
       "restart": {
         "button": "Repornește",
@@ -805,6 +813,7 @@
       "title": "Header de autorizare"
     },
     "authHeaderText": "Utilizează în header-ul Authorization:",
+    "configuration": "Configurare",
     "description": "Expune capacitățile AI ale Cherry Studio prin API-uri HTTP compatibile cu OpenAI",
     "documentation": {
       "title": "Documentație API"
@@ -818,16 +827,17 @@
       },
       "port": {
         "description": "Numărul portului TCP pentru serverul HTTP (1000-65535)",
+        "helpText": "Oprește serverul pentru a schimba portul",
         "label": "Port"
       },
       "url": {
+        "copyTooltip": "Copiază URL-ul",
         "label": "URL"
       }
     },
     "messages": {
       "apiKeyCopied": "Cheia API a fost copiată în clipboard",
       "apiKeyRegenerated": "Cheia API a fost regenerată",
-      "invalidPort": "[to be translated]:Enter a port number between 1000 and 65535",
       "notEnabled": "Serverul API nu este activat.",
       "operationFailed": "Operațiunea serverului API a eșuat: ",
       "restartError": "Nu s-a putut reporni serverul API: ",
@@ -836,7 +846,9 @@
       "startError": "Nu s-a putut porni serverul API: ",
       "startSuccess": "Serverul API a pornit cu succes",
       "stopError": "Nu s-a putut opri serverul API: ",
-      "stopSuccess": "Serverul API s-a oprit cu succes"
+      "stopSuccess": "Serverul API s-a oprit cu succes",
+      "urlCopied": "URL-ul serverului a fost copiat în clipboard",
+      "invalidPort": "[to be translated]:Enter a port number between 1000 and 65535"
     },
     "status": {
       "running": "Rulează",
@@ -1269,11 +1281,11 @@
         "collapse_in": "Restrânge",
         "collapse_out": "Elimină din restrângere",
         "expand": "Extinde",
-        "external_app_not_found": "[to be translated]:External app not found: {{name}}",
         "file_not_found": "Fișier negăsit: {{path}}",
         "open_file": "Deschide fișier",
         "open_file_error": "Nu s-a putut deschide fișierul: {{path}}",
-        "reveal_in_finder": "Afișează în Finder"
+        "reveal_in_finder": "Afișează în Finder",
+        "external_app_not_found": "[to be translated]:External app not found: {{name}}"
       },
       "topics": " Subiecte ",
       "translate": "Tradu în {{target_language}}",
@@ -1659,11 +1671,12 @@
       "claude_code": "Asistentul oficial de programare cu linie de comandă al companiei Anthropic",
       "gemini_cli": "Asistentul oficial de linie de comandă Gemini al Google",
       "github_copilot_cli": "Companion oficial de linie de comandă Copilot al GitHub",
-      "iflow_cli": "asistentul în linie de comandă multi-model al iFlow",
       "kimi_cli": "Asistentul de linie de comandă Kimi de la Moonshot",
       "openai_codex": "CLI-ul oficial de generare de cod al OpenAI",
       "opencode": "Agent de codare multi-model cu sursă deschisă",
-      "qwen_code": "Instrumentul CLI de codare open-source al Alibaba Tongyi"
+      "qoder_cli": "Instrumentul de codare în linia de comandă cu agenți al Alibaba Qoder",
+      "qwen_code": "Instrumentul CLI de codare open-source al Alibaba Tongyi",
+      "iflow_cli": "asistentul în linie de comandă multi-model al iFlow"
     },
     "update_options": "Opțiuni de actualizare",
     "working_directory": "Director de lucru",
@@ -1737,7 +1750,6 @@
     "copy_failed": "Copiere eșuată",
     "current": "Curent",
     "cut": "Decupează",
-    "decline": "Refuză",
     "default": "Implicit",
     "delete": "Șterge",
     "delete_confirm": "Ești sigur că vrei să ștergi?",
@@ -1844,7 +1856,8 @@
     "upload_image": "Încarcă fișier imagine",
     "uploaded_image": "Imagine încărcată",
     "warning": "Avertisment",
-    "you": "Tu"
+    "you": "Tu",
+    "decline": "Refuză"
   },
   "dialog": {
     "all_files": "Toate fișierele",
@@ -1919,7 +1932,6 @@
     "detail": "Detalii eroare",
     "details": "Detalii",
     "diagnosis": {
-      "abnormal_finish": "Răspunsul s-a încheiat anormal, încearcă din nou sau schimbă modelul",
       "ai_button": "Diagnostic IA",
       "ai_done": "Diagnosticat",
       "ai_loading": "Se diagnostichează",
@@ -1935,7 +1947,6 @@
       "model_conflict": "Modelul de diagnostic este identic cu modelul cu eroare",
       "network": "Nu se poate conecta la server, verificați setările de rețea sau proxy",
       "ocr": "Motorul OCR nu este inițializat, verificați setările OCR",
-      "output_truncated": "Răspunsul a atins lungimea maximă și a fost trunchiat",
       "parse": "IA a returnat un răspuns invalid, vă rugăm să reîncercați sau să schimbați modelul",
       "payload": "Conținutul cererii este prea mare, reduceți dimensiunea fișierului sau a textului.",
       "proxy": "Eroare de proxy sau certificat SSL, verificați setările de proxy și de rețea",
@@ -1943,7 +1954,9 @@
       "server": "Eroare de server, reîncercați mai târziu",
       "stream": "Răspuns întrerupt, verificați stabilitatea rețelei sau reîncercați",
       "unknown": "A apărut o eroare",
-      "view_details": "Vezi detalii"
+      "view_details": "Vezi detalii",
+      "abnormal_finish": "Răspunsul s-a încheiat anormal, încearcă din nou sau schimbă modelul",
+      "output_truncated": "Răspunsul a atins lungimea maximă și a fost trunchiat"
     },
     "errors": "Erori",
     "finishReason": "Motiv finalizare",
@@ -2051,11 +2064,11 @@
     "preview": {
       "error": "Nu s-a putut deschide fișierul"
     },
-    "rename_failed": "[to be translated]:Rename failed",
     "size": "Dimensiune",
     "text": "Text",
     "title": "Fișiere",
-    "type": "Tip"
+    "type": "Tip",
+    "rename_failed": "[to be translated]:Rename failed"
   },
   "gpustack": {
     "keep_alive_time": {
@@ -2084,10 +2097,10 @@
         "newest": "Cele mai noi primele",
         "oldest": "Cel mai vechi mai întâi"
       },
-      "stats": "[to be translated]:Found {{count}} results in {{time}} seconds",
       "topics": {
         "empty": "Nu s-au găsit subiecte, apasă Enter pentru a căuta în toate mesajele"
-      }
+      },
+      "stats": "[to be translated]:Found {{count}} results in {{time}} seconds"
     },
     "title": "Căutare subiecte"
   },
@@ -2185,6 +2198,7 @@
           "success": "Sursa de date adăugată la baza de cunoștințe"
         },
         "title": "Adăugare sursă de date",
+        "unsupported_files_skipped": "S-au omis {{count}} fișier(e) neacceptate",
         "url": {
           "description": "Introduceți un URL de pagină web:",
           "help": "Textul paginii va fi preluat, împărțit în fragmente și indexat automat",
@@ -2194,12 +2208,12 @@
         }
       },
       "bulk": {
-        "cancel": "Anulează",
         "delete": "Șterge",
         "delete_confirm_description": "Ștergeți cele {{count}} surse de date selectate? Această acțiune nu poate fi anulată.",
         "delete_confirm_title": "Șterge sursele de date selectate?",
         "reindex": "Reindexare",
-        "selected_count": "{{count}} selectate"
+        "selected_count": "{{count}} selectate",
+        "cancel": "Anulează"
       },
       "chunks_count": "{{count}} fragmente",
       "delete_confirm_description": "Această sursă de date și datele sale index nu pot fi recuperate după ștergere.",
@@ -2264,6 +2278,7 @@
     "embedding_model_required": "Este necesar un model de încorporare a bazei de cunoștințe",
     "empty": "Nicio bază de cunoștințe",
     "error": {
+      "directory_not_migrated": "Migrarea folderului a eșuat. Te rugăm să-l ștergi și să-l reîncarci.",
       "failed_base_unknown": "Această bază de cunoștințe a eșuat în timpul migrării. Reconstruiește-o și alege un nou model de încorporare.",
       "failed_to_create": "Nu s-a reușit crearea bazei de cunoștințe",
       "failed_to_delete": "Nu s-a reușit ștergerea bazei de cunoștințe",
@@ -2496,18 +2511,6 @@
             "empty": "Niciunul legat",
             "label": "servere MCP (id)"
           },
-          "mode": {
-            "option": {
-              "enhanced": {
-                "desc": "[to be translated]:Best for more complex scenarios. Uses the Claude Agent SDK, with stronger behavior but usually slower responses and higher token usage.",
-                "title": "[to be translated]:Enhanced mode"
-              },
-              "standard": {
-                "desc": "[to be translated]:Best for most cases. Uses Pi Agent, responds faster, uses fewer tokens, and matches the default Cherry Studio Pi experience.",
-                "title": "[to be translated]:Standard mode"
-              }
-            }
-          },
           "model": {
             "help": "UniqueModelId; va trece mai târziu la un selector susținut de /models",
             "hint": "Raționamentul și execuția principale",
@@ -2540,6 +2543,18 @@
             "help": "Când este activată, acordă automat bypassPermissions",
             "label": "Mod suflet"
           },
+          "mode": {
+            "option": {
+              "enhanced": {
+                "desc": "[to be translated]:Best for more complex scenarios. Uses the Claude Agent SDK, with stronger behavior but usually slower responses and higher token usage.",
+                "title": "[to be translated]:Enhanced mode"
+              },
+              "standard": {
+                "desc": "[to be translated]:Best for most cases. Uses Pi Agent, responds faster, uses fewer tokens, and matches the default Cherry Studio Pi experience.",
+                "title": "[to be translated]:Standard mode"
+              }
+            }
+          },
           "workspace": {
             "auto": "[to be translated]:Create a dedicated workspace automatically",
             "change": "[to be translated]:Change directory",
@@ -2560,11 +2575,6 @@
             "desc": "Numele agentului, descrierea și modelul principal",
             "label": "De bază",
             "title": "De bază"
-          },
-          "mode": {
-            "desc": "[to be translated]:Choose how this agent runs under the hood",
-            "label": "[to be translated]:Runtime mode",
-            "title": "[to be translated]:Choose runtime mode"
           },
           "permission": {
             "desc": "Domeniu de autorizare pentru acțiunile agentului",
@@ -2592,6 +2602,11 @@
               "tools": "Instrumente integrate"
             },
             "title": "Unelte și runtime"
+          },
+          "mode": {
+            "desc": "[to be translated]:Choose how this agent runs under the hood",
+            "label": "[to be translated]:Runtime mode",
+            "title": "[to be translated]:Choose runtime mode"
           },
           "workspace": {
             "desc": "[to be translated]:Choose where this agent reads and writes local project files",
@@ -3165,10 +3180,6 @@
       "completed": "Finalizat",
       "error": "A apărut o eroare",
       "groupHeader": "{{count}} apeluri de instrumente",
-      "groupHeaderMessages": "{{count}} mesaje",
-      "groupHeaderThinking": "{{count}} gânduri",
-      "groupHeaderWithDetails": "{{toolCount}} apeluri de instrumente · {{thinkingCount}} gânduri · {{messageCount}} mesaje",
-      "groupHeaderWithMessages": "{{toolCount}} apeluri de instrumente · {{messageCount}} mesaje",
       "invoking": "Se invocă",
       "labels": {
         "bash": "Bash",
@@ -3229,7 +3240,11 @@
         "plan_other": "{{count}} planuri",
         "result_one": "{{count}} rezultat",
         "result_other": "{{count}} rezultate"
-      }
+      },
+      "groupHeaderMessages": "{{count}} mesaje",
+      "groupHeaderThinking": "{{count}} gânduri",
+      "groupHeaderWithDetails": "{{toolCount}} apeluri de instrumente · {{thinkingCount}} gânduri · {{messageCount}} mesaje",
+      "groupHeaderWithMessages": "{{toolCount}} apeluri de instrumente · {{messageCount}} mesaje"
     },
     "topic": {
       "added": "Subiect nou adăugat"
@@ -3650,12 +3665,6 @@
     "title": "Ollama"
   },
   "onboarding": {
-    "privacy": {
-      "accept_and_continue": "Acceptă și continuă",
-      "notice": "Continuând, confirmi că ai citit și ești de acord cu",
-      "period": ".",
-      "policy": "Politica de confidențialitate"
-    },
     "select_model": {
       "change_later": "Poți schimba oricând asta din setări.",
       "start": "Începe",
@@ -3674,6 +3683,12 @@
       "setup_hint": "Vă rugăm să configurați cel puțin un furnizor pentru cea mai bună experiență",
       "subtitle": "Bucurați-vă de servicii AI de top cu CherryIN",
       "title": "Bun venit la Cherry Studio"
+    },
+    "privacy": {
+      "accept_and_continue": "Acceptă și continuă",
+      "notice": "Continuând, confirmi că ai citit și ești de acord cu",
+      "period": ".",
+      "policy": "Politica de confidențialitate"
     }
   },
   "openclaw": {
@@ -4161,14 +4176,6 @@
     "source": "Vezi codul sursă",
     "zoom_in": "Mărește",
     "zoom_out": "Micșorează"
-  },
-  "privacy_policy": {
-    "title": "Politica de confidențialitate"
-  },
-  "privacy_policy_update": {
-    "description_before_link": "Am actualizat politica de confidențialitate. Te rugăm să consulți cea mai recentă ",
-    "policy": "Politica de confidențialitate",
-    "title": "Politica de confidențialitate a fost actualizată"
   },
   "prompts": {
     "explanation": "Explică-mi acest concept",
@@ -4821,117 +4828,6 @@
       "description": "Conectați agenți la platforme de mesagerie precum Telegram, Feishu, Discord și altele.",
       "title": "Canale"
     },
-    "componentLab": {
-      "agentSelector": {
-        "clearSelection": "Clar",
-        "configDescription": "Comută proprietățile pentru a previzualiza comportamentul componentei",
-        "configTitle": "Configurare",
-        "currentProps": "Proprietăți curente",
-        "description": "AgentSelector citește acum date reale din DataApi /agents pentru a verifica selecția id/item, fixarea, sortarea și comportamentul căutării.",
-        "emptyShellNotice": "Această previzualizare utilizează lista reală de agenți returnată de DataApi /agents.",
-        "lastOnChange": "Cel mai recent onChange",
-        "previewDescription": "Faceți clic pe declanșator pentru a deschide selectorul",
-        "previewTitle": "Previzualizare",
-        "title": "Selector Agent",
-        "triggerPlaceholder": "Selectați un agent",
-        "valueProp": "Valoare curentă"
-      },
-      "agentTodoList": {
-        "title": "Lista de sarcini a agentului"
-      },
-      "assistantSelector": {
-        "clearSelection": "Clar",
-        "configDescription": "Comută proprietățile pentru a previzualiza comportamentul componentei",
-        "configTitle": "Configurare",
-        "currentProps": "Proprietățile curente",
-        "description": "Montează componenta business AssistantSelector direct pentru a verifica comportamentul multi/single, id/item, pin, sortare și căutare.",
-        "lastOnChange": "Cel mai recent onChange",
-        "previewDescription": "Faceți clic pe declanșator pentru a deschide selectorul",
-        "previewTitle": "Previzualizare",
-        "title": "Selector de asistent",
-        "triggerPlaceholder": "Selectați un asistent",
-        "triggerSelectedCount": "{{count}} asistenți selectați",
-        "valueProp": "Valoare curentă"
-      },
-      "description": "Vizibil doar în dezvoltare pentru testarea noului selector de model direct în aplicație.",
-      "fileProcessing": {
-        "artifact": {
-          "file": "Fișier Markdown",
-          "text": "Rezultat text"
-        },
-        "description": "Rulează fiecare procesor de fișiere configurat prin IPC-ul real de procesare a fișierelor și compară rezultatele.",
-        "duration": "{{seconds}}s",
-        "jobId": "ID job",
-        "markdown": {
-          "description": "Selectați un document și executați toți procesorii de conversie document-to-markdown.",
-          "fileFilterName": "Documente",
-          "noFile": "Niciun document selectat",
-          "select": "Selectați documentul",
-          "start": "Test markdown",
-          "title": "Markdown"
-        },
-        "noProcessors": "Niciun procesor nu acceptă această caracteristică.",
-        "ocr": {
-          "description": "Selectați o imagine și executați toți procesorii OCR.",
-          "fileFilterName": "Imagini",
-          "noFile": "Nicio imagine selectată",
-          "select": "Selectează imagine",
-          "start": "Test OCR",
-          "title": "OCR"
-        },
-        "processorCount": "{{count}} procesoare",
-        "status": {
-          "cancelled": "Anulat",
-          "completed": "Finalizat",
-          "delayed": "Întârziat",
-          "failed": "Eșuat",
-          "idle": "Inactiv",
-          "pending": "În așteptare",
-          "processing": "Procesare",
-          "running": "Alergare",
-          "starting": "Pornind"
-        },
-        "title": "Analiza documentelor"
-      },
-      "label": "Laborator de Componente",
-      "modelSelector": {
-        "behaviorConfig": "Configurare comportament și afișare",
-        "callbackEmpty": "Niciun apel de întoarcere al componentei nu a fost încă primit",
-        "clearSelection": "Șterge selecția",
-        "configDescription": "Comută proprietățile cheie ale selectorului de model de mai sus și inspectează valoarea de intrare plus încărcăturile de apel invers de mai jos.",
-        "configTitle": "Teren de joacă pentru recuzită",
-        "controlMultiSelectMode": "Mod multiSelect controlat",
-        "currentProps": "Proprietăți actuale",
-        "defaultMultiSelectMode": "modImplicitSelectareMultiplă",
-        "description": "Această pagină montează direct componenta de business ModelSelector curentă, astfel încât să putem verifica comportamentul de selecție, filtrare, căutare și fixare.",
-        "empty": "Niciun model nu este disponibil în prezent, așa că selectorul nu poate fi încă afișat.",
-        "lastModeChangeReturn": "Ultimul Return privind schimbarea modului de selecție multiplă",
-        "lastSelectReturn": "Cel mai recent Return onSelect",
-        "loading": "Se încarcă modelele...",
-        "modelId": "ID model",
-        "multiSelectMode": "modSelectareMultiplă",
-        "multiple": "multiple",
-        "normalizedIds": "ID-uri selectate normalizate",
-        "outputEmpty": "Nu există încă date de afișat",
-        "provider": "Furnizor",
-        "resetOutputs": "Resetare ieșiri",
-        "resultsDescription": "Acesta arată propoziția de valoare curentă, ID-urile selectate normalizate și cea mai recentă ieșire de callback de la componentă.",
-        "resultsTitle": "Ieșiri și Stare",
-        "selected": "Selecție curentă",
-        "selectedEmpty": "Niciun model selectat încă",
-        "selectionConfig": "Configurare Valoare Selecție",
-        "selectionType": "tipSelecție",
-        "selectionTypeId": "Returnează ID-urile modelului",
-        "selectionTypeModel": "Returnează Obiectele Modelului",
-        "showPinnedModels": "aratăModeleFixate",
-        "showTagFilter": "aratăFiltrulEtichete",
-        "title": "Selector de modele",
-        "triggerPlaceholder": "Selectați un model",
-        "triggerSelectedCount": "{{count}} modele selectate",
-        "valueProp": "Propunerea de valoare actuală"
-      },
-      "title": "Componenta Laborator Dezvoltare"
-    },
     "data": {
       "app_data": {
         "copy_data_option": "Copiază datele, va reporni automat după copierea datelor din directorul original în noul director",
@@ -4977,96 +4873,6 @@
       },
       "data": {
         "title": "Director de date"
-      },
-      "data_sync": {
-        "auto_sync": "[to be translated]:Auto Sync",
-        "current_device": "[to be translated]:Current Device",
-        "diagnose": "[to be translated]:Diagnose",
-        "diagnosis": {
-          "checked_at": "[to be translated]:Checked at: {{time}}",
-          "device": "[to be translated]:Device: {{deviceId}}",
-          "title": "[to be translated]:WebDAV Diagnosis",
-          "write_path": "[to be translated]:Write path: {{path}}",
-          "write_success": "[to be translated]:WebDAV connection and write access are available."
-        },
-        "effective_path": "[to be translated]:Effective Sync Path",
-        "effective_path_help": "[to be translated]:This is the final WebDAV directory Cherry Studio Pi will read and write.",
-        "help": "[to be translated]:Sync local settings, providers, assistants, agents, conversations, knowledge data, notes, and runtime metadata through WebDAV.",
-        "interval": {
-          "day_one": "[to be translated]:Every day",
-          "hour_one": "[to be translated]:Every hour",
-          "hour_other": "[to be translated]:Every {{count}} hours",
-          "minute_one": "[to be translated]:Every minute",
-          "minute_other": "[to be translated]:Every {{count}} minutes",
-          "off": "[to be translated]:Off"
-        },
-        "last_result": "[to be translated]:Latest Result",
-        "method": "[to be translated]:Sync Method",
-        "method_value": "[to be translated]:WebDAV",
-        "password": "[to be translated]:Password",
-        "password_placeholder": "[to be translated]:WebDAV password",
-        "refresh_status": "[to be translated]:Refresh Status",
-        "remote_browser": {
-          "current_path": "[to be translated]:Current path: {{path}}",
-          "empty": "[to be translated]:No folders found",
-          "error_title": "[to be translated]:Unable to load remote directory",
-          "path_hint": "[to be translated]:You can continue using the configured path: {{path}}",
-          "path_hint_title": "[to be translated]:Directory path",
-          "refresh": "[to be translated]:Refresh",
-          "select": "[to be translated]:Select",
-          "select_current": "[to be translated]:Select Current",
-          "title": "[to be translated]:Browse WebDAV Directory",
-          "use_current_path": "[to be translated]:Use configured path",
-          "use_root": "[to be translated]:Use root"
-        },
-        "remote_path": "[to be translated]:Sync Directory",
-        "remote_path_browse": "[to be translated]:Browse",
-        "remote_path_help": "[to be translated]:Choose a dedicated WebDAV directory. Use the same directory on every device that should sync together.",
-        "restore_confirm_content": "[to be translated]:Restore the latest remote safety snapshot to this device? Current local data may be overwritten.",
-        "restore_confirm_title": "[to be translated]:Restore Latest Snapshot",
-        "restore_latest": "[to be translated]:Restore Latest",
-        "snapshot": {
-          "join_safety": "[to be translated]:Local safety snapshot: {{file}} ({{size}})",
-          "open_local": "[to be translated]:Show local snapshot",
-          "uploaded": "[to be translated]:Remote safety snapshot: {{file}} ({{size}})"
-        },
-        "storage": {
-          "blobs": "[to be translated]:Files: uploaded {{uploaded}}, downloaded {{downloaded}}",
-          "conflicts": "[to be translated]:Storage conflicts: {{count}}",
-          "records": "[to be translated]:Storage records: uploaded {{uploaded}}, downloaded {{downloaded}}",
-          "resolved_conflicts": "[to be translated]:Resolved storage conflicts: {{count}}"
-        },
-        "summary": {
-          "conflicts": "[to be translated]:Conflicts: {{count}}",
-          "deleted": "[to be translated]:Deleted: {{count}}",
-          "downloaded": "[to be translated]:Downloaded: {{count}}",
-          "error": "[to be translated]:Error: {{message}}",
-          "remote_path": "[to be translated]:Remote path: {{path}}",
-          "resolved_conflicts": "[to be translated]:Resolved conflicts: {{count}}",
-          "status_failed": "[to be translated]:Failed",
-          "status_success": "[to be translated]:Success",
-          "uploaded": "[to be translated]:Uploaded: {{count}}"
-        },
-        "sync": "[to be translated]:Sync",
-        "sync_now": "[to be translated]:Manual Sync",
-        "title": "[to be translated]:Data Sync",
-        "toast": {
-          "diagnose_failed": "[to be translated]:Diagnosis failed: {{message}}",
-          "diagnose_success": "[to be translated]:Diagnosis passed",
-          "open_snapshot_failed": "[to be translated]:Failed to open local safety snapshot: {{message}}",
-          "remote_path_selected": "[to be translated]:Selected WebDAV directory: {{path}}",
-          "restore_failed": "[to be translated]:Restore failed: {{message}}",
-          "restore_success": "[to be translated]:Restore completed",
-          "sync_failed": "[to be translated]:Data sync failed: {{message}}",
-          "sync_running": "[to be translated]:Data sync is still running.",
-          "sync_success": "[to be translated]:Data sync completed.",
-          "webdav_required": "[to be translated]:Please configure the WebDAV host, username, and password first."
-        },
-        "uninitialized": "[to be translated]:Not initialized",
-        "unresolved_conflicts": "[to be translated]:Unresolved Conflicts",
-        "username": "[to be translated]:Username",
-        "username_placeholder": "[to be translated]:WebDAV username",
-        "webdav_host": "[to be translated]:WebDAV Host"
       },
       "divider": {
         "basic": "Setări date de bază",
@@ -5632,6 +5438,96 @@
         "title": "Configurare Yuque",
         "token": "Token Yuque",
         "token_placeholder": "Te rugăm să introduci tokenul Yuque"
+      },
+      "data_sync": {
+        "auto_sync": "[to be translated]:Auto Sync",
+        "current_device": "[to be translated]:Current Device",
+        "diagnose": "[to be translated]:Diagnose",
+        "diagnosis": {
+          "checked_at": "[to be translated]:Checked at: {{time}}",
+          "device": "[to be translated]:Device: {{deviceId}}",
+          "title": "[to be translated]:WebDAV Diagnosis",
+          "write_path": "[to be translated]:Write path: {{path}}",
+          "write_success": "[to be translated]:WebDAV connection and write access are available."
+        },
+        "effective_path": "[to be translated]:Effective Sync Path",
+        "effective_path_help": "[to be translated]:This is the final WebDAV directory Cherry Studio Pi will read and write.",
+        "help": "[to be translated]:Sync local settings, providers, assistants, agents, conversations, knowledge data, notes, and runtime metadata through WebDAV.",
+        "interval": {
+          "day_one": "[to be translated]:Every day",
+          "hour_one": "[to be translated]:Every hour",
+          "hour_other": "[to be translated]:Every {{count}} hours",
+          "minute_one": "[to be translated]:Every minute",
+          "minute_other": "[to be translated]:Every {{count}} minutes",
+          "off": "[to be translated]:Off"
+        },
+        "last_result": "[to be translated]:Latest Result",
+        "method": "[to be translated]:Sync Method",
+        "method_value": "[to be translated]:WebDAV",
+        "password": "[to be translated]:Password",
+        "password_placeholder": "[to be translated]:WebDAV password",
+        "refresh_status": "[to be translated]:Refresh Status",
+        "remote_browser": {
+          "current_path": "[to be translated]:Current path: {{path}}",
+          "empty": "[to be translated]:No folders found",
+          "error_title": "[to be translated]:Unable to load remote directory",
+          "path_hint": "[to be translated]:You can continue using the configured path: {{path}}",
+          "path_hint_title": "[to be translated]:Directory path",
+          "refresh": "[to be translated]:Refresh",
+          "select": "[to be translated]:Select",
+          "select_current": "[to be translated]:Select Current",
+          "title": "[to be translated]:Browse WebDAV Directory",
+          "use_current_path": "[to be translated]:Use configured path",
+          "use_root": "[to be translated]:Use root"
+        },
+        "remote_path": "[to be translated]:Sync Directory",
+        "remote_path_browse": "[to be translated]:Browse",
+        "remote_path_help": "[to be translated]:Choose a dedicated WebDAV directory. Use the same directory on every device that should sync together.",
+        "restore_confirm_content": "[to be translated]:Restore the latest remote safety snapshot to this device? Current local data may be overwritten.",
+        "restore_confirm_title": "[to be translated]:Restore Latest Snapshot",
+        "restore_latest": "[to be translated]:Restore Latest",
+        "snapshot": {
+          "join_safety": "[to be translated]:Local safety snapshot: {{file}} ({{size}})",
+          "open_local": "[to be translated]:Show local snapshot",
+          "uploaded": "[to be translated]:Remote safety snapshot: {{file}} ({{size}})"
+        },
+        "storage": {
+          "blobs": "[to be translated]:Files: uploaded {{uploaded}}, downloaded {{downloaded}}",
+          "conflicts": "[to be translated]:Storage conflicts: {{count}}",
+          "records": "[to be translated]:Storage records: uploaded {{uploaded}}, downloaded {{downloaded}}",
+          "resolved_conflicts": "[to be translated]:Resolved storage conflicts: {{count}}"
+        },
+        "summary": {
+          "conflicts": "[to be translated]:Conflicts: {{count}}",
+          "deleted": "[to be translated]:Deleted: {{count}}",
+          "downloaded": "[to be translated]:Downloaded: {{count}}",
+          "error": "[to be translated]:Error: {{message}}",
+          "remote_path": "[to be translated]:Remote path: {{path}}",
+          "resolved_conflicts": "[to be translated]:Resolved conflicts: {{count}}",
+          "status_failed": "[to be translated]:Failed",
+          "status_success": "[to be translated]:Success",
+          "uploaded": "[to be translated]:Uploaded: {{count}}"
+        },
+        "sync": "[to be translated]:Sync",
+        "sync_now": "[to be translated]:Manual Sync",
+        "title": "[to be translated]:Data Sync",
+        "toast": {
+          "diagnose_failed": "[to be translated]:Diagnosis failed: {{message}}",
+          "diagnose_success": "[to be translated]:Diagnosis passed",
+          "open_snapshot_failed": "[to be translated]:Failed to open local safety snapshot: {{message}}",
+          "remote_path_selected": "[to be translated]:Selected WebDAV directory: {{path}}",
+          "restore_failed": "[to be translated]:Restore failed: {{message}}",
+          "restore_success": "[to be translated]:Restore completed",
+          "sync_failed": "[to be translated]:Data sync failed: {{message}}",
+          "sync_running": "[to be translated]:Data sync is still running.",
+          "sync_success": "[to be translated]:Data sync completed.",
+          "webdav_required": "[to be translated]:Please configure the WebDAV host, username, and password first."
+        },
+        "uninitialized": "[to be translated]:Not initialized",
+        "unresolved_conflicts": "[to be translated]:Unresolved Conflicts",
+        "username": "[to be translated]:Username",
+        "username_placeholder": "[to be translated]:WebDAV username",
+        "webdav_host": "[to be translated]:WebDAV Host"
       }
     },
     "developer": {
@@ -6012,11 +5908,11 @@
         "selectProvider": "Selectează furnizor:",
         "setToken": "Introdu tokenul tău",
         "success": "Sincronizare servere MCP reușită",
-        "timeout": "[to be translated]:Sync timed out after {{seconds}}s. Please check your network connection and try again.",
         "title": "Sincronizare servere",
         "tokenPlaceholder": "Introdu tokenul API aici",
         "tokenRequired": "Tokenul API este obligatoriu",
-        "unauthorized": "Sincronizare neautorizată"
+        "unauthorized": "Sincronizare neautorizată",
+        "timeout": "[to be translated]:Sync timed out after {{seconds}}s. Please check your network connection and try again."
       },
       "system": "Sistem",
       "tabs": {
@@ -6206,6 +6102,7 @@
       "disabled": "Mini Aplicații Ascunse",
       "display_title": "Setări de afișare Mini App",
       "empty": "Apasă pictograma de ascundere pe o aplicație din stânga și aceasta va fi mutată aici",
+      "hide_app": "Ascunde {{name}}",
       "open_link_external": {
         "title": "Deschide linkurile în fereastră nouă în browser"
       },
@@ -6217,6 +6114,7 @@
         "title": "Filtru Mini Program"
       },
       "reset_tooltip": "Resetare la valorile implicite",
+      "show_app": "Arată {{name}}",
       "sidebar_description": "Afișează miniaplicațiile active în bara laterală",
       "sidebar_title": "Afișare Mini Aplicații Active în Bara Laterală",
       "title": "Setări Mini Apps",
@@ -6264,11 +6162,11 @@
           "placeholder": "Opțional de ex. GPT-4",
           "tooltip": "Opțional de ex. GPT-4"
         },
-        "provider_enable_failed": "[to be translated]:The model was added, but the provider could not be enabled. Enable this provider first, otherwise these models will not appear in Chat or Agent model selectors.",
         "supported_text_delta": {
           "label": "Suportă ieșire text incrementală",
           "tooltip": "Modelul returnează text incremental, mai degrabă decât tot odată. Activat implicit, dacă modelul nu acceptă acest lucru, te rugăm să dezactivezi această opțiune"
-        }
+        },
+        "provider_enable_failed": "[to be translated]:The model was added, but the provider could not be enabled. Enable this provider first, otherwise these models will not appear in Chat or Agent model selectors."
       },
       "api_key": "Cheie API",
       "base_url": "URL de bază",
@@ -6519,7 +6417,8 @@
       "add": {
         "name": {
           "label": "Nume furnizor",
-          "placeholder": "Exemplu: OpenAI"
+          "placeholder": "Exemplu: OpenAI",
+          "required": "Vă rugăm să introduceți numele furnizorului"
         },
         "title": "Adaugă furnizor",
         "type": "Tip furnizor"
@@ -6630,7 +6529,8 @@
       "balance": "Echilibru",
       "base_url": {
         "label": "URL de bază",
-        "placeholder": "https://api.example.com"
+        "placeholder": "https://api.example.com",
+        "required": "Vă rugăm să introduceți URL-ul de bază"
       },
       "basic_auth": {
         "label": "Autentificare HTTP",
@@ -6707,7 +6607,6 @@
         "content": "Ești sigur că vrei să ștergi acest furnizor?",
         "title": "Șterge furnizor"
       },
-      "delete_failed": "[to be translated]:Failed to delete provider",
       "dmxapi": {
         "platform_enterprise": "ssvip.DMXAPI.com (Întreprindere)",
         "platform_international": "www.DMXAPI.com (Internațional)",
@@ -6827,7 +6726,8 @@
           "toggle_private_key_visibility": "[to be translated]:Toggle private key visibility",
           "toggle_project_id_visibility": "[to be translated]:Toggle project ID visibility"
         }
-      }
+      },
+      "delete_failed": "[to be translated]:Failed to delete provider"
     },
     "proxy": {
       "address": "Adresă proxy",
@@ -6998,10 +6898,12 @@
         },
         "features": {
           "document_to_markdown": {
-            "title": "Procesarea documentelor"
+            "title": "Procesarea documentelor",
+            "tooltip": "Pentru analizarea documentelor în bazele de cunoștințe"
           },
           "image_to_text": {
-            "title": "OCR"
+            "title": "OCR",
+            "tooltip": "Pentru recunoașterea textului din imagini în funcția de traducere"
           }
         },
         "fields": {
@@ -7213,6 +7115,117 @@
     "zoom": {
       "reset": "Resetează",
       "title": "Zoom pagină"
+    },
+    "componentLab": {
+      "agentSelector": {
+        "clearSelection": "Clar",
+        "configDescription": "Comută proprietățile pentru a previzualiza comportamentul componentei",
+        "configTitle": "Configurare",
+        "currentProps": "Proprietăți curente",
+        "description": "AgentSelector citește acum date reale din DataApi /agents pentru a verifica selecția id/item, fixarea, sortarea și comportamentul căutării.",
+        "emptyShellNotice": "Această previzualizare utilizează lista reală de agenți returnată de DataApi /agents.",
+        "lastOnChange": "Cel mai recent onChange",
+        "previewDescription": "Faceți clic pe declanșator pentru a deschide selectorul",
+        "previewTitle": "Previzualizare",
+        "title": "Selector Agent",
+        "triggerPlaceholder": "Selectați un agent",
+        "valueProp": "Valoare curentă"
+      },
+      "agentTodoList": {
+        "title": "Lista de sarcini a agentului"
+      },
+      "assistantSelector": {
+        "clearSelection": "Clar",
+        "configDescription": "Comută proprietățile pentru a previzualiza comportamentul componentei",
+        "configTitle": "Configurare",
+        "currentProps": "Proprietățile curente",
+        "description": "Montează componenta business AssistantSelector direct pentru a verifica comportamentul multi/single, id/item, pin, sortare și căutare.",
+        "lastOnChange": "Cel mai recent onChange",
+        "previewDescription": "Faceți clic pe declanșator pentru a deschide selectorul",
+        "previewTitle": "Previzualizare",
+        "title": "Selector de asistent",
+        "triggerPlaceholder": "Selectați un asistent",
+        "triggerSelectedCount": "{{count}} asistenți selectați",
+        "valueProp": "Valoare curentă"
+      },
+      "description": "Vizibil doar în dezvoltare pentru testarea noului selector de model direct în aplicație.",
+      "fileProcessing": {
+        "artifact": {
+          "file": "Fișier Markdown",
+          "text": "Rezultat text"
+        },
+        "description": "Rulează fiecare procesor de fișiere configurat prin IPC-ul real de procesare a fișierelor și compară rezultatele.",
+        "duration": "{{seconds}}s",
+        "jobId": "ID job",
+        "markdown": {
+          "description": "Selectați un document și executați toți procesorii de conversie document-to-markdown.",
+          "fileFilterName": "Documente",
+          "noFile": "Niciun document selectat",
+          "select": "Selectați documentul",
+          "start": "Test markdown",
+          "title": "Markdown"
+        },
+        "noProcessors": "Niciun procesor nu acceptă această caracteristică.",
+        "ocr": {
+          "description": "Selectați o imagine și executați toți procesorii OCR.",
+          "fileFilterName": "Imagini",
+          "noFile": "Nicio imagine selectată",
+          "select": "Selectează imagine",
+          "start": "Test OCR",
+          "title": "OCR"
+        },
+        "processorCount": "{{count}} procesoare",
+        "status": {
+          "cancelled": "Anulat",
+          "completed": "Finalizat",
+          "delayed": "Întârziat",
+          "failed": "Eșuat",
+          "idle": "Inactiv",
+          "pending": "În așteptare",
+          "processing": "Procesare",
+          "running": "Alergare",
+          "starting": "Pornind"
+        },
+        "title": "Analiza documentelor"
+      },
+      "label": "Laborator de Componente",
+      "modelSelector": {
+        "behaviorConfig": "Configurare comportament și afișare",
+        "callbackEmpty": "Niciun apel de întoarcere al componentei nu a fost încă primit",
+        "clearSelection": "Șterge selecția",
+        "configDescription": "Comută proprietățile cheie ale selectorului de model de mai sus și inspectează valoarea de intrare plus încărcăturile de apel invers de mai jos.",
+        "configTitle": "Teren de joacă pentru recuzită",
+        "controlMultiSelectMode": "Mod multiSelect controlat",
+        "currentProps": "Proprietăți actuale",
+        "defaultMultiSelectMode": "modImplicitSelectareMultiplă",
+        "description": "Această pagină montează direct componenta de business ModelSelector curentă, astfel încât să putem verifica comportamentul de selecție, filtrare, căutare și fixare.",
+        "empty": "Niciun model nu este disponibil în prezent, așa că selectorul nu poate fi încă afișat.",
+        "lastModeChangeReturn": "Ultimul Return privind schimbarea modului de selecție multiplă",
+        "lastSelectReturn": "Cel mai recent Return onSelect",
+        "loading": "Se încarcă modelele...",
+        "modelId": "ID model",
+        "multiSelectMode": "modSelectareMultiplă",
+        "multiple": "multiple",
+        "normalizedIds": "ID-uri selectate normalizate",
+        "outputEmpty": "Nu există încă date de afișat",
+        "provider": "Furnizor",
+        "resetOutputs": "Resetare ieșiri",
+        "resultsDescription": "Acesta arată propoziția de valoare curentă, ID-urile selectate normalizate și cea mai recentă ieșire de callback de la componentă.",
+        "resultsTitle": "Ieșiri și Stare",
+        "selected": "Selecție curentă",
+        "selectedEmpty": "Niciun model selectat încă",
+        "selectionConfig": "Configurare Valoare Selecție",
+        "selectionType": "tipSelecție",
+        "selectionTypeId": "Returnează ID-urile modelului",
+        "selectionTypeModel": "Returnează Obiectele Modelului",
+        "showPinnedModels": "aratăModeleFixate",
+        "showTagFilter": "aratăFiltrulEtichete",
+        "title": "Selector de modele",
+        "triggerPlaceholder": "Selectați un model",
+        "triggerSelectedCount": "{{count}} modele selectate",
+        "valueProp": "Propunerea de valoare actuală"
+      },
+      "title": "Componenta Laborator Dezvoltare"
     }
   },
   "tab": {
@@ -7449,5 +7462,13 @@
     "quit": "Ieșire",
     "show_window": "Afișează fereastra",
     "visualization": "Vizualizare"
+  },
+  "privacy_policy": {
+    "title": "Politica de confidențialitate"
+  },
+  "privacy_policy_update": {
+    "description_before_link": "Am actualizat politica de confidențialitate. Te rugăm să consulți cea mai recentă ",
+    "policy": "Politica de confidențialitate",
+    "title": "Politica de confidențialitate a fost actualizată"
   }
 }

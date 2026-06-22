@@ -1,9 +1,8 @@
 import { Avatar, AvatarFallback, Button } from '@cherrystudio/ui'
 import { resolveIcon } from '@cherrystudio/ui/icons'
 import { cn } from '@cherrystudio/ui/lib/utils'
-import { ModelSelector } from '@renderer/components/ModelSelector'
-import { getProviderDisplayName } from '@renderer/components/ModelSelector/utils'
-import { getRawModelId } from '@renderer/config/models/utils'
+import { ModelSelector } from '@renderer/components/Selector/model'
+import { getProviderDisplayName } from '@renderer/components/Selector/model/utils'
 import { useModels } from '@renderer/hooks/useModel'
 import { useProviders } from '@renderer/hooks/useProvider'
 import { createUniqueModelId, parseUniqueModelId } from '@shared/data/types/model'
@@ -38,7 +37,7 @@ const PaintingModelSelector: FC<PaintingModelSelectorProps> = ({ className, pain
   const selectedModel = useMemo(
     () =>
       painting.model
-        ? models.find((model) => model.providerId === painting.providerId && getRawModelId(model) === painting.model)
+        ? models.find((model) => model.providerId === painting.providerId && model.apiModelId === painting.model)
         : undefined,
     [models, painting.providerId, painting.model]
   )

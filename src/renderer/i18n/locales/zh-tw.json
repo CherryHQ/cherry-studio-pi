@@ -1659,10 +1659,10 @@
       "claude_code": "Anthropic 官方 CLI 程式助理",
       "gemini_cli": "Google Gemini 命令列助理",
       "github_copilot_cli": "GitHub Copilot 命令列版本",
-      "iflow_cli": "iFlow 推出的多模型 CLI 助理",
       "kimi_cli": "Moonshot Kimi 命令列助理",
       "openai_codex": "OpenAI 官方程式碼產生 CLI",
       "opencode": "開源社群的多模型程式碼 Agent",
+      "qoder_cli": "阿里 Qoder 的智慧體命令列程式設計工具",
       "qwen_code": "阿里通義出品的開源 CLI 程式設計工具"
     },
     "update_options": "更新選項",
@@ -2155,13 +2155,13 @@
         "view_chunks": "查看 Chunks"
       },
       "add_dialog": {
-        "directory": {
-          "description": "将递归导入文件夹中的支持文件",
-          "title": "点击选择文件夹"
+        "conflict_dialog": {
+          "description": "[to be translated]:{{count}} of the sources you are adding have the same name as existing items. Choose how to handle them.",
+          "keep_all": "[to be translated]:Keep All",
+          "replace": "[to be translated]:Replace",
+          "title": "[to be translated]:Sources already exist"
         },
         "footer": {
-          "selected_directories": "已选 {{count}} 个目录",
-          "selected_files": "已选 {{count}} 个文件",
           "selected_notes": "已选 {{count}} 个笔记"
         },
         "note": {
@@ -2185,6 +2185,7 @@
           "success": "数据源已添加到知识库"
         },
         "title": "添加数据源",
+        "unsupported_files_skipped": "已跳過 {{count}} 個不支援的檔案",
         "url": {
           "description": "输入网页链接：",
           "help": "将自动抓取页面文本并分块索引",
@@ -2194,7 +2195,6 @@
         }
       },
       "bulk": {
-        "cancel": "取消",
         "delete": "刪除",
         "delete_confirm_description": "確認刪除選中的 {{count}} 個資料來源？刪除後無法復原。",
         "delete_confirm_title": "確認批次刪除",
@@ -2252,18 +2252,16 @@
         "select_row": "選取列"
       },
       "toolbar": {
-        "add": "新增資料來源",
-        "no_search_results": "未找到符合的資料來源",
-        "search_placeholder": "搜尋資料來源"
+        "add": "新增資料來源"
       }
     },
     "dimensions_auto_set": "自動設定嵌入維度",
     "dimensions_size_placeholder": "留空表示不設定",
-    "drag_file": "拖曳檔案到這裡",
     "embedding_model": "嵌入模型",
     "embedding_model_required": "知识库嵌入模型是必需的",
     "empty": "暂无知识库",
     "error": {
+      "directory_not_migrated": "該資料夾內容遷移失敗，請刪除後重新上傳。",
       "failed_base_unknown": "該知識庫遷移失敗，請重建知識庫並選擇新的嵌入模型。",
       "failed_to_create": "知识库创建失败",
       "failed_to_delete": "知識庫刪除失敗",
@@ -2272,7 +2270,6 @@
       "missing_embedding_model": "遷移時未找到原知識庫使用的嵌入模型，請重建知識庫並選擇新的嵌入模型。",
       "model_invalid": "未選擇模型"
     },
-    "file_hint": "支援 {{file_types}} 格式",
     "groups": {
       "add": "新建分组",
       "create_base_here": "在此分组新建",
@@ -2417,7 +2414,9 @@
   "launchpad": {
     "apps": "應用",
     "minapps": "小程式",
-    "miniApps": "小程式"
+    "miniApps": "小程式",
+    "pin_to_sidebar": "固定到側邊欄",
+    "unpin_from_sidebar": "取消固定"
   },
   "library": {
     "action": {
@@ -4821,117 +4820,6 @@
       "description": "將代理連接到 Telegram、飛書、Discord 等訊息平台。",
       "title": "頻道"
     },
-    "componentLab": {
-      "agentSelector": {
-        "clearSelection": "清空",
-        "configDescription": "切換 props 預覽元件行為",
-        "configTitle": "設定",
-        "currentProps": "目前 props",
-        "description": "AgentSelector 現在會讀取真實 /agents DataApi 資料，用於驗證 id/item 選擇、pin、排序與搜尋行為。",
-        "emptyShellNotice": "目前預覽使用 /agents DataApi 回傳的真實智能體列表。",
-        "lastOnChange": "最近一次 onChange",
-        "previewDescription": "點擊 trigger 開啟選擇器",
-        "previewTitle": "預覽",
-        "title": "智能體選擇器",
-        "triggerPlaceholder": "選擇智能體",
-        "valueProp": "目前 value"
-      },
-      "agentTodoList": {
-        "title": "Agent 任務列表"
-      },
-      "assistantSelector": {
-        "clearSelection": "清空",
-        "configDescription": "切換 props 預覽元件行為",
-        "configTitle": "設定",
-        "currentProps": "目前 props",
-        "description": "直接掛載 AssistantSelector 業務元件，驗證 multi/single、id/item、pin、排序與搜尋行為。",
-        "lastOnChange": "最近一次 onChange",
-        "previewDescription": "點擊 trigger 開啟選擇器",
-        "previewTitle": "預覽",
-        "title": "助手選擇器",
-        "triggerPlaceholder": "選擇助手",
-        "triggerSelectedCount": "已選 {{count}} 個助手",
-        "valueProp": "目前 value"
-      },
-      "description": "僅在開發環境顯示，用於直接在應用內聯調 v2 選擇器等新元件。",
-      "fileProcessing": {
-        "artifact": {
-          "file": "Markdown 檔案",
-          "text": "文字結果"
-        },
-        "description": "透過真實 file processing IPC 執行所有已設定的檔案處理器，並比較結果。",
-        "duration": "{{seconds}} 秒",
-        "jobId": "Job ID",
-        "markdown": {
-          "description": "選擇文件，並執行所有文件轉 Markdown 處理器。",
-          "fileFilterName": "文件",
-          "noFile": "未選擇文件",
-          "select": "選擇文件",
-          "start": "測試 Markdown",
-          "title": "Markdown"
-        },
-        "noProcessors": "沒有處理器支援這個能力。",
-        "ocr": {
-          "description": "選擇圖片，並執行所有 OCR 處理器。",
-          "fileFilterName": "圖片",
-          "noFile": "未選擇圖片",
-          "select": "選擇圖片",
-          "start": "測試 OCR",
-          "title": "OCR"
-        },
-        "processorCount": "{{count}} 個處理器",
-        "status": {
-          "cancelled": "已取消",
-          "completed": "已完成",
-          "delayed": "已延遲",
-          "failed": "失敗",
-          "idle": "閒置",
-          "pending": "等待中",
-          "processing": "處理中",
-          "running": "執行中",
-          "starting": "啟動中"
-        },
-        "title": "文件解析"
-      },
-      "label": "元件測試",
-      "modelSelector": {
-        "behaviorConfig": "互動與顯示設定",
-        "callbackEmpty": "尚未收到元件回呼",
-        "clearSelection": "清空選擇",
-        "configDescription": "在上方切換 ModelSelector 的關鍵 props，並在下方直接查看傳入值與回呼返回值。",
-        "configTitle": "Props Playground",
-        "controlMultiSelectMode": "受控 multiSelectMode",
-        "currentProps": "目前 props",
-        "defaultMultiSelectMode": "defaultMultiSelectMode",
-        "description": "這裡直接掛載目前的 ModelSelector 業務元件，方便驗證選擇、篩選、搜尋與置頂能力。",
-        "empty": "目前沒有可用模型，暫時無法顯示選擇器。",
-        "lastModeChangeReturn": "最近一次 onMultiSelectModeChange 返回",
-        "lastSelectReturn": "最近一次 onSelect 返回",
-        "loading": "正在載入模型...",
-        "modelId": "模型 ID",
-        "multiSelectMode": "multiSelectMode",
-        "multiple": "multiple",
-        "normalizedIds": "正規化選中 ID",
-        "outputEmpty": "目前沒有可顯示的資料",
-        "provider": "服務商",
-        "resetOutputs": "重設輸出",
-        "resultsDescription": "這裡會顯示元件目前接收的 value、正規化後的選中狀態，以及最新一次回呼輸出。",
-        "resultsTitle": "返回資料與狀態",
-        "selected": "目前選擇",
-        "selectedEmpty": "尚未選擇模型",
-        "selectionConfig": "選擇值設定",
-        "selectionType": "selectionType",
-        "selectionTypeId": "返回模型 ID",
-        "selectionTypeModel": "返回模型物件",
-        "showPinnedModels": "showPinnedModels",
-        "showTagFilter": "showTagFilter",
-        "title": "模型選擇元件",
-        "triggerPlaceholder": "選擇一個模型",
-        "triggerSelectedCount": "已選 {{count}} 個模型",
-        "valueProp": "目前傳入 value"
-      },
-      "title": "開發環境元件測試"
-    },
     "data": {
       "app_data": {
         "copy_data_option": "複製資料，會在重新啟動後將原始目錄的資料複製到新目錄",
@@ -5716,7 +5604,19 @@
         "title": "資料備份與復原"
       },
       "common": {
+        "menu": {
+          "presentation_mode": {
+            "cherry": "[to be translated]:Cherry",
+            "native": "[to be translated]:Native",
+            "restart": {
+              "content": "[to be translated]:Changing the menu style requires restarting the app to take effect. Do you want to restart now?",
+              "title": "[to be translated]:Restart Required"
+            },
+            "title": "[to be translated]:Context menu style"
+          }
+        },
         "sections": {
+          "chat_settings": "[to be translated]:Chat Settings",
           "custom_css": "自訂 CSS",
           "display_language": "顯示與語言",
           "privacy_advanced": "隱私與進階",
@@ -6206,6 +6106,7 @@
       "disabled": "隱藏的小程式",
       "display_title": "小程式顯示設定",
       "empty": "在左側清單點擊隱藏圖示，小程式會移到這裡",
+      "hide_app": "隱藏 {{name}}",
       "open_link_external": {
         "title": "在瀏覽器中開啟新視窗連結"
       },
@@ -6217,6 +6118,7 @@
         "title": "小程式區域篩選"
       },
       "reset_tooltip": "重設為預設值",
+      "show_app": "顯示 {{name}}",
       "sidebar_description": "設定側邊欄是否顯示活躍的小程式",
       "sidebar_title": "側邊欄活躍小程式顯示設定",
       "title": "小程式設定",
@@ -6519,7 +6421,8 @@
       "add": {
         "name": {
           "label": "提供者名稱",
-          "placeholder": "例如：OpenAI"
+          "placeholder": "例如：OpenAI",
+          "required": "請輸入提供者名稱"
         },
         "title": "新增提供者",
         "type": "供應商類型"
@@ -6630,7 +6533,8 @@
       "balance": "餘額",
       "base_url": {
         "label": "Base URL",
-        "placeholder": "https://api.example.com"
+        "placeholder": "https://api.example.com",
+        "required": "請輸入 Base URL"
       },
       "basic_auth": {
         "label": "HTTP 認證",
@@ -6806,7 +6710,7 @@
         "project_id": "專案 ID",
         "project_id_help": "您的 Google Cloud 專案 ID",
         "project_id_placeholder": "your-google-cloud-project-id",
-        "select_location": "[to be translated]:Select location",
+        "select_location": "選擇位置",
         "service_account": {
           "auth_success": "服務帳戶驗證成功",
           "client_email": "Client Email",
@@ -6823,9 +6727,9 @@
           "private_key_help": "從 Google Cloud Console 下載的 JSON 金鑰檔案中的 private_key 欄位",
           "private_key_placeholder": "輸入服務帳戶私密金鑰",
           "title": "服務帳戶設定",
-          "toggle_client_email_visibility": "[to be translated]:Toggle client email visibility",
-          "toggle_private_key_visibility": "[to be translated]:Toggle private key visibility",
-          "toggle_project_id_visibility": "[to be translated]:Toggle project ID visibility"
+          "toggle_client_email_visibility": "切換客戶電子郵件可見性",
+          "toggle_private_key_visibility": "切換私鑰可見性",
+          "toggle_project_id_visibility": "切換專案 ID 顯示"
         }
       }
     },
@@ -6895,7 +6799,7 @@
       },
       "clear_shortcut": "清除快捷鍵",
       "clear_topic": "清除所有訊息",
-      "close_tab": "[to be translated]:Close Tab",
+      "close_tab": "關閉分頁",
       "conflict_with": "已被「{{name}}」使用",
       "copy_last_message": "複製上一則訊息",
       "edit_last_user_message": "編輯最後一則使用者訊息",
@@ -6903,11 +6807,11 @@
       "enabled": "啟用",
       "exit_fullscreen": "離開全螢幕",
       "label": "按鍵",
-      "move_tab_to_first": "[to be translated]:Move Tab to First",
+      "move_tab_to_first": "將分頁移至最前",
       "new_topic": "新增話題",
       "occupied_by_other_application": "此快捷鍵已被系統或其他應用程式占用",
-      "open_tab_in_new_window": "[to be translated]:Open Tab in New Window",
-      "pin_tab": "[to be translated]:Toggle Pin Tab",
+      "open_tab_in_new_window": "在新視窗中開啟分頁",
+      "pin_tab": "切換釘選分頁",
       "press_shortcut": "按下快捷鍵",
       "quick_assistant": "快捷助手",
       "rename_topic": "重新命名話題",
@@ -6998,10 +6902,12 @@
         },
         "features": {
           "document_to_markdown": {
-            "title": "文件處理"
+            "title": "文件處理",
+            "tooltip": "用於知識庫解析文件"
           },
           "image_to_text": {
-            "title": "OCR"
+            "title": "OCR",
+            "tooltip": "用於識別圖片內文字內容"
           }
         },
         "fields": {
@@ -7215,10 +7121,16 @@
       "title": "縮放"
     }
   },
+  "subWindow": {
+    "back_to_main": "[to be translated]:Back to Main Window",
+    "pin": "[to be translated]:Keep on Top",
+    "unpin": "[to be translated]:Cancel Keep on Top"
+  },
   "tab": {
     "close": "關閉分頁",
     "move_to_first": "移至第一個",
     "new": "新標籤頁",
+    "open_in_new_window": "[to be translated]:Open in New Window",
     "pin": "釘選分頁",
     "unpin": "取消固定分頁"
   },

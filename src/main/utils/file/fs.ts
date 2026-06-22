@@ -42,27 +42,14 @@ import path from 'node:path'
 import { Writable } from 'node:stream'
 
 import { loggerService } from '@logger'
-import { sanitizeRemoteUrl } from '@main/utils/remoteUrlSafety'
-import { MB } from '@shared/config/constant'
-import type { FilePath } from '@shared/file/types'
+import type { FilePath } from '@shared/types/file'
 import mime from 'mime'
 import xxhashLoader from 'xxhash-wasm'
 
 const logger = loggerService.withContext('utils/file/fs')
-const REMOTE_DOWNLOAD_MAX_BYTES = 100 * MB
-const REMOTE_DOWNLOAD_TIMEOUT_MS = 120_000
 
 const notImplemented = (op: string): never => {
   throw new Error(`@main/utils/file/fs.${op}: not implemented (deferred to Phase 2)`)
-}
-
-function parseContentLength(value: string | null): number | undefined {
-  if (!value) {
-    return undefined
-  }
-
-  const parsed = Number.parseInt(value, 10)
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined
 }
 
 /** Read file content as text with optional encoding detection. */
@@ -92,6 +79,24 @@ export async function exists(path: FilePath): Promise<boolean> {
     return true
   } catch {
     return false
+  }
+}
+
+/** Outcome of a readability probe: present, genuinely absent, or could-not-be-checked. */
+export type PathReadability = 'readable' | 'missing' | 'unverifiable'
+
+/**
+ * Like {@link exists}, but distinguishes a path that is genuinely absent (`ENOENT` → `missing`)
+ * from one that could not be checked (`EACCES` / `EMFILE` / `EIO` / a network-drive timeout →
+ * `unverifiable`). Callers that drive a destructive remediation off "absent" — e.g. telling the
+ * user to delete and re-add a source — need this so a transient failure is not reported as deletion.
+ */
+export async function probeReadable(path: FilePath): Promise<PathReadability> {
+  try {
+    await access(path, constants.R_OK)
+    return 'readable'
+  } catch (error) {
+    return (error as NodeJS.ErrnoException)?.code === 'ENOENT' ? 'missing' : 'unverifiable'
   }
 }
 
@@ -514,21 +519,15 @@ export async function compressImage(_input: FilePath | Uint8Array, _output: File
  * dest file. Throws on non-2xx responses.
  */
 export async function download(url: string, dest: FilePath): Promise<void> {
-  const safeUrl = sanitizeRemoteUrl(url)
-  const response = await fetch(safeUrl, { signal: AbortSignal.timeout(REMOTE_DOWNLOAD_TIMEOUT_MS) })
+  const response = await fetch(url)
   if (!response.ok) {
-    throw new Error(`download: HTTP ${response.status} ${response.statusText}`)
-  }
-  const contentLength = parseContentLength(response.headers.get('content-length'))
-  if (contentLength !== undefined && contentLength > REMOTE_DOWNLOAD_MAX_BYTES) {
-    throw new Error(`download: remote file is too large (${contentLength} bytes, limit ${REMOTE_DOWNLOAD_MAX_BYTES})`)
+    throw new Error(`download(${url}): HTTP ${response.status} ${response.statusText}`)
   }
   if (!response.body) {
-    throw new Error('download: response has no body')
+    throw new Error(`download(${url}): response has no body`)
   }
   const writer = createAtomicWriteStream(dest)
   const reader = response.body.getReader()
-  let downloadedBytes = 0
   await new Promise<void>((resolve, reject) => {
     writer.on('error', (err) => {
       // Cancel the reader so the underlying TCP socket / ReadableStream lock
@@ -546,19 +545,12 @@ export async function download(url: string, dest: FilePath): Promise<void> {
             writer.end()
             return
           }
-          downloadedBytes += value.byteLength
-          if (downloadedBytes > REMOTE_DOWNLOAD_MAX_BYTES) {
-            throw new Error(
-              `download: remote file is too large (${downloadedBytes} bytes, limit ${REMOTE_DOWNLOAD_MAX_BYTES})`
-            )
-          }
           if (!writer.write(Buffer.from(value))) {
             await new Promise<void>((r) => writer.once('drain', r))
           }
         }
       } catch (err) {
         writer.destroy(err as Error)
-        reject(err)
       }
     }
     void pump()

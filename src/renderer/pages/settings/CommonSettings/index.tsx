@@ -17,10 +17,12 @@ import {
 import { Flex } from '@cherrystudio/ui'
 import { useMultiplePreferences, usePreference } from '@data/hooks/usePreference'
 import { loggerService } from '@logger'
+import ChatPreferenceSections from '@renderer/components/chat/settings/ChatPreferenceSections'
 import { ResetIcon } from '@renderer/components/Icons'
 import Scrollbar from '@renderer/components/Scrollbar'
 import Selector from '@renderer/components/Selector'
 import { isLinux, isMac, THEME_COLOR_PRESETS } from '@renderer/config/constant'
+import { defaultByPassRules } from '@renderer/config/constant'
 import { useCodeStyle } from '@renderer/context/CodeStyleProvider'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { useTimer } from '@renderer/hooks/useTimer'
@@ -28,15 +30,15 @@ import useUserTheme from '@renderer/hooks/useUserTheme'
 import i18n from '@renderer/i18n'
 import type { NotificationSource } from '@renderer/types/notification'
 import { isValidProxyUrl } from '@renderer/utils'
-import { formatErrorMessage, formatErrorMessageWithPrefix } from '@renderer/utils/error'
+import { formatErrorMessage } from '@renderer/utils/error'
 import { cn } from '@renderer/utils/style'
-import { defaultByPassRules, defaultLanguage } from '@shared/config/constant'
-import type { LanguageVarious } from '@shared/data/preference/preferenceTypes'
+import type { LanguageVarious, MenuPresentationMode } from '@shared/data/preference/preferenceTypes'
 import { ThemeMode } from '@shared/data/preference/preferenceTypes'
-import { Code, Minus, Monitor, Moon, Palette, Plus, Shield, Sun } from 'lucide-react'
+import { defaultLanguage } from '@shared/utils/languages'
+import { Code, MessageSquare, Minus, Monitor, Moon, Palette, Plus, Shield, Sun } from 'lucide-react'
 import type React from 'react'
 import type { FC } from 'react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -56,7 +58,15 @@ import {
 import ThemeColorPicker from './components/ThemeColorPicker'
 
 type SpellCheckOption = { readonly value: string; readonly label: string; readonly flag: string }
-type CommonSettingsSection = 'display-language' | 'system-startup' | 'privacy-advanced' | 'custom-css'
+type CommonSettingsSection = 'display-language' | 'chat-settings' | 'system-startup' | 'privacy-advanced' | 'custom-css'
+type TFunction = (key: string) => string
+type MenuPresentationModeChangeOptions = {
+  currentMode: MenuPresentationMode
+  mode: MenuPresentationMode
+  setMenuPresentationMode: (mode: MenuPresentationMode) => Promise<unknown> | unknown
+  setTimeoutTimer: (key: string, callback: () => void, delay: number) => void
+  t: TFunction
+}
 
 const defaultFontPreviewFamily = 'Ubuntu, -apple-system, system-ui, Arial, sans-serif'
 const logger = loggerService.withContext('CommonSettings')
@@ -74,6 +84,40 @@ const spellCheckLanguageOptions: readonly SpellCheckOption[] = [
   { value: 'sk', label: 'Slovenčina', flag: '🇸🇰' },
   { value: 'el', label: 'Ελληνικά', flag: '🇬🇷' }
 ]
+
+export function confirmMenuPresentationModeChange({
+  currentMode,
+  mode,
+  setMenuPresentationMode,
+  setTimeoutTimer,
+  t
+}: MenuPresentationModeChangeOptions): void {
+  if (mode === currentMode) return
+
+  void window.modal.confirm({
+    title: t('settings.general.common.menu.presentation_mode.restart.title'),
+    content: t('settings.general.common.menu.presentation_mode.restart.content'),
+    okText: t('common.confirm'),
+    cancelText: t('common.cancel'),
+    centered: true,
+    async onOk() {
+      try {
+        await setMenuPresentationMode(mode)
+      } catch (error) {
+        window.toast.error(formatErrorMessage(error))
+        throw error
+      }
+
+      setTimeoutTimer(
+        'handleMenuPresentationModeChange',
+        () => {
+          void window.api.application.relaunch()
+        },
+        500
+      )
+    }
+  })
+}
 
 const CommonSettings: FC = () => {
   const { t } = useTranslation()
@@ -99,60 +143,20 @@ const CommonSettings: FC = () => {
   const [enableSpellCheck, setEnableSpellCheck] = usePreference('app.spell_check.enabled')
   const [spellCheckLanguages, setSpellCheckLanguages] = usePreference('app.spell_check.languages')
   const [windowStyle, setWindowStyle] = usePreference('ui.window_style')
+  const [menuPresentationMode, setMenuPresentationMode] = usePreference('menu.presentation_mode')
   const [customCss, setCustomCss] = usePreference('ui.custom_css')
-  const [topicPosition, setTopicPosition] = usePreference('topic.position')
-  const [clickAssistantToShowTopic, setClickAssistantToShowTopic] = usePreference('assistant.click_to_show_topic')
-  const [pinTopicsToTop, setPinTopicsToTop] = usePreference('topic.tab.pin_to_top')
-  const [showTopicTime, setShowTopicTime] = usePreference('topic.tab.show_time')
   const [fontSize] = usePreference('chat.message.font_size')
   const [useSystemTitleBar, setUseSystemTitleBar] = usePreference('app.use_system_title_bar')
   const [notificationSettings, setNotificationSettings] = useMultiplePreferences({
     assistant: 'app.notification.assistant.enabled',
     backup: 'app.notification.backup.enabled',
-    knowledge: 'app.notification.knowledge.enabled',
-    update: 'app.notification.update.enabled'
+    knowledge: 'app.notification.knowledge.enabled'
   })
 
   const [proxyUrl, setProxyUrl] = useState<string>(storeProxyUrl)
   const [proxyBypassRules, setProxyBypassRules] = useState<string>(storeProxyBypassRules)
   const [currentZoom, setCurrentZoom] = useState(1.0)
   const [fontList, setFontList] = useState<string[]>([])
-  const systemTitleBarConfirmRef = useRef(false)
-  const systemTitleBarOperationRef = useRef(false)
-  const hardwareAccelerationConfirmRef = useRef(false)
-  const hardwareAccelerationOperationRef = useRef(false)
-
-  const showSaveFailed = useCallback(
-    (error: unknown) => {
-      window.toast?.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
-    },
-    [t]
-  )
-
-  const showOperationFailed = useCallback(
-    (error: unknown) => {
-      window.toast?.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
-    },
-    [t]
-  )
-
-  const requestRelaunch = useCallback(() => {
-    void window.api.application.relaunch().catch((error) => {
-      logger.error('Failed to relaunch app after common settings change', error as Error)
-      showOperationFailed(error)
-    })
-  }, [showOperationFailed])
-
-  const persistPreference = useCallback(
-    (operation: () => Promise<unknown>) => {
-      try {
-        void operation().catch(showSaveFailed)
-      } catch (error) {
-        showSaveFailed(error)
-      }
-    },
-    [showSaveFailed]
-  )
 
   const sectionItems = useMemo(
     () => [
@@ -160,6 +164,11 @@ const CommonSettings: FC = () => {
         key: 'display-language' as const,
         label: t('settings.general.common.sections.display_language'),
         icon: <Palette />
+      },
+      {
+        key: 'chat-settings' as const,
+        label: t('settings.general.common.sections.chat_settings'),
+        icon: <MessageSquare />
       },
       {
         key: 'system-startup' as const,
@@ -267,77 +276,71 @@ const CommonSettings: FC = () => {
     }
   }, [])
 
-  const onSelectLanguage = async (value: LanguageVarious) => {
-    try {
-      await setLanguage(value)
-      await i18n.changeLanguage(value)
-    } catch (error) {
-      showSaveFailed(error)
-    }
+  const onSelectLanguage = (value: LanguageVarious) => {
+    void i18n.changeLanguage(value)
+    void setLanguage(value)
   }
 
   const handleNotificationChange = (type: NotificationSource, value: boolean) => {
-    persistPreference(() => setNotificationSettings({ [type]: value }))
+    void setNotificationSettings({ [type]: value })
   }
 
-  const handleSpellCheckChange = async (checked: boolean) => {
-    try {
-      await setEnableSpellCheck(checked)
-      await window.api.setEnableSpellCheck(checked)
-    } catch (error) {
-      showSaveFailed(error)
-    }
+  const handleSpellCheckChange = (checked: boolean) => {
+    void setEnableSpellCheck(checked)
+    void window.api.setEnableSpellCheck(checked)
   }
 
   const handleSpellCheckLanguagesChange = (selectedLanguages: string[]) => {
-    persistPreference(() => setSpellCheckLanguages(selectedLanguages))
+    void setSpellCheckLanguages(selectedLanguages)
   }
 
   const handleWindowStyleChange = useCallback(
     (checked: boolean) => {
-      persistPreference(() => setWindowStyle(checked ? 'transparent' : 'opaque'))
+      void setWindowStyle(checked ? 'transparent' : 'opaque')
     },
-    [persistPreference, setWindowStyle]
+    [setWindowStyle]
+  )
+
+  const menuPresentationModeOptions = useMemo(
+    () => [
+      { value: 'cherry' as const, label: t('settings.general.common.menu.presentation_mode.cherry') },
+      { value: 'native' as const, label: t('settings.general.common.menu.presentation_mode.native') }
+    ],
+    [t]
+  )
+
+  const handleMenuPresentationModeChange = useCallback(
+    (mode: MenuPresentationMode) => {
+      confirmMenuPresentationModeChange({
+        currentMode: menuPresentationMode,
+        mode,
+        setMenuPresentationMode,
+        setTimeoutTimer,
+        t
+      })
+    },
+    [menuPresentationMode, setMenuPresentationMode, setTimeoutTimer, t]
   )
 
   const handleUseSystemTitleBarChange = (checked: boolean) => {
-    if (systemTitleBarConfirmRef.current || systemTitleBarOperationRef.current) {
-      return
-    }
-
-    const clearSystemTitleBarGuard = () => {
-      if (systemTitleBarOperationRef.current) return
-      systemTitleBarConfirmRef.current = false
-    }
-
-    systemTitleBarConfirmRef.current = true
     void window.modal.confirm({
       title: t('settings.use_system_title_bar.confirm.title'),
       content: t('settings.use_system_title_bar.confirm.content'),
       okText: t('common.confirm'),
       cancelText: t('common.cancel'),
       centered: true,
-      onCancel: clearSystemTitleBarGuard,
       async onOk() {
-        if (systemTitleBarOperationRef.current) {
-          return
-        }
-
-        systemTitleBarOperationRef.current = true
         try {
           await setUseSystemTitleBar(checked)
         } catch (error) {
-          window.toast?.error(formatErrorMessage(error))
+          window.toast.error(formatErrorMessage(error))
           throw error
-        } finally {
-          systemTitleBarOperationRef.current = false
-          systemTitleBarConfirmRef.current = false
         }
 
         setTimeoutTimer(
           'handleUseSystemTitleBarChange',
           () => {
-            requestRelaunch()
+            void window.api.application.relaunch()
           },
           500
         )
@@ -346,43 +349,24 @@ const CommonSettings: FC = () => {
   }
 
   const handleHardwareAccelerationChange = (checked: boolean) => {
-    if (hardwareAccelerationConfirmRef.current || hardwareAccelerationOperationRef.current) {
-      return
-    }
-
-    const clearHardwareAccelerationGuard = () => {
-      if (hardwareAccelerationOperationRef.current) return
-      hardwareAccelerationConfirmRef.current = false
-    }
-
-    hardwareAccelerationConfirmRef.current = true
     void window.modal.confirm({
       title: t('settings.hardware_acceleration.confirm.title'),
       content: t('settings.hardware_acceleration.confirm.content'),
       okText: t('common.confirm'),
       cancelText: t('common.cancel'),
       centered: true,
-      onCancel: clearHardwareAccelerationGuard,
       async onOk() {
-        if (hardwareAccelerationOperationRef.current) {
-          return
-        }
-
-        hardwareAccelerationOperationRef.current = true
         try {
           await setDisableHardwareAcceleration(checked)
         } catch (error) {
-          window.toast?.error(formatErrorMessage(error))
+          window.toast.error(formatErrorMessage(error))
           throw error
-        } finally {
-          hardwareAccelerationOperationRef.current = false
-          hardwareAccelerationConfirmRef.current = false
         }
 
         setTimeoutTimer(
           'handleHardwareAccelerationChange',
           () => {
-            requestRelaunch()
+            void window.api.application.relaunch()
           },
           500
         )
@@ -391,7 +375,7 @@ const CommonSettings: FC = () => {
   }
 
   const updateTray = (isShowTray: boolean) => {
-    persistPreference(() => setTray(isShowTray))
+    void setTray(isShowTray)
     if (!isShowTray) {
       updateTrayOnClose(false)
       updateLaunchToTray(false)
@@ -399,14 +383,14 @@ const CommonSettings: FC = () => {
   }
 
   const updateTrayOnClose = (isTrayOnClose: boolean) => {
-    persistPreference(() => setTrayOnClose(isTrayOnClose))
+    void setTrayOnClose(isTrayOnClose)
     if (isTrayOnClose && !tray) {
       updateTray(true)
     }
   }
 
   const updateLaunchToTray = (isLaunchToTray: boolean) => {
-    persistPreference(() => setLaunchToTray(isLaunchToTray))
+    void setLaunchToTray(isLaunchToTray)
     if (isLaunchToTray && !tray) {
       updateTray(true)
     }
@@ -414,15 +398,15 @@ const CommonSettings: FC = () => {
 
   const onSetProxyUrl = () => {
     if (proxyUrl && !isValidProxyUrl(proxyUrl)) {
-      window.toast?.error(t('message.error.invalid.proxy.url'))
+      window.toast.error(t('message.error.invalid.proxy.url'))
       return
     }
 
-    persistPreference(() => _setProxyUrl(proxyUrl))
+    void _setProxyUrl(proxyUrl)
   }
 
   const onSetProxyBypassRules = () => {
-    persistPreference(() => _setProxyBypassRules(proxyBypassRules))
+    void _setProxyBypassRules(proxyBypassRules)
   }
 
   const handleZoomFactor = async (delta: number, reset: boolean = false) => {
@@ -432,32 +416,32 @@ const CommonSettings: FC = () => {
 
   const handleColorPrimaryChange = useCallback(
     (colorHex: string) => {
-      void setUserTheme({
+      setUserTheme({
         ...userTheme,
         colorPrimary: colorHex
-      }).catch(showSaveFailed)
+      })
     },
-    [setUserTheme, showSaveFailed, userTheme]
+    [setUserTheme, userTheme]
   )
 
   const handleUserFontChange = useCallback(
     (value: string) => {
-      void setUserTheme({
+      setUserTheme({
         ...userTheme,
         userFontFamily: value
-      }).catch(showSaveFailed)
+      })
     },
-    [setUserTheme, showSaveFailed, userTheme]
+    [setUserTheme, userTheme]
   )
 
   const handleUserCodeFontChange = useCallback(
     (value: string) => {
-      void setUserTheme({
+      setUserTheme({
         ...userTheme,
         userCodeFontFamily: value
-      }).catch(showSaveFailed)
+      })
     },
-    [setUserTheme, showSaveFailed, userTheme]
+    [setUserTheme, userTheme]
   )
 
   const fontOptions = useMemo<ComboboxOption[]>(
@@ -588,6 +572,16 @@ const CommonSettings: FC = () => {
             </Button>
           </ZoomButtonGroup>
         </SettingRow>
+        <SettingDivider />
+        <SettingRow>
+          <SettingRowTitle>{t('settings.general.common.menu.presentation_mode.title')}</SettingRowTitle>
+          <SegmentedControl<MenuPresentationMode>
+            value={menuPresentationMode}
+            onValueChange={handleMenuPresentationModeChange}
+            options={menuPresentationModeOptions}
+            size="sm"
+          />
+        </SettingRow>
       </SettingGroup>
 
       <SettingGroup theme={theme}>
@@ -639,54 +633,6 @@ const CommonSettings: FC = () => {
           </SelectRow>
         </SettingRow>
       </SettingGroup>
-
-      <SettingGroup theme={theme}>
-        <SettingTitle>{t('settings.display.topic.title')}</SettingTitle>
-        <SettingDivider />
-        <SettingRow>
-          <SettingRowTitle>{t('settings.topic.position.label')}</SettingRowTitle>
-          <SelectorRow>
-            <SegmentedControl
-              value={topicPosition || 'right'}
-              onValueChange={(value) => persistPreference(() => setTopicPosition(value))}
-              options={[
-                { value: 'left', label: t('settings.topic.position.left') },
-                { value: 'right', label: t('settings.topic.position.right') }
-              ]}
-              className="max-w-full"
-              size="sm"
-            />
-          </SelectorRow>
-        </SettingRow>
-        {topicPosition === 'left' && (
-          <>
-            <SettingDivider />
-            <SettingRow>
-              <SettingRowTitle>{t('settings.advanced.auto_switch_to_topics')}</SettingRowTitle>
-              <Switch
-                checked={clickAssistantToShowTopic}
-                onCheckedChange={(checked) => persistPreference(() => setClickAssistantToShowTopic(checked))}
-              />
-            </SettingRow>
-          </>
-        )}
-        <SettingDivider />
-        <SettingRow>
-          <SettingRowTitle>{t('settings.topic.show.time')}</SettingRowTitle>
-          <Switch
-            checked={showTopicTime}
-            onCheckedChange={(checked) => persistPreference(() => setShowTopicTime(checked))}
-          />
-        </SettingRow>
-        <SettingDivider />
-        <SettingRow>
-          <SettingRowTitle>{t('settings.topic.pin_to_top')}</SettingRowTitle>
-          <Switch
-            checked={pinTopicsToTop}
-            onCheckedChange={(checked) => persistPreference(() => setPinTopicsToTop(checked))}
-          />
-        </SettingRow>
-      </SettingGroup>
     </>
   )
 
@@ -697,10 +643,7 @@ const CommonSettings: FC = () => {
         <SettingDivider />
         <SettingRow>
           <SettingRowTitle>{t('settings.launch.onboot')}</SettingRowTitle>
-          <Switch
-            checked={launchOnBoot}
-            onCheckedChange={(checked) => persistPreference(() => setLaunchOnBoot(checked))}
-          />
+          <Switch checked={launchOnBoot} onCheckedChange={(checked) => void setLaunchOnBoot(checked)} />
         </SettingRow>
         <SettingDivider />
         <SettingRow>
@@ -724,11 +667,7 @@ const CommonSettings: FC = () => {
         <SettingDivider />
         <SettingRow>
           <SettingRowTitle>{t('settings.proxy.mode.title')}</SettingRowTitle>
-          <Selector
-            value={storeProxyMode}
-            onChange={(mode) => persistPreference(() => setProxyMode(mode))}
-            options={proxyModeOptions}
-          />
+          <Selector value={storeProxyMode} onChange={(mode) => void setProxyMode(mode)} options={proxyModeOptions} />
         </SettingRow>
         {storeProxyMode === 'custom' && (
           <>
@@ -806,6 +745,8 @@ const CommonSettings: FC = () => {
     </>
   )
 
+  const renderChatSettingsSection = () => <ChatPreferenceSections />
+
   const renderPrivacyAdvancedSection = () => (
     <>
       <SettingGroup theme={theme}>
@@ -841,14 +782,6 @@ const CommonSettings: FC = () => {
             onCheckedChange={(v) => handleNotificationChange('knowledge', v)}
           />
         </SettingRow>
-        <SettingDivider />
-        <SettingRow>
-          <SettingRowTitle>{t('settings.notification.update')}</SettingRowTitle>
-          <Switch
-            checked={notificationSettings.update}
-            onCheckedChange={(v) => handleNotificationChange('update', v)}
-          />
-        </SettingRow>
       </SettingGroup>
 
       <SettingGroup theme={theme}>
@@ -858,13 +791,9 @@ const CommonSettings: FC = () => {
           <SettingRowTitle>{t('settings.privacy.enable_privacy_mode')}</SettingRowTitle>
           <Switch
             checked={enableDataCollection}
-            onCheckedChange={async (v) => {
-              try {
-                await setEnableDataCollection(v)
-                await window.api.config.set('enableDataCollection', v)
-              } catch (error) {
-                showSaveFailed(error)
-              }
+            onCheckedChange={(v) => {
+              void setEnableDataCollection(v)
+              void window.api.config.set('enableDataCollection', v)
             }}
           />
         </SettingRow>
@@ -878,10 +807,7 @@ const CommonSettings: FC = () => {
             <SettingRowTitle>{t('settings.developer.enable_developer_mode')}</SettingRowTitle>
             <InfoTooltip content={t('settings.developer.help')} />
           </Flex>
-          <Switch
-            checked={enableDeveloperMode}
-            onCheckedChange={(checked) => persistPreference(() => setEnableDeveloperMode(checked))}
-          />
+          <Switch checked={enableDeveloperMode} onCheckedChange={setEnableDeveloperMode} />
         </SettingRow>
       </SettingGroup>
     </>
@@ -892,7 +818,7 @@ const CommonSettings: FC = () => {
       <SettingGroup theme={theme}>
         <SettingTitle>
           {t('settings.display.custom.css.label')}
-          <TitleExtra onClick={() => void window.api.openWebsite('https://cherrycss.com/').catch(showOperationFailed)}>
+          <TitleExtra onClick={() => window.api.openWebsite('https://cherrycss.com/')}>
             {t('settings.display.custom.css.cherrycss')}
           </TitleExtra>
         </SettingTitle>
@@ -924,6 +850,8 @@ const CommonSettings: FC = () => {
     switch (activeSection) {
       case 'display-language':
         return renderDisplayLanguageSection()
+      case 'chat-settings':
+        return renderChatSettingsSection()
       case 'system-startup':
         return renderSystemStartupSection()
       case 'privacy-advanced':

@@ -1,17 +1,15 @@
 import { Avatar, AvatarFallback, Button, InfoTooltip, PageSidePanel, Tooltip } from '@cherrystudio/ui'
 import { resolveIcon } from '@cherrystudio/ui/icons'
 import { usePreference } from '@data/hooks/usePreference'
-import { ModelSelector } from '@renderer/components/ModelSelector'
-import { getProviderDisplayName } from '@renderer/components/ModelSelector/utils'
-import { getRawModelId } from '@renderer/config/models/utils'
+import { ModelSelector } from '@renderer/components/Selector/model'
+import { getProviderDisplayName } from '@renderer/components/Selector/model/utils'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { useDefaultModel } from '@renderer/hooks/useModel'
 import { useProviders } from '@renderer/hooks/useProvider'
 import { TranslateSettingsPanelContent } from '@renderer/pages/translate/TranslateSettings'
 import { cn } from '@renderer/utils'
-import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
-import { TRANSLATE_PROMPT } from '@shared/config/prompts'
-import type { Model } from '@shared/data/types/model'
+import { TRANSLATE_PROMPT } from '@shared/ai/prompts'
+import { type Model, parseUniqueModelId } from '@shared/data/types/model'
 import type { Provider } from '@shared/data/types/provider'
 import { isNonChatModel } from '@shared/utils/model'
 import { ChevronDown, Languages, MessageSquareMore, Rocket, RotateCcw, Settings2 } from 'lucide-react'
@@ -77,11 +75,10 @@ type ModelSettingsPanel = 'quick-model' | 'translate' | null
 const MODEL_SETTINGS_DRAWER_WIDTH_CLASS = '!w-[min(31.25rem,calc(100%-1rem))]'
 const TRANSLATE_DRAWER_WIDTH_CLASS = '!w-[min(31.25rem,calc(100%-1rem))]'
 const SETTINGS_DRAWER_BODY_CLASS = 'space-y-0 px-6 py-5'
-const MODEL_SELECTOR_VISIBLE_COUNT = 8
 
 const drawerTitleClassName = 'truncate font-semibold text-foreground text-sm leading-4'
 
-const getModelIdentifier = (model: Model) => getRawModelId(model)
+const getModelIdentifier = (model: Model) => model.apiModelId ?? parseUniqueModelId(model.id).modelId
 
 const getModelInitial = (model: Model) => model.name.trim().charAt(0) || 'M'
 
@@ -125,7 +122,6 @@ const DefaultModelSelector: FC<DefaultModelSelectorProps> = ({
     value={model}
     onSelect={onSelect}
     filter={filter}
-    listVisibleCount={MODEL_SELECTOR_VISIBLE_COUNT}
     trigger={renderModelSelectorTrigger({ model, providers, placeholder, compact })}
   />
 )
@@ -146,39 +142,32 @@ const ModelSettings: FC<ModelSettingsProps> = ({
 
   const modelFilter = useCallback((model: Model) => !isNonChatModel(model), [])
 
-  const showSaveFailed = useCallback(
-    (error: unknown) => {
-      window.toast?.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
-    },
-    [t]
-  )
-
   const onSelectDefault = useCallback(
     (selected: Model | undefined) => {
       if (!selected) return
-      void setDefaultModel(selected).catch(showSaveFailed)
+      void setDefaultModel(selected)
     },
-    [setDefaultModel, showSaveFailed]
+    [setDefaultModel]
   )
 
   const onSelectQuick = useCallback(
     (selected: Model | undefined) => {
       if (!selected) return
-      void setQuickModel(selected).catch(showSaveFailed)
+      void setQuickModel(selected)
     },
-    [setQuickModel, showSaveFailed]
+    [setQuickModel]
   )
 
   const onSelectTranslate = useCallback(
     (selected: Model | undefined) => {
       if (!selected) return
-      void setTranslateModel(selected).catch(showSaveFailed)
+      void setTranslateModel(selected)
     },
-    [setTranslateModel, showSaveFailed]
+    [setTranslateModel]
   )
 
   const onResetTranslatePrompt = () => {
-    void setTranslateModelPrompt(TRANSLATE_PROMPT).catch(showSaveFailed)
+    void setTranslateModelPrompt(TRANSLATE_PROMPT)
   }
 
   const closePanel = useCallback(() => {

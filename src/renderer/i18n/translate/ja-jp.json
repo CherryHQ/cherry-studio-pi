@@ -390,9 +390,6 @@
       },
       "label_one": "セッション",
       "label_other": "セッション",
-      "orphan": {
-        "message": "[to be translated]:This session's agent is missing. The conversation is read-only until you switch to another session or create a new one."
-      },
       "reorder": {
         "error": {
           "failed": "セッションの並び替えに失敗しました"
@@ -403,17 +400,20 @@
           "failed": "セッションの更新に失敗しました"
         }
       },
+      "workspace_status": {
+        "inaccessible": "ワークスペースパスにアクセスできません: {{path}}",
+        "missing": "ワークスペースパスが存在しません: {{path}}",
+        "not_directory": "ワークスペースパスがディレクトリではありません: {{path}}"
+      },
+      "orphan": {
+        "message": "[to be translated]:This session's agent is missing. The conversation is read-only until you switch to another session or create a new one."
+      },
       "workspace": {
         "change": "[to be translated]:Change workspace",
         "create_failed": "[to be translated]:Failed to create workspace",
         "select": "[to be translated]:Select workspace",
         "select_failed": "[to be translated]:Failed to select workspace",
         "updated": "[to be translated]:Workspace updated"
-      },
-      "workspace_status": {
-        "inaccessible": "ワークスペースパスにアクセスできません: {{path}}",
-        "missing": "ワークスペースパスが存在しません: {{path}}",
-        "not_directory": "ワークスペースパスがディレクトリではありません: {{path}}"
       }
     },
     "settings": {
@@ -593,9 +593,6 @@
       }
     },
     "sidebar_title": "エージェント",
-    "system_agent": {
-      "auto_triggered": "[to be translated]:System Agent checked automatically"
-    },
     "todo": {
       "mock": {
         "actions": {
@@ -789,10 +786,21 @@
       "error": {
         "failed": "エージェントの更新に失敗しました"
       }
+    },
+    "warning": {
+      "enable_and_start": "有効化 & 開始",
+      "enable_server": "APIサーバーがエージェントを使用できるようにする。",
+      "enable_server_description": "エージェントを動作させるには、API サーバーを有効にする必要があります。直接有効にするか、設定から構成することができます。",
+      "server_not_running": "APIサーバーは有効になっていますが、実行されていません。サーバー設定を確認してください。",
+      "server_not_running_description": "エージェントを動作させるには、APIサーバーが稼働している必要があります。直接起動するか、設定を確認してください。"
+    },
+    "system_agent": {
+      "auto_triggered": "[to be translated]:System Agent checked automatically"
     }
   },
   "apiGateway": {
     "actions": {
+      "copy": "コピー",
       "regenerate": "再生成",
       "restart": {
         "button": "再起動",
@@ -805,6 +813,7 @@
       "title": "認証ヘッダー"
     },
     "authHeaderText": "認証ヘッダーで使用：",
+    "configuration": "設定",
     "description": "OpenAI 互換の HTTP API を通じて Cherry Studio の AI 機能を公開します",
     "documentation": {
       "title": "API ドキュメント"
@@ -818,16 +827,17 @@
       },
       "port": {
         "description": "HTTP サーバーの TCP ポート番号 (1000-65535)",
+        "helpText": "ポートを変更するにはサーバーを停止してください",
         "label": "ポート"
       },
       "url": {
+        "copyTooltip": "URL をコピー",
         "label": "URL"
       }
     },
     "messages": {
       "apiKeyCopied": "API キーがクリップボードにコピーされました",
       "apiKeyRegenerated": "API キーが再生成されました",
-      "invalidPort": "[to be translated]:Enter a port number between 1000 and 65535",
       "notEnabled": "APIサーバーが有効になっていません。",
       "operationFailed": "API サーバーの操作に失敗しました：",
       "restartError": "API サーバーの再起動に失敗しました：",
@@ -836,7 +846,9 @@
       "startError": "API サーバーの開始に失敗しました：",
       "startSuccess": "API サーバーが正常に開始されました",
       "stopError": "API サーバーの停止に失敗しました：",
-      "stopSuccess": "API サーバーが正常に停止されました"
+      "stopSuccess": "API サーバーが正常に停止されました",
+      "urlCopied": "サーバー URL がクリップボードにコピーされました",
+      "invalidPort": "[to be translated]:Enter a port number between 1000 and 65535"
     },
     "status": {
       "running": "実行中",
@@ -1269,11 +1281,11 @@
         "collapse_in": "折りたたむ",
         "collapse_out": "展開",
         "expand": "展開",
-        "external_app_not_found": "[to be translated]:External app not found: {{name}}",
         "file_not_found": "ファイルが見つかりません: {{path}}",
         "open_file": "ファイルを開く",
         "open_file_error": "ファイルを開けませんでした: {{path}}",
-        "reveal_in_finder": "Finderで表示"
+        "reveal_in_finder": "Finderで表示",
+        "external_app_not_found": "[to be translated]:External app not found: {{name}}"
       },
       "topics": " トピック ",
       "translate": "{{target_language}}に翻訳",
@@ -1659,11 +1671,12 @@
       "claude_code": "Anthropicの公式コマンドラインAIコーディングアシスタント",
       "gemini_cli": "Googleの公式Geminiコマンドラインアシスタント",
       "github_copilot_cli": "GitHubの公式Copilotコマンドラインコンパニオン",
-      "iflow_cli": "iFlowのマルチモデルコマンドラインアシスタント",
       "kimi_cli": "MoonshotのKimiコマンドラインアシスタント",
       "openai_codex": "OpenAIの公式コード生成CLI",
       "opencode": "オープンソースのマルチモデルコーディングエージェント",
-      "qwen_code": "Alibaba TongyiのオープンソースCLIコーディングツール"
+      "qoder_cli": "Alibaba Qoderの自律型コマンドラインコーディングツール",
+      "qwen_code": "Alibaba TongyiのオープンソースCLIコーディングツール",
+      "iflow_cli": "iFlowのマルチモデルコマンドラインアシスタント"
     },
     "update_options": "更新オプション",
     "working_directory": "作業ディレクトリ",
@@ -1737,7 +1750,6 @@
     "copy_failed": "コピーに失敗しました",
     "current": "現在",
     "cut": "切り取り",
-    "decline": "拒否",
     "default": "デフォルト",
     "delete": "削除",
     "delete_confirm": "削除してもよろしいですか？",
@@ -1844,7 +1856,8 @@
     "upload_image": "画像ファイルをアップロード",
     "uploaded_image": "アップロードされた画像",
     "warning": "警告",
-    "you": "あなた"
+    "you": "あなた",
+    "decline": "拒否"
   },
   "dialog": {
     "all_files": "すべてのファイル",
@@ -1919,7 +1932,6 @@
     "detail": "エラーの詳細",
     "details": "詳細",
     "diagnosis": {
-      "abnormal_finish": "応答が異常終了しました。再試行するかモデルを変更してください",
       "ai_button": "AI 診断",
       "ai_done": "診断完了",
       "ai_loading": "診断中",
@@ -1935,7 +1947,6 @@
       "model_conflict": "診断モデルとエラーモデルが同一のため、診断できません",
       "network": "サーバーに接続できません。ネットワークまたはプロキシの設定を確認してください",
       "ocr": "OCR エンジンが初期化されていません。OCR 設定を確認してください",
-      "output_truncated": "応答が最大長に達したため切り詰められました",
       "parse": "AIが無効な応答を返しました。再試行するか、別のモデルに切り替えてください。",
       "payload": "リクエスト内容が大きすぎます。ファイルまたはテキストのサイズを減らしてください。",
       "proxy": "プロキシまたはSSL証明書エラー、プロキシとネットワーク設定を確認してください",
@@ -1943,7 +1954,9 @@
       "server": "サーバーエラーが発生しました。しばらくしてから再試行してください",
       "stream": "応答が中断されました。ネットワークの安定性を確認するか、再試行してください。",
       "unknown": "エラーが発生しました",
-      "view_details": "詳細を表示"
+      "view_details": "詳細を表示",
+      "abnormal_finish": "応答が異常終了しました。再試行するかモデルを変更してください",
+      "output_truncated": "応答が最大長に達したため切り詰められました"
     },
     "errors": "エラー",
     "finishReason": "終了理由",
@@ -2051,11 +2064,11 @@
     "preview": {
       "error": "ファイルを開くのに失敗しました"
     },
-    "rename_failed": "[to be translated]:Rename failed",
     "size": "サイズ",
     "text": "テキスト",
     "title": "ファイル",
-    "type": "タイプ"
+    "type": "タイプ",
+    "rename_failed": "[to be translated]:Rename failed"
   },
   "gpustack": {
     "keep_alive_time": {
@@ -2084,10 +2097,10 @@
         "newest": "最新のものから",
         "oldest": "古いものから"
       },
-      "stats": "[to be translated]:Found {{count}} results in {{time}} seconds",
       "topics": {
         "empty": "トピックが見つかりませんでした。Enterキーを押してすべてのメッセージを検索"
-      }
+      },
+      "stats": "[to be translated]:Found {{count}} results in {{time}} seconds"
     },
     "title": "トピック検索"
   },
@@ -2185,6 +2198,7 @@
           "success": "ナレッジベースにデータソースが追加されました"
         },
         "title": "データソースを追加",
+        "unsupported_files_skipped": "サポートされていないファイル {{count}} 個をスキップしました",
         "url": {
           "description": "ウェブページのURLを入力してください：",
           "help": "ページのテキストは自動的に取得され、チャンク化され、インデックスされます",
@@ -2194,12 +2208,12 @@
         }
       },
       "bulk": {
-        "cancel": "キャンセル",
         "delete": "削除",
         "delete_confirm_description": "{{count}}件の選択したデータソースを削除しますか？この操作は取り消せません。",
         "delete_confirm_title": "選択したデータソースを削除しますか？",
         "reindex": "再インデックス",
-        "selected_count": "{{count}} 件選択"
+        "selected_count": "{{count}} 件選択",
+        "cancel": "キャンセル"
       },
       "chunks_count": "{{count}} チャンク",
       "delete_confirm_description": "このデータソースとそのインデックスデータは、削除後に回復できません。",
@@ -2264,6 +2278,7 @@
     "embedding_model_required": "ナレッジベース埋め込みモデルが必要です",
     "empty": "ナレッジベースなし",
     "error": {
+      "directory_not_migrated": "フォルダーの移行に失敗しました。削除してから再度アップロードしてください。",
       "failed_base_unknown": "このナレッジベースは移行中に失敗しました。再構築して、新しい埋め込みモデルを選択してください。",
       "failed_to_create": "ナレッジベースの作成に失敗しました",
       "failed_to_delete": "ナレッジベースの削除に失敗しました",
@@ -2496,18 +2511,6 @@
             "empty": "バインドされていません",
             "label": "MCPサーバー (id)"
           },
-          "mode": {
-            "option": {
-              "enhanced": {
-                "desc": "[to be translated]:Best for more complex scenarios. Uses the Claude Agent SDK, with stronger behavior but usually slower responses and higher token usage.",
-                "title": "[to be translated]:Enhanced mode"
-              },
-              "standard": {
-                "desc": "[to be translated]:Best for most cases. Uses Pi Agent, responds faster, uses fewer tokens, and matches the default Cherry Studio Pi experience.",
-                "title": "[to be translated]:Standard mode"
-              }
-            }
-          },
           "model": {
             "help": "UniqueModelId; 後で /models をバックエンドにしたピッカーに切り替わります",
             "hint": "主な推論と実行",
@@ -2540,6 +2543,18 @@
             "help": "有効にすると、bypassPermissions を自動的に付与します",
             "label": "ソウルモード"
           },
+          "mode": {
+            "option": {
+              "enhanced": {
+                "desc": "[to be translated]:Best for more complex scenarios. Uses the Claude Agent SDK, with stronger behavior but usually slower responses and higher token usage.",
+                "title": "[to be translated]:Enhanced mode"
+              },
+              "standard": {
+                "desc": "[to be translated]:Best for most cases. Uses Pi Agent, responds faster, uses fewer tokens, and matches the default Cherry Studio Pi experience.",
+                "title": "[to be translated]:Standard mode"
+              }
+            }
+          },
           "workspace": {
             "auto": "[to be translated]:Create a dedicated workspace automatically",
             "change": "[to be translated]:Change directory",
@@ -2560,11 +2575,6 @@
             "desc": "エージェント名、説明、およびプライマリモデル",
             "label": "基本",
             "title": "基本"
-          },
-          "mode": {
-            "desc": "[to be translated]:Choose how this agent runs under the hood",
-            "label": "[to be translated]:Runtime mode",
-            "title": "[to be translated]:Choose runtime mode"
           },
           "permission": {
             "desc": "エージェントアクションの認可範囲",
@@ -2592,6 +2602,11 @@
               "tools": "組み込みツール"
             },
             "title": "ツールとランタイム"
+          },
+          "mode": {
+            "desc": "[to be translated]:Choose how this agent runs under the hood",
+            "label": "[to be translated]:Runtime mode",
+            "title": "[to be translated]:Choose runtime mode"
           },
           "workspace": {
             "desc": "[to be translated]:Choose where this agent reads and writes local project files",
@@ -3165,10 +3180,6 @@
       "completed": "完了",
       "error": "エラーが発生しました",
       "groupHeader": "{{count}}ツール呼び出し",
-      "groupHeaderMessages": "{{count}}メッセージ",
-      "groupHeaderThinking": "{{count}}思考",
-      "groupHeaderWithDetails": "{{toolCount}}ツール呼び出し · {{thinkingCount}}思考 · {{messageCount}}メッセージ",
-      "groupHeaderWithMessages": "{{toolCount}}ツール呼び出し · {{messageCount}}メッセージ",
       "invoking": "呼び出し中",
       "labels": {
         "bash": "バッシュ",
@@ -3229,7 +3240,11 @@
         "plan_other": "{{count}}件のプラン",
         "result_one": "{{count}}件の結果",
         "result_other": "{{count}}件の結果"
-      }
+      },
+      "groupHeaderMessages": "{{count}}メッセージ",
+      "groupHeaderThinking": "{{count}}思考",
+      "groupHeaderWithDetails": "{{toolCount}}ツール呼び出し · {{thinkingCount}}思考 · {{messageCount}}メッセージ",
+      "groupHeaderWithMessages": "{{toolCount}}ツール呼び出し · {{messageCount}}メッセージ"
     },
     "topic": {
       "added": "新しいトピックが追加されました"
@@ -3650,12 +3665,6 @@
     "title": "Ollama"
   },
   "onboarding": {
-    "privacy": {
-      "accept_and_continue": "同意して続行",
-      "notice": "続行することで、あなたは以下を読み、同意したことを確認します。",
-      "period": "。",
-      "policy": "プライバシーポリシー"
-    },
     "select_model": {
       "change_later": "いつでも設定で変更できます",
       "start": "始めましょう",
@@ -3674,6 +3683,12 @@
       "setup_hint": "ベストな体験のために、少なくとも1つのプロバイダーを設定してください",
       "subtitle": "CherryINでトップクラスのAIサービスをお楽しみください",
       "title": "Cherry Studioへようこそ"
+    },
+    "privacy": {
+      "accept_and_continue": "同意して続行",
+      "notice": "続行することで、あなたは以下を読み、同意したことを確認します。",
+      "period": "。",
+      "policy": "プライバシーポリシー"
     }
   },
   "openclaw": {
@@ -4161,14 +4176,6 @@
     "source": "ソースコードを表示",
     "zoom_in": "拡大",
     "zoom_out": "縮小"
-  },
-  "privacy_policy": {
-    "title": "プライバシーポリシー"
-  },
-  "privacy_policy_update": {
-    "description_before_link": "プライバシーポリシーを更新しました。最新の ",
-    "policy": "プライバシーポリシー",
-    "title": "プライバシーポリシーが更新されました"
   },
   "prompts": {
     "explanation": "この概念を説明してください",
@@ -4821,117 +4828,6 @@
       "description": "エージェントをTelegram、Feishu、Discordなどのメッセージングプラットフォームに接続します。",
       "title": "チャンネル"
     },
-    "componentLab": {
-      "agentSelector": {
-        "clearSelection": "クリア",
-        "configDescription": "プロップを切り替えてコンポーネントの動作をプレビューする",
-        "configTitle": "設定",
-        "currentProps": "現在のプロップ",
-        "description": "AgentSelectorは、ID/アイテムの選択、ピン留め、ソート、検索動作を検証するために、リアルな/agents DataApiデータを読み込むようになりました。",
-        "emptyShellNotice": "このプレビューは、/agents DataApi から返される実際のエージェントリストを使用しています。",
-        "lastOnChange": "最新のonChange",
-        "previewDescription": "トリガーをクリックしてセレクタを開きます",
-        "previewTitle": "プレビュー",
-        "title": "エージェントセレクター",
-        "triggerPlaceholder": "エージェントを選択してください",
-        "valueProp": "現在値"
-      },
-      "agentTodoList": {
-        "title": "エージェントのToDoリスト"
-      },
-      "assistantSelector": {
-        "clearSelection": "クリア",
-        "configDescription": "プロパティを切り替えてコンポーネントの動作をプレビューする",
-        "configTitle": "設定",
-        "currentProps": "現在のプロップ",
-        "description": "AssistantSelectorのビジネスコンポーネントを直接マウントし、複数/単一、ID/項目、ピン留め、ソート、検索の動作を検証します。",
-        "lastOnChange": "最新のonChange",
-        "previewDescription": "トリガーをクリックしてセレクターを開きます",
-        "previewTitle": "プレビュー",
-        "title": "アシスタントセレクター",
-        "triggerPlaceholder": "アシスタントを選択してください",
-        "triggerSelectedCount": "{{count}}人のアシスタントが選択されました",
-        "valueProp": "現在の値"
-      },
-      "description": "開発環境でのみ表示され、アプリ内で直接新しいモデルセレクタをテストするためのものです。",
-      "fileProcessing": {
-        "artifact": {
-          "file": "Markdownファイル",
-          "text": "テキスト結果"
-        },
-        "description": "設定済みのすべてのファイルプロセッサーを実際のファイル処理 IPC を通じて実行し、結果を比較します。",
-        "duration": "{{seconds}}秒",
-        "jobId": "ジョブID",
-        "markdown": {
-          "description": "ドキュメントを選択し、すべてのドキュメント→マークダウンプロセッサーを実行します。",
-          "fileFilterName": "文書",
-          "noFile": "文書が選択されていません",
-          "select": "ドキュメントを選択",
-          "start": "Test markdown",
-          "title": "Markdown"
-        },
-        "noProcessors": "この機能をサポートするプロセッサはありません。",
-        "ocr": {
-          "description": "画像を選択して、すべてのOCRプロセッサを実行します。",
-          "fileFilterName": "画像",
-          "noFile": "画像が選択されていません",
-          "select": "画像を選択",
-          "start": "テストOCR",
-          "title": "OCR"
-        },
-        "processorCount": "{{count}} プロセッサ",
-        "status": {
-          "cancelled": "キャンセル",
-          "completed": "完了",
-          "delayed": "遅延",
-          "failed": "失敗",
-          "idle": "アイドル",
-          "pending": "保留中",
-          "processing": "処理",
-          "running": "走っている",
-          "starting": "開始"
-        },
-        "title": "ドキュメント解析"
-      },
-      "label": "コンポーネントラボ",
-      "modelSelector": {
-        "behaviorConfig": "動作と表示設定",
-        "callbackEmpty": "まだコンポーネントコールバックを受信していません",
-        "clearSelection": "選択をクリア",
-        "configDescription": "上記のキー ModelSelector プロパティを切り替え、下記の入力値とコールバックのペイロードを確認してください。",
-        "configTitle": "プロップス プレイグラウンド",
-        "controlMultiSelectMode": "制御された複数選択モード",
-        "currentProps": "現在のプロップ",
-        "defaultMultiSelectMode": "デフォルトマルチセレクトモード",
-        "description": "このページでは、現在の ModelSelector ビジネスコンポーネントを直接マウントして、選択、フィルタリング、検索、ピン留めの動作を確認できます。",
-        "empty": "現在利用可能なモデルがないため、セレクターはまだ表示できません。",
-        "lastModeChangeReturn": "最新の onMultiSelectModeChange 戻り値",
-        "lastSelectReturn": "最新のonSelect戻り値",
-        "loading": "モデルを読み込んでいます...",
-        "modelId": "モデルID",
-        "multiSelectMode": "マルチセレクトモード",
-        "multiple": "複数",
-        "normalizedIds": "正規化された選択されたID",
-        "outputEmpty": "まだ表示するデータがありません",
-        "provider": "プロバイダー",
-        "resetOutputs": "出力をリセット",
-        "resultsDescription": "これは現在の値のプロップ、正規化された選択されたID、およびコンポーネントからの最新のコールバック出力を示しています。",
-        "resultsTitle": "出力と状態",
-        "selected": "現在の選択",
-        "selectedEmpty": "モデルがまだ選択されていません",
-        "selectionConfig": "選択値設定",
-        "selectionType": "選択タイプ",
-        "selectionTypeId": "モデルIDを返す",
-        "selectionTypeModel": "モデルオブジェクトを返す",
-        "showPinnedModels": "固定されたモデルを表示",
-        "showTagFilter": "タグフィルターを表示",
-        "title": "モデルセレクター",
-        "triggerPlaceholder": "モデルを選択してください",
-        "triggerSelectedCount": "{{count}}件のモデルが選択されています",
-        "valueProp": "現在のバリュープロポジション"
-      },
-      "title": "開発コンポーネントラボ"
-    },
     "data": {
       "app_data": {
         "copy_data_option": "データをコピーする, 開くと元のディレクトリのデータが新しいディレクトリにコピーされます。",
@@ -4977,96 +4873,6 @@
       },
       "data": {
         "title": "データディレクトリ"
-      },
-      "data_sync": {
-        "auto_sync": "[to be translated]:Auto Sync",
-        "current_device": "[to be translated]:Current Device",
-        "diagnose": "[to be translated]:Diagnose",
-        "diagnosis": {
-          "checked_at": "[to be translated]:Checked at: {{time}}",
-          "device": "[to be translated]:Device: {{deviceId}}",
-          "title": "[to be translated]:WebDAV Diagnosis",
-          "write_path": "[to be translated]:Write path: {{path}}",
-          "write_success": "[to be translated]:WebDAV connection and write access are available."
-        },
-        "effective_path": "[to be translated]:Effective Sync Path",
-        "effective_path_help": "[to be translated]:This is the final WebDAV directory Cherry Studio Pi will read and write.",
-        "help": "[to be translated]:Sync local settings, providers, assistants, agents, conversations, knowledge data, notes, and runtime metadata through WebDAV.",
-        "interval": {
-          "day_one": "[to be translated]:Every day",
-          "hour_one": "[to be translated]:Every hour",
-          "hour_other": "[to be translated]:Every {{count}} hours",
-          "minute_one": "[to be translated]:Every minute",
-          "minute_other": "[to be translated]:Every {{count}} minutes",
-          "off": "[to be translated]:Off"
-        },
-        "last_result": "[to be translated]:Latest Result",
-        "method": "[to be translated]:Sync Method",
-        "method_value": "[to be translated]:WebDAV",
-        "password": "[to be translated]:Password",
-        "password_placeholder": "[to be translated]:WebDAV password",
-        "refresh_status": "[to be translated]:Refresh Status",
-        "remote_browser": {
-          "current_path": "[to be translated]:Current path: {{path}}",
-          "empty": "[to be translated]:No folders found",
-          "error_title": "[to be translated]:Unable to load remote directory",
-          "path_hint": "[to be translated]:You can continue using the configured path: {{path}}",
-          "path_hint_title": "[to be translated]:Directory path",
-          "refresh": "[to be translated]:Refresh",
-          "select": "[to be translated]:Select",
-          "select_current": "[to be translated]:Select Current",
-          "title": "[to be translated]:Browse WebDAV Directory",
-          "use_current_path": "[to be translated]:Use configured path",
-          "use_root": "[to be translated]:Use root"
-        },
-        "remote_path": "[to be translated]:Sync Directory",
-        "remote_path_browse": "[to be translated]:Browse",
-        "remote_path_help": "[to be translated]:Choose a dedicated WebDAV directory. Use the same directory on every device that should sync together.",
-        "restore_confirm_content": "[to be translated]:Restore the latest remote safety snapshot to this device? Current local data may be overwritten.",
-        "restore_confirm_title": "[to be translated]:Restore Latest Snapshot",
-        "restore_latest": "[to be translated]:Restore Latest",
-        "snapshot": {
-          "join_safety": "[to be translated]:Local safety snapshot: {{file}} ({{size}})",
-          "open_local": "[to be translated]:Show local snapshot",
-          "uploaded": "[to be translated]:Remote safety snapshot: {{file}} ({{size}})"
-        },
-        "storage": {
-          "blobs": "[to be translated]:Files: uploaded {{uploaded}}, downloaded {{downloaded}}",
-          "conflicts": "[to be translated]:Storage conflicts: {{count}}",
-          "records": "[to be translated]:Storage records: uploaded {{uploaded}}, downloaded {{downloaded}}",
-          "resolved_conflicts": "[to be translated]:Resolved storage conflicts: {{count}}"
-        },
-        "summary": {
-          "conflicts": "[to be translated]:Conflicts: {{count}}",
-          "deleted": "[to be translated]:Deleted: {{count}}",
-          "downloaded": "[to be translated]:Downloaded: {{count}}",
-          "error": "[to be translated]:Error: {{message}}",
-          "remote_path": "[to be translated]:Remote path: {{path}}",
-          "resolved_conflicts": "[to be translated]:Resolved conflicts: {{count}}",
-          "status_failed": "[to be translated]:Failed",
-          "status_success": "[to be translated]:Success",
-          "uploaded": "[to be translated]:Uploaded: {{count}}"
-        },
-        "sync": "[to be translated]:Sync",
-        "sync_now": "[to be translated]:Manual Sync",
-        "title": "[to be translated]:Data Sync",
-        "toast": {
-          "diagnose_failed": "[to be translated]:Diagnosis failed: {{message}}",
-          "diagnose_success": "[to be translated]:Diagnosis passed",
-          "open_snapshot_failed": "[to be translated]:Failed to open local safety snapshot: {{message}}",
-          "remote_path_selected": "[to be translated]:Selected WebDAV directory: {{path}}",
-          "restore_failed": "[to be translated]:Restore failed: {{message}}",
-          "restore_success": "[to be translated]:Restore completed",
-          "sync_failed": "[to be translated]:Data sync failed: {{message}}",
-          "sync_running": "[to be translated]:Data sync is still running.",
-          "sync_success": "[to be translated]:Data sync completed.",
-          "webdav_required": "[to be translated]:Please configure the WebDAV host, username, and password first."
-        },
-        "uninitialized": "[to be translated]:Not initialized",
-        "unresolved_conflicts": "[to be translated]:Unresolved Conflicts",
-        "username": "[to be translated]:Username",
-        "username_placeholder": "[to be translated]:WebDAV username",
-        "webdav_host": "[to be translated]:WebDAV Host"
       },
       "divider": {
         "basic": "基本データ設定",
@@ -5632,6 +5438,96 @@
         "title": "Yuque設定",
         "token": "Yuqueトークン",
         "token_placeholder": "Yuqueトークンを入力してください"
+      },
+      "data_sync": {
+        "auto_sync": "[to be translated]:Auto Sync",
+        "current_device": "[to be translated]:Current Device",
+        "diagnose": "[to be translated]:Diagnose",
+        "diagnosis": {
+          "checked_at": "[to be translated]:Checked at: {{time}}",
+          "device": "[to be translated]:Device: {{deviceId}}",
+          "title": "[to be translated]:WebDAV Diagnosis",
+          "write_path": "[to be translated]:Write path: {{path}}",
+          "write_success": "[to be translated]:WebDAV connection and write access are available."
+        },
+        "effective_path": "[to be translated]:Effective Sync Path",
+        "effective_path_help": "[to be translated]:This is the final WebDAV directory Cherry Studio Pi will read and write.",
+        "help": "[to be translated]:Sync local settings, providers, assistants, agents, conversations, knowledge data, notes, and runtime metadata through WebDAV.",
+        "interval": {
+          "day_one": "[to be translated]:Every day",
+          "hour_one": "[to be translated]:Every hour",
+          "hour_other": "[to be translated]:Every {{count}} hours",
+          "minute_one": "[to be translated]:Every minute",
+          "minute_other": "[to be translated]:Every {{count}} minutes",
+          "off": "[to be translated]:Off"
+        },
+        "last_result": "[to be translated]:Latest Result",
+        "method": "[to be translated]:Sync Method",
+        "method_value": "[to be translated]:WebDAV",
+        "password": "[to be translated]:Password",
+        "password_placeholder": "[to be translated]:WebDAV password",
+        "refresh_status": "[to be translated]:Refresh Status",
+        "remote_browser": {
+          "current_path": "[to be translated]:Current path: {{path}}",
+          "empty": "[to be translated]:No folders found",
+          "error_title": "[to be translated]:Unable to load remote directory",
+          "path_hint": "[to be translated]:You can continue using the configured path: {{path}}",
+          "path_hint_title": "[to be translated]:Directory path",
+          "refresh": "[to be translated]:Refresh",
+          "select": "[to be translated]:Select",
+          "select_current": "[to be translated]:Select Current",
+          "title": "[to be translated]:Browse WebDAV Directory",
+          "use_current_path": "[to be translated]:Use configured path",
+          "use_root": "[to be translated]:Use root"
+        },
+        "remote_path": "[to be translated]:Sync Directory",
+        "remote_path_browse": "[to be translated]:Browse",
+        "remote_path_help": "[to be translated]:Choose a dedicated WebDAV directory. Use the same directory on every device that should sync together.",
+        "restore_confirm_content": "[to be translated]:Restore the latest remote safety snapshot to this device? Current local data may be overwritten.",
+        "restore_confirm_title": "[to be translated]:Restore Latest Snapshot",
+        "restore_latest": "[to be translated]:Restore Latest",
+        "snapshot": {
+          "join_safety": "[to be translated]:Local safety snapshot: {{file}} ({{size}})",
+          "open_local": "[to be translated]:Show local snapshot",
+          "uploaded": "[to be translated]:Remote safety snapshot: {{file}} ({{size}})"
+        },
+        "storage": {
+          "blobs": "[to be translated]:Files: uploaded {{uploaded}}, downloaded {{downloaded}}",
+          "conflicts": "[to be translated]:Storage conflicts: {{count}}",
+          "records": "[to be translated]:Storage records: uploaded {{uploaded}}, downloaded {{downloaded}}",
+          "resolved_conflicts": "[to be translated]:Resolved storage conflicts: {{count}}"
+        },
+        "summary": {
+          "conflicts": "[to be translated]:Conflicts: {{count}}",
+          "deleted": "[to be translated]:Deleted: {{count}}",
+          "downloaded": "[to be translated]:Downloaded: {{count}}",
+          "error": "[to be translated]:Error: {{message}}",
+          "remote_path": "[to be translated]:Remote path: {{path}}",
+          "resolved_conflicts": "[to be translated]:Resolved conflicts: {{count}}",
+          "status_failed": "[to be translated]:Failed",
+          "status_success": "[to be translated]:Success",
+          "uploaded": "[to be translated]:Uploaded: {{count}}"
+        },
+        "sync": "[to be translated]:Sync",
+        "sync_now": "[to be translated]:Manual Sync",
+        "title": "[to be translated]:Data Sync",
+        "toast": {
+          "diagnose_failed": "[to be translated]:Diagnosis failed: {{message}}",
+          "diagnose_success": "[to be translated]:Diagnosis passed",
+          "open_snapshot_failed": "[to be translated]:Failed to open local safety snapshot: {{message}}",
+          "remote_path_selected": "[to be translated]:Selected WebDAV directory: {{path}}",
+          "restore_failed": "[to be translated]:Restore failed: {{message}}",
+          "restore_success": "[to be translated]:Restore completed",
+          "sync_failed": "[to be translated]:Data sync failed: {{message}}",
+          "sync_running": "[to be translated]:Data sync is still running.",
+          "sync_success": "[to be translated]:Data sync completed.",
+          "webdav_required": "[to be translated]:Please configure the WebDAV host, username, and password first."
+        },
+        "uninitialized": "[to be translated]:Not initialized",
+        "unresolved_conflicts": "[to be translated]:Unresolved Conflicts",
+        "username": "[to be translated]:Username",
+        "username_placeholder": "[to be translated]:WebDAV username",
+        "webdav_host": "[to be translated]:WebDAV Host"
       }
     },
     "developer": {
@@ -6012,11 +5908,11 @@
         "selectProvider": "プロバイダーを選択：",
         "setToken": "トークンを入力してください",
         "success": "MCPサーバーの同期成功",
-        "timeout": "[to be translated]:Sync timed out after {{seconds}}s. Please check your network connection and try again.",
         "title": "サーバーの同期",
         "tokenPlaceholder": "ここに API トークンを入力してください",
         "tokenRequired": "API トークンは必須です",
-        "unauthorized": "同期が許可されていません"
+        "unauthorized": "同期が許可されていません",
+        "timeout": "[to be translated]:Sync timed out after {{seconds}}s. Please check your network connection and try again."
       },
       "system": "システム",
       "tabs": {
@@ -6206,6 +6102,7 @@
       "disabled": "隠しミニアプリ",
       "display_title": "ミニアプリ表示設定",
       "empty": "左側のアプリの非表示アイコンをクリックすると、ここに移動します",
+      "hide_app": "{{name}}を隠す",
       "open_link_external": {
         "title": "ブラウザで新しいウィンドウのリンクを開く"
       },
@@ -6217,6 +6114,7 @@
         "title": "ミニプログラムフィルター"
       },
       "reset_tooltip": "デフォルトにリセット",
+      "show_app": "{{name}}を表示",
       "sidebar_description": "サイドバーにアクティブなミニアプリを表示",
       "sidebar_title": "サイドバー アクティブ ミニアプリ表示",
       "title": "ミニアプリの設定",
@@ -6264,11 +6162,11 @@
           "placeholder": "例：GPT-4",
           "tooltip": "例：GPT-4"
         },
-        "provider_enable_failed": "[to be translated]:The model was added, but the provider could not be enabled. Enable this provider first, otherwise these models will not appear in Chat or Agent model selectors.",
         "supported_text_delta": {
           "label": "インクリメンタルテキスト出力のサポート",
           "tooltip": "モデルがテキストをチャンクで返す場合、デフォルトで有効になっています。モデルがサポートしていない場合は、このオプションを無効にしてください"
-        }
+        },
+        "provider_enable_failed": "[to be translated]:The model was added, but the provider could not be enabled. Enable this provider first, otherwise these models will not appear in Chat or Agent model selectors."
       },
       "api_key": "API キー",
       "base_url": "ベース URL",
@@ -6519,7 +6417,8 @@
       "add": {
         "name": {
           "label": "プロバイダー名",
-          "placeholder": "例：OpenAI"
+          "placeholder": "例：OpenAI",
+          "required": "プロバイダー名を入力してください"
         },
         "title": "プロバイダーを追加",
         "type": "プロバイダータイプ"
@@ -6630,7 +6529,8 @@
       "balance": "バランス",
       "base_url": {
         "label": "ベースURL",
-        "placeholder": "https://api.example.com"
+        "placeholder": "https://api.example.com",
+        "required": "Base URLを入力してください"
       },
       "basic_auth": {
         "label": "HTTP 認証",
@@ -6707,7 +6607,6 @@
         "content": "このプロバイダーを削除してもよろしいですか？",
         "title": "プロバイダーを削除"
       },
-      "delete_failed": "[to be translated]:Failed to delete provider",
       "dmxapi": {
         "platform_enterprise": "ssvip.DMXAPI.com（エンタープライズ）",
         "platform_international": "www.DMXAPI.com（インターナショナル）",
@@ -6827,7 +6726,8 @@
           "toggle_private_key_visibility": "[to be translated]:Toggle private key visibility",
           "toggle_project_id_visibility": "[to be translated]:Toggle project ID visibility"
         }
-      }
+      },
+      "delete_failed": "[to be translated]:Failed to delete provider"
     },
     "proxy": {
       "address": "プロキシアドレス",
@@ -6998,10 +6898,12 @@
         },
         "features": {
           "document_to_markdown": {
-            "title": "ドキュメント処理"
+            "title": "ドキュメント処理",
+            "tooltip": "ナレッジベースでドキュメントを解析するために使用します"
           },
           "image_to_text": {
-            "title": "OCR"
+            "title": "OCR",
+            "tooltip": "翻訳機能で画像内の文字を認識するために使用します"
           }
         },
         "fields": {
@@ -7213,6 +7115,117 @@
     "zoom": {
       "reset": "リセット",
       "title": "ページズーム"
+    },
+    "componentLab": {
+      "agentSelector": {
+        "clearSelection": "クリア",
+        "configDescription": "プロップを切り替えてコンポーネントの動作をプレビューする",
+        "configTitle": "設定",
+        "currentProps": "現在のプロップ",
+        "description": "AgentSelectorは、ID/アイテムの選択、ピン留め、ソート、検索動作を検証するために、リアルな/agents DataApiデータを読み込むようになりました。",
+        "emptyShellNotice": "このプレビューは、/agents DataApi から返される実際のエージェントリストを使用しています。",
+        "lastOnChange": "最新のonChange",
+        "previewDescription": "トリガーをクリックしてセレクタを開きます",
+        "previewTitle": "プレビュー",
+        "title": "エージェントセレクター",
+        "triggerPlaceholder": "エージェントを選択してください",
+        "valueProp": "現在値"
+      },
+      "agentTodoList": {
+        "title": "エージェントのToDoリスト"
+      },
+      "assistantSelector": {
+        "clearSelection": "クリア",
+        "configDescription": "プロパティを切り替えてコンポーネントの動作をプレビューする",
+        "configTitle": "設定",
+        "currentProps": "現在のプロップ",
+        "description": "AssistantSelectorのビジネスコンポーネントを直接マウントし、複数/単一、ID/項目、ピン留め、ソート、検索の動作を検証します。",
+        "lastOnChange": "最新のonChange",
+        "previewDescription": "トリガーをクリックしてセレクターを開きます",
+        "previewTitle": "プレビュー",
+        "title": "アシスタントセレクター",
+        "triggerPlaceholder": "アシスタントを選択してください",
+        "triggerSelectedCount": "{{count}}人のアシスタントが選択されました",
+        "valueProp": "現在の値"
+      },
+      "description": "開発環境でのみ表示され、アプリ内で直接新しいモデルセレクタをテストするためのものです。",
+      "fileProcessing": {
+        "artifact": {
+          "file": "Markdownファイル",
+          "text": "テキスト結果"
+        },
+        "description": "設定済みのすべてのファイルプロセッサーを実際のファイル処理 IPC を通じて実行し、結果を比較します。",
+        "duration": "{{seconds}}秒",
+        "jobId": "ジョブID",
+        "markdown": {
+          "description": "ドキュメントを選択し、すべてのドキュメント→マークダウンプロセッサーを実行します。",
+          "fileFilterName": "文書",
+          "noFile": "文書が選択されていません",
+          "select": "ドキュメントを選択",
+          "start": "Test markdown",
+          "title": "Markdown"
+        },
+        "noProcessors": "この機能をサポートするプロセッサはありません。",
+        "ocr": {
+          "description": "画像を選択して、すべてのOCRプロセッサを実行します。",
+          "fileFilterName": "画像",
+          "noFile": "画像が選択されていません",
+          "select": "画像を選択",
+          "start": "テストOCR",
+          "title": "OCR"
+        },
+        "processorCount": "{{count}} プロセッサ",
+        "status": {
+          "cancelled": "キャンセル",
+          "completed": "完了",
+          "delayed": "遅延",
+          "failed": "失敗",
+          "idle": "アイドル",
+          "pending": "保留中",
+          "processing": "処理",
+          "running": "走っている",
+          "starting": "開始"
+        },
+        "title": "ドキュメント解析"
+      },
+      "label": "コンポーネントラボ",
+      "modelSelector": {
+        "behaviorConfig": "動作と表示設定",
+        "callbackEmpty": "まだコンポーネントコールバックを受信していません",
+        "clearSelection": "選択をクリア",
+        "configDescription": "上記のキー ModelSelector プロパティを切り替え、下記の入力値とコールバックのペイロードを確認してください。",
+        "configTitle": "プロップス プレイグラウンド",
+        "controlMultiSelectMode": "制御された複数選択モード",
+        "currentProps": "現在のプロップ",
+        "defaultMultiSelectMode": "デフォルトマルチセレクトモード",
+        "description": "このページでは、現在の ModelSelector ビジネスコンポーネントを直接マウントして、選択、フィルタリング、検索、ピン留めの動作を確認できます。",
+        "empty": "現在利用可能なモデルがないため、セレクターはまだ表示できません。",
+        "lastModeChangeReturn": "最新の onMultiSelectModeChange 戻り値",
+        "lastSelectReturn": "最新のonSelect戻り値",
+        "loading": "モデルを読み込んでいます...",
+        "modelId": "モデルID",
+        "multiSelectMode": "マルチセレクトモード",
+        "multiple": "複数",
+        "normalizedIds": "正規化された選択されたID",
+        "outputEmpty": "まだ表示するデータがありません",
+        "provider": "プロバイダー",
+        "resetOutputs": "出力をリセット",
+        "resultsDescription": "これは現在の値のプロップ、正規化された選択されたID、およびコンポーネントからの最新のコールバック出力を示しています。",
+        "resultsTitle": "出力と状態",
+        "selected": "現在の選択",
+        "selectedEmpty": "モデルがまだ選択されていません",
+        "selectionConfig": "選択値設定",
+        "selectionType": "選択タイプ",
+        "selectionTypeId": "モデルIDを返す",
+        "selectionTypeModel": "モデルオブジェクトを返す",
+        "showPinnedModels": "固定されたモデルを表示",
+        "showTagFilter": "タグフィルターを表示",
+        "title": "モデルセレクター",
+        "triggerPlaceholder": "モデルを選択してください",
+        "triggerSelectedCount": "{{count}}件のモデルが選択されています",
+        "valueProp": "現在のバリュープロポジション"
+      },
+      "title": "開発コンポーネントラボ"
     }
   },
   "tab": {
@@ -7449,5 +7462,13 @@
     "quit": "終了",
     "show_window": "ウィンドウを表示",
     "visualization": "可視化"
+  },
+  "privacy_policy": {
+    "title": "プライバシーポリシー"
+  },
+  "privacy_policy_update": {
+    "description_before_link": "プライバシーポリシーを更新しました。最新の ",
+    "policy": "プライバシーポリシー",
+    "title": "プライバシーポリシーが更新されました"
   }
 }

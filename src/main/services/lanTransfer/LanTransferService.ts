@@ -5,7 +5,7 @@ import { application } from '@application'
 import { loggerService } from '@logger'
 import { BaseService, DependsOn, Injectable, Phase, ServicePhase } from '@main/core/lifecycle'
 import { WindowType } from '@main/core/window/types'
-import { summarizeTextForLog } from '@main/utils/logging'
+import { IpcChannel } from '@shared/IpcChannel'
 import type {
   LanClientEvent,
   LanFileCompleteMessage,
@@ -13,9 +13,8 @@ import type {
   LanTransferConnectPayload,
   LanTransferPeer,
   LanTransferState
-} from '@shared/config/types'
-import { LAN_TRANSFER_GLOBAL_TIMEOUT_MS } from '@shared/config/types'
-import { IpcChannel } from '@shared/IpcChannel'
+} from '@shared/types/lanTransfer'
+import { LAN_TRANSFER_GLOBAL_TIMEOUT_MS } from '@shared/types/lanTransfer'
 import type { Browser, Service } from 'bonjour-service'
 import Bonjour from 'bonjour-service'
 
@@ -43,17 +42,6 @@ import type { ActiveFileTransfer, ConnectionContext, FileTransferContext } from 
 const DISCOVERY_SERVICE_TYPE = 'cherrystudio'
 const DISCOVERY_SERVICE_PROTOCOL = 'tcp' as const
 const DEFAULT_HANDSHAKE_TIMEOUT_MS = 10_000
-
-function summarizeControlPayload(payload: Record<string, unknown>): Record<string, unknown> {
-  const keys = Object.keys(payload).sort()
-  return {
-    type: typeof payload.type === 'string' ? payload.type : undefined,
-    transferId: typeof payload.transferId === 'string' ? summarizeTextForLog(payload.transferId) : undefined,
-    chunkIndex: typeof payload.chunkIndex === 'number' ? payload.chunkIndex : undefined,
-    keys,
-    keyCount: keys.length
-  }
-}
 
 const logger = loggerService.withContext('LanTransferService')
 
@@ -92,7 +80,6 @@ export class LanTransferService extends BaseService {
   private dataHandler?: ReturnType<typeof createDataHandler>
   private responseManager = new ResponseManager()
   private isConnecting = false
-  private isPreparingTransfer = false
   private activeTransfer?: ActiveFileTransfer
   private lastConnectOptions?: LanTransferConnectPayload
   private consecutiveJsonErrors = 0
@@ -119,7 +106,6 @@ export class LanTransferService extends BaseService {
     }
     this.dataHandler?.resetBuffer()
     this.isConnecting = false
-    this.isPreparingTransfer = false
 
     // Clean up discovery resources
     this.stopDiscovery()
@@ -450,7 +436,6 @@ export class LanTransferService extends BaseService {
         socket.removeAllListeners()
         resolve()
       }, DISCONNECT_TIMEOUT_MS)
-      timeout.unref?.()
 
       socket.once('close', () => {
         clearTimeout(timeout)
@@ -467,66 +452,57 @@ export class LanTransferService extends BaseService {
   public async sendFile(filePath: string): Promise<LanFileCompleteMessage> {
     await this.ensureConnection()
 
-    if (this.isPreparingTransfer || this.activeTransfer) {
+    if (this.activeTransfer) {
       throw new Error('A file transfer is already in progress')
     }
 
-    this.isPreparingTransfer = true
-    let transfer: ActiveFileTransfer | undefined
-    let globalTimeoutHandle: ReturnType<typeof setTimeout> | undefined
+    // Validate file
+    const { stats, fileName } = await validateFile(filePath)
+
+    // Calculate checksum
+    logger.info('Calculating file checksum...')
+    const checksum = await calculateFileChecksum(filePath)
+    logger.info(`File checksum: ${checksum.substring(0, 16)}...`)
+
+    // Connection can drop while validating/checking file; ensure it is still ready before starting transfer.
+    await this.ensureConnection()
+
+    // Initialize transfer state
+    const transferId = crypto.randomUUID()
+    this.activeTransfer = createTransferState(transferId, fileName, stats.size, checksum)
+
+    logger.info(
+      `Starting file transfer: ${fileName} (${formatFileSize(stats.size)}, ${this.activeTransfer.totalChunks} chunks)`
+    )
+
+    // Global timeout
+    const globalTimeoutError = new Error('Transfer timed out (global timeout exceeded)')
+    const globalTimeoutHandle = setTimeout(() => {
+      logger.warn('Global transfer timeout exceeded, aborting transfer', { transferId, fileName })
+      abortTransfer(this.activeTransfer, globalTimeoutError)
+    }, LAN_TRANSFER_GLOBAL_TIMEOUT_MS)
 
     try {
-      // Validate file
-      const { stats, fileName } = await validateFile(filePath)
-
-      // Calculate checksum
-      logger.info('Calculating file checksum...')
-      const checksum = await calculateFileChecksum(filePath)
-      logger.info(`File checksum: ${checksum.substring(0, 16)}...`)
-
-      // Connection can drop while validating/checking file; ensure it is still ready before starting transfer.
-      await this.ensureConnection()
-
-      // Initialize transfer state
-      const transferId = crypto.randomUUID()
-      transfer = createTransferState(transferId, fileName, stats.size, checksum)
-      this.activeTransfer = transfer
-
-      logger.info(`Starting file transfer: ${fileName} (${formatFileSize(stats.size)}, ${transfer.totalChunks} chunks)`)
-
-      // Global timeout
-      const globalTimeoutError = new Error('Transfer timed out (global timeout exceeded)')
-      globalTimeoutHandle = setTimeout(() => {
-        logger.warn('Global transfer timeout exceeded, aborting transfer', { transferId, fileName })
-        abortTransfer(transfer, globalTimeoutError)
-      }, LAN_TRANSFER_GLOBAL_TIMEOUT_MS)
-      globalTimeoutHandle.unref?.()
-
-      const result = await this.performFileTransfer(filePath, transfer)
+      const result = await this.performFileTransfer(filePath, transferId, fileName)
       return result
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       logger.error(`File transfer failed: ${message}`)
 
-      if (transfer) {
-        this.broadcastClientEvent({
-          type: 'file_transfer_complete',
-          transferId: transfer.transferId,
-          fileName: transfer.fileName,
-          success: false,
-          error: message,
-          timestamp: Date.now()
-        })
-      }
+      this.broadcastClientEvent({
+        type: 'file_transfer_complete',
+        transferId,
+        fileName,
+        success: false,
+        error: message,
+        timestamp: Date.now()
+      })
 
       throw error
     } finally {
-      if (globalTimeoutHandle) clearTimeout(globalTimeoutHandle)
-      cleanupTransfer(transfer)
-      if (this.activeTransfer === transfer) {
-        this.activeTransfer = undefined
-      }
-      this.isPreparingTransfer = false
+      clearTimeout(globalTimeoutHandle)
+      cleanupTransfer(this.activeTransfer)
+      this.activeTransfer = undefined
     }
   }
 
@@ -591,8 +567,12 @@ export class LanTransferService extends BaseService {
     await this.reconnectPromise
   }
 
-  private async performFileTransfer(filePath: string, transfer: ActiveFileTransfer): Promise<LanFileCompleteMessage> {
-    const { transferId, fileName } = transfer
+  private async performFileTransfer(
+    filePath: string,
+    transferId: string,
+    fileName: string
+  ): Promise<LanFileCompleteMessage> {
+    const transfer = this.activeTransfer!
     const ctx = this.createFileTransferContext()
 
     // Step 1: Send file_start
@@ -669,10 +649,7 @@ export class LanTransferService extends BaseService {
       this.consecutiveJsonErrors = 0 // Reset on successful parse
     } catch {
       this.consecutiveJsonErrors++
-      logger.warn('Received invalid JSON control message', {
-        line: summarizeTextForLog(line),
-        consecutiveErrors: this.consecutiveJsonErrors
-      })
+      logger.warn('Received invalid JSON control message', { line, consecutiveErrors: this.consecutiveJsonErrors })
 
       if (this.consecutiveJsonErrors >= LanTransferService.MAX_CONSECUTIVE_JSON_ERRORS) {
         const message = `Protocol error: ${this.consecutiveJsonErrors} consecutive invalid messages, disconnecting`
@@ -689,7 +666,7 @@ export class LanTransferService extends BaseService {
 
     const type = payload?.type as string | undefined
     if (!type) {
-      logger.warn('Received control message without type', summarizeControlPayload(payload))
+      logger.warn('Received control message without type', payload)
       return
     }
 
@@ -700,7 +677,7 @@ export class LanTransferService extends BaseService {
       return
     }
 
-    logger.info('Received control message', summarizeControlPayload(payload))
+    logger.info('Received control message', payload)
 
     if (type === 'pong') {
       this.broadcastClientEvent({
@@ -715,7 +692,7 @@ export class LanTransferService extends BaseService {
     // Ignore late-arriving file transfer messages
     const fileTransferMessageTypes = ['file_start_ack', 'file_complete']
     if (fileTransferMessageTypes.includes(type)) {
-      logger.debug('Ignoring late file transfer message', summarizeControlPayload(payload))
+      logger.debug('Ignoring late file transfer message', { type, payload })
       return
     }
 

@@ -1,4 +1,5 @@
-import type { Assistant, Model, Provider } from '@types'
+import type { Model, Provider } from '@main/data/migration/v2/legacyTypes'
+import type { Assistant } from '@shared/data/types/assistant'
 
 import type { ProviderConfig } from '../types'
 

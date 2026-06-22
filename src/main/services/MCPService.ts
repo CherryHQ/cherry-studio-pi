@@ -1,7 +1,8 @@
 import { application } from '@application'
 import { mcpServerService } from '@data/services/McpServerService'
 import { loggerService } from '@logger'
-import type { McpCallToolResponse, McpTool } from '@types'
+import type { McpCallToolResponse } from '@main/ai/mcp/types'
+import type { McpTool } from '@shared/types/mcp'
 
 const logger = loggerService.withContext('MCPServiceCompat')
 

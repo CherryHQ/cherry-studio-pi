@@ -1,5 +1,5 @@
-import { FILE_TYPE } from '@shared/file/types'
-import type { SupportedOcrFile } from '@types'
+import { FILE_TYPE } from '@shared/types/file'
+import type { SupportedOcrFile } from '@shared/types/ocr'
 import { execFile } from 'child_process'
 import fs from 'fs'
 import os from 'os'

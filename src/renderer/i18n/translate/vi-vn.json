@@ -390,9 +390,6 @@
       },
       "label_one": "Phiên",
       "label_other": " sessions",
-      "orphan": {
-        "message": "[to be translated]:This session's agent is missing. The conversation is read-only until you switch to another session or create a new one."
-      },
       "reorder": {
         "error": {
           "failed": "Không thể sắp xếp lại các phiên"
@@ -403,17 +400,20 @@
           "failed": "Không cập nhật được phiên"
         }
       },
+      "workspace_status": {
+        "inaccessible": "Đường dẫn không gian làm việc không thể truy cập: {{path}}",
+        "missing": "Đường dẫn không gian làm việc không tồn tại: {{path}}",
+        "not_directory": "Đường dẫn không gian làm việc không phải là thư mục: {{path}}"
+      },
+      "orphan": {
+        "message": "[to be translated]:This session's agent is missing. The conversation is read-only until you switch to another session or create a new one."
+      },
       "workspace": {
         "change": "[to be translated]:Change workspace",
         "create_failed": "[to be translated]:Failed to create workspace",
         "select": "[to be translated]:Select workspace",
         "select_failed": "[to be translated]:Failed to select workspace",
         "updated": "[to be translated]:Workspace updated"
-      },
-      "workspace_status": {
-        "inaccessible": "Đường dẫn không gian làm việc không thể truy cập: {{path}}",
-        "missing": "Đường dẫn không gian làm việc không tồn tại: {{path}}",
-        "not_directory": "Đường dẫn không gian làm việc không phải là thư mục: {{path}}"
       }
     },
     "settings": {
@@ -593,9 +593,6 @@
       }
     },
     "sidebar_title": "Đại lý",
-    "system_agent": {
-      "auto_triggered": "[to be translated]:System Agent checked automatically"
-    },
     "todo": {
       "mock": {
         "actions": {
@@ -789,10 +786,21 @@
       "error": {
         "failed": "Không thể cập nhật tác nhân"
       }
+    },
+    "warning": {
+      "enable_and_start": "Kích hoạt & Khởi động",
+      "enable_server": "Kích hoạt API Server để sử dụng các agent.",
+      "enable_server_description": "Máy chủ API phải được bật để các tác nhân hoạt động. Bạn có thể bật nó trực tiếp hoặc cấu hình trong phần cài đặt.",
+      "server_not_running": "Máy chủ API đã được kích hoạt nhưng không đang chạy. Vui lòng kiểm tra cấu hình máy chủ.",
+      "server_not_running_description": "Máy chủ API cần được chạy để các tác nhân hoạt động. Bạn có thể khởi động nó trực tiếp hoặc kiểm tra cài đặt."
+    },
+    "system_agent": {
+      "auto_triggered": "[to be translated]:System Agent checked automatically"
     }
   },
   "apiGateway": {
     "actions": {
+      "copy": "Kopi",
       "regenerate": "Tái tạo",
       "restart": {
         "button": "Khởi động lại",
@@ -805,6 +813,7 @@
       "title": "Tiêu đề ủy quyền"
     },
     "authHeaderText": "Sử dụng trong tiêu đề Ủy quyền:",
+    "configuration": "Konfiguracja",
     "description": "Phơi bày khả năng AI của Cherry Studio qua các API HTTP tương thích với OpenAI",
     "documentation": {
       "title": "API Documentación"
@@ -818,16 +827,17 @@
       },
       "port": {
         "description": "Số cổng TCP cho máy chủ HTTP (1000-65535)",
+        "helpText": "Detener servidor para cambiar puerto",
         "label": "Harbor"
       },
       "url": {
+        "copyTooltip": "Sao chép URL",
         "label": "URL"
       }
     },
     "messages": {
       "apiKeyCopied": "Khóa API đã được sao chép vào clipboard",
       "apiKeyRegenerated": "Khóa API đã được tạo lại",
-      "invalidPort": "[to be translated]:Enter a port number between 1000 and 65535",
       "notEnabled": "Máy chủ API chưa được kích hoạt.",
       "operationFailed": "Hoạt động của Máy chủ API không thành công:",
       "restartError": "Không khởi động lại được Máy chủ API:",
@@ -836,7 +846,9 @@
       "startError": "Không thể khởi động Máy chủ API:",
       "startSuccess": "Máy chủ API đã khởi động thành công",
       "stopError": "Không thể dừng Máy chủ API:",
-      "stopSuccess": "Máy chủ API đã dừng thành công"
+      "stopSuccess": "Máy chủ API đã dừng thành công",
+      "urlCopied": "URL máy chủ đã được sao chép vào bộ nhớ tạm",
+      "invalidPort": "[to be translated]:Enter a port number between 1000 and 65535"
     },
     "status": {
       "running": "Chạy",
@@ -1269,11 +1281,11 @@
         "collapse_in": "Thu gọn",
         "collapse_out": "Gỡ khỏi trạng thái thu gọn",
         "expand": "Mở rộng",
-        "external_app_not_found": "[to be translated]:External app not found: {{name}}",
         "file_not_found": "Không tìm thấy tệp: {{path}}",
         "open_file": "Mở Tệp",
         "open_file_error": "Không mở được tệp: {{path}}",
-        "reveal_in_finder": "Hiển thị trong Finder"
+        "reveal_in_finder": "Hiển thị trong Finder",
+        "external_app_not_found": "[to be translated]:External app not found: {{name}}"
       },
       "topics": "Chủ đề",
       "translate": "Dịch sang {{target_language}}",
@@ -1659,11 +1671,12 @@
       "claude_code": "Trợ lý lập trình AI dòng lệnh chính thức của Anthropic",
       "gemini_cli": "Trợ lý dòng lệnh chính thức Gemini của Google",
       "github_copilot_cli": "Trình đồng hành dòng lệnh chính thức của GitHub Copilot",
-      "iflow_cli": "Trợ lý dòng lệnh đa mô hình của iFlow",
       "kimi_cli": "Trợ lý dòng lệnh Kimi của Moonshot",
       "openai_codex": "CLI chính thức tạo mã của OpenAI",
       "opencode": "Đại lý lập trình đa mô hình mã nguồn mở",
-      "qwen_code": "Công cụ lập trình CLI nguồn mở của Alibaba Tongyi"
+      "qoder_cli": "Công cụ lập trình dòng lệnh đại lý của Alibaba Qoder",
+      "qwen_code": "Công cụ lập trình CLI nguồn mở của Alibaba Tongyi",
+      "iflow_cli": "Trợ lý dòng lệnh đa mô hình của iFlow"
     },
     "update_options": "Tùy chọn Cập nhật",
     "working_directory": "Thư mục làm việc",
@@ -1737,7 +1750,6 @@
     "copy_failed": "Sao chép thất bại",
     "current": "Hiện tại",
     "cut": "Cắt",
-    "decline": "Từ chối",
     "default": "Mặc định",
     "delete": "Xóa",
     "delete_confirm": "Bạn có chắc chắn muốn xóa không?",
@@ -1844,7 +1856,8 @@
     "upload_image": "Tải lên tệp hình ảnh",
     "uploaded_image": "Hình ảnh đã tải lên",
     "warning": "Cảnh báo",
-    "you": "Bạn"
+    "you": "Bạn",
+    "decline": "Từ chối"
   },
   "dialog": {
     "all_files": "Tất cả các tệp",
@@ -1919,7 +1932,6 @@
     "detail": "Chi tiết lỗi",
     "details": "Chi tiết",
     "diagnosis": {
-      "abnormal_finish": "Phản hồi đã kết thúc bất thường, vui lòng thử lại hoặc đổi mô hình",
       "ai_button": "Chẩn đoán bằng AI",
       "ai_done": "Chẩn đoán",
       "ai_loading": "Chẩn đoán",
@@ -1935,7 +1947,6 @@
       "model_conflict": "Mô hình chẩn đoán giống với mô hình đang gặp lỗi",
       "network": "Không thể kết nối đến máy chủ, hãy kiểm tra cài đặt mạng hoặc proxy",
       "ocr": "Công cụ OCR chưa được khởi tạo, hãy kiểm tra cài đặt OCR",
-      "output_truncated": "Phản hồi đã đạt độ dài tối đa và bị cắt bớt",
       "parse": "AI đã trả về phản hồi không hợp lệ, vui lòng thử lại hoặc chuyển sang mô hình khác",
       "payload": "Nội dung yêu cầu quá lớn, vui lòng giảm kích thước tệp hoặc văn bản",
       "proxy": "Lỗi proxy hoặc chứng chỉ SSL, hãy kiểm tra cài đặt proxy và mạng",
@@ -1943,7 +1954,9 @@
       "server": "Lỗi máy chủ, vui lòng thử lại sau",
       "stream": "Phản hồi bị gián đoạn, kiểm tra độ ổn định mạng hoặc thử lại",
       "unknown": "Đã xảy ra lỗi",
-      "view_details": "Xem Chi Tiết"
+      "view_details": "Xem Chi Tiết",
+      "abnormal_finish": "Phản hồi đã kết thúc bất thường, vui lòng thử lại hoặc đổi mô hình",
+      "output_truncated": "Phản hồi đã đạt độ dài tối đa và bị cắt bớt"
     },
     "errors": "Lỗi",
     "finishReason": "Lý do kết thúc",
@@ -2051,11 +2064,11 @@
     "preview": {
       "error": "Không thể mở tệp"
     },
-    "rename_failed": "[to be translated]:Rename failed",
     "size": "Kích thước",
     "text": "Văn bản",
     "title": "Tập tin",
-    "type": "Kiểu"
+    "type": "Kiểu",
+    "rename_failed": "[to be translated]:Rename failed"
   },
   "gpustack": {
     "keep_alive_time": {
@@ -2084,10 +2097,10 @@
         "newest": "Mới nhất trước",
         "oldest": "Cũ nhất trước"
       },
-      "stats": "[to be translated]:Found {{count}} results in {{time}} seconds",
       "topics": {
         "empty": "Không tìm thấy chủ đề nào, nhấn Enter để tìm kiếm tất cả tin nhắn"
-      }
+      },
+      "stats": "[to be translated]:Found {{count}} results in {{time}} seconds"
     },
     "title": "Tìm kiếm chủ đề"
   },
@@ -2185,6 +2198,7 @@
           "success": "Nguồn dữ liệu đã được thêm vào cơ sở kiến thức"
         },
         "title": "Thêm Nguồn Dữ Liệu",
+        "unsupported_files_skipped": "Đã bỏ qua {{count}} tệp không được hỗ trợ",
         "url": {
           "description": "Nhập URL của trang web:",
           "help": "Văn bản trang sẽ được tải, chia nhỏ và lập chỉ mục tự động",
@@ -2194,12 +2208,12 @@
         }
       },
       "bulk": {
-        "cancel": "Hủy",
         "delete": "Xóa",
         "delete_confirm_description": "Xóa {{count}} nguồn dữ liệu đã chọn? Thao tác này không thể hoàn tác.",
         "delete_confirm_title": "Xóa các Nguồn Dữ liệu Đã Chọn?",
         "reindex": "Lập chỉ mục lại",
-        "selected_count": "{{count}} đã chọn"
+        "selected_count": "{{count}} đã chọn",
+        "cancel": "Hủy"
       },
       "chunks_count": "{{count}} phần",
       "delete_confirm_description": "Nguồn dữ liệu này và dữ liệu chỉ mục của nó không thể được khôi phục sau khi xóa.",
@@ -2264,6 +2278,7 @@
     "embedding_model_required": "Mô hình nhúng cơ sở tri thức là bắt buộc",
     "empty": "Không có cơ sở kiến thức",
     "error": {
+      "directory_not_migrated": "Di chuyển thư mục không thành công. Vui lòng xóa và tải lên lại.",
       "failed_base_unknown": "Cơ sở kiến thức này đã thất bại trong quá trình di chuyển. Hãy xây dựng lại và chọn một mô hình embedding mới.",
       "failed_to_create": "Không thể tạo cơ sở kiến thức",
       "failed_to_delete": "Không thể xóa cơ sở kiến thức",
@@ -2496,18 +2511,6 @@
             "empty": "Không ràng buộc",
             "label": "Máy chủ MCP (id)"
           },
-          "mode": {
-            "option": {
-              "enhanced": {
-                "desc": "[to be translated]:Best for more complex scenarios. Uses the Claude Agent SDK, with stronger behavior but usually slower responses and higher token usage.",
-                "title": "[to be translated]:Enhanced mode"
-              },
-              "standard": {
-                "desc": "[to be translated]:Best for most cases. Uses Pi Agent, responds faster, uses fewer tokens, and matches the default Cherry Studio Pi experience.",
-                "title": "[to be translated]:Standard mode"
-              }
-            }
-          },
           "model": {
             "help": "UniqueModelId; sau sẽ chuyển sang bộ chọn được hỗ trợ bởi /models",
             "hint": "Lý luận và thực hiện chính",
@@ -2540,6 +2543,18 @@
             "help": "Khi được bật, tự động cấp quyền bypassPermissions",
             "label": "Chế độ linh hồn"
           },
+          "mode": {
+            "option": {
+              "enhanced": {
+                "desc": "[to be translated]:Best for more complex scenarios. Uses the Claude Agent SDK, with stronger behavior but usually slower responses and higher token usage.",
+                "title": "[to be translated]:Enhanced mode"
+              },
+              "standard": {
+                "desc": "[to be translated]:Best for most cases. Uses Pi Agent, responds faster, uses fewer tokens, and matches the default Cherry Studio Pi experience.",
+                "title": "[to be translated]:Standard mode"
+              }
+            }
+          },
           "workspace": {
             "auto": "[to be translated]:Create a dedicated workspace automatically",
             "change": "[to be translated]:Change directory",
@@ -2560,11 +2575,6 @@
             "desc": "Tên đại lý, mô tả và mô hình chính",
             "label": "Cơ bản",
             "title": "Cơ bản"
-          },
-          "mode": {
-            "desc": "[to be translated]:Choose how this agent runs under the hood",
-            "label": "[to be translated]:Runtime mode",
-            "title": "[to be translated]:Choose runtime mode"
           },
           "permission": {
             "desc": "Phạm vi ủy quyền cho các hành động của đại lý",
@@ -2592,6 +2602,11 @@
               "tools": "Công cụ tích hợp sẵn"
             },
             "title": "Công cụ & thời gian chạy"
+          },
+          "mode": {
+            "desc": "[to be translated]:Choose how this agent runs under the hood",
+            "label": "[to be translated]:Runtime mode",
+            "title": "[to be translated]:Choose runtime mode"
           },
           "workspace": {
             "desc": "[to be translated]:Choose where this agent reads and writes local project files",
@@ -3165,10 +3180,6 @@
       "completed": "Hoàn thành",
       "error": "Đã xảy ra lỗi",
       "groupHeader": "{{count}} appels d’outil",
-      "groupHeaderMessages": "{{count}} messages",
-      "groupHeaderThinking": "{{count}} thoughts",
-      "groupHeaderWithDetails": "{{toolCount}} appels d’outil · {{thinkingCount}} thoughts · {{messageCount}} messages",
-      "groupHeaderWithMessages": "{{toolCount}} appels d’outil · {{messageCount}} messages",
       "invoking": "Invocando",
       "labels": {
         "bash": "Bash",
@@ -3229,7 +3240,11 @@
         "plan_other": "{{count}} gói",
         "result_one": "{{count}} kết quả",
         "result_other": "{{count}} kết quả"
-      }
+      },
+      "groupHeaderMessages": "{{count}} messages",
+      "groupHeaderThinking": "{{count}} thoughts",
+      "groupHeaderWithDetails": "{{toolCount}} appels d’outil · {{thinkingCount}} thoughts · {{messageCount}} messages",
+      "groupHeaderWithMessages": "{{toolCount}} appels d’outil · {{messageCount}} messages"
     },
     "topic": {
       "added": "Chủ đề mới đã được thêm"
@@ -3650,12 +3665,6 @@
     "title": "Ollama"
   },
   "onboarding": {
-    "privacy": {
-      "accept_and_continue": "Chấp nhận và tiếp tục",
-      "notice": "Bằng cách tiếp tục, bạn xác nhận rằng bạn đã đọc và đồng ý với",
-      "period": ".",
-      "policy": "Chính sách quyền riêng tư"
-    },
     "select_model": {
       "change_later": "Bạn có thể thay đổi điều này bất cứ lúc nào trong phần cài đặt",
       "start": "Bắt đầu",
@@ -3674,6 +3683,12 @@
       "setup_hint": "Vui lòng cấu hình ít nhất một nhà cung cấp để có trải nghiệm tốt nhất",
       "subtitle": "Tận hưởng các dịch vụ AI hàng đầu với CherryIN",
       "title": "Chào mừng bạn đến với Cherry Studio"
+    },
+    "privacy": {
+      "accept_and_continue": "Chấp nhận và tiếp tục",
+      "notice": "Bằng cách tiếp tục, bạn xác nhận rằng bạn đã đọc và đồng ý với",
+      "period": ".",
+      "policy": "Chính sách quyền riêng tư"
     }
   },
   "openclaw": {
@@ -4161,14 +4176,6 @@
     "source": "Ver Código Fuente",
     "zoom_in": "Phóng to",
     "zoom_out": "Zum Herauszoomen"
-  },
-  "privacy_policy": {
-    "title": "Chính sách quyền riêng tư"
-  },
-  "privacy_policy_update": {
-    "description_before_link": "Chúng tôi đã cập nhật chính sách quyền riêng tư. Vui lòng xem lại bản mới nhất ",
-    "policy": "Chính sách quyền riêng tư",
-    "title": "Chính sách quyền riêng tư đã được cập nhật"
   },
   "prompts": {
     "explanation": "Giải thích khái niệm này cho tôi",
@@ -4821,117 +4828,6 @@
       "description": "Kết nối các tác nhân với các nền tảng nhắn tin như Telegram, Feishu, Discord và nhiều hơn nữa.",
       "title": "Kênh"
     },
-    "componentLab": {
-      "agentSelector": {
-        "clearSelection": "Rõ ràng",
-        "configDescription": "Chuyển đổi props để xem trước hành vi của thành phần",
-        "configTitle": "Cấu hình",
-        "currentProps": "Props hiện tại",
-        "description": "AgentSelector hiện đọc dữ liệu DataApi /agents thực tế để xác minh hành vi chọn id/mục, ghim, sắp xếp và tìm kiếm.",
-        "emptyShellNotice": "Bản xem trước này sử dụng danh sách tác nhân thực được trả về bởi /agents DataApi.",
-        "lastOnChange": "Cập nhật mới nhất về onChange",
-        "previewDescription": "Nhấp vào công tắc để mở bộ chọn",
-        "previewTitle": "Xem trước",
-        "title": "Bộ chọn tác nhân",
-        "triggerPlaceholder": "Chọn một đại lý",
-        "valueProp": "Giá trị hiện tại"
-      },
-      "agentTodoList": {
-        "title": "Danh sách việc cần làm của đại lý"
-      },
-      "assistantSelector": {
-        "clearSelection": "Rõ ràng",
-        "configDescription": "Chuyển đổi props để xem trước hành vi của component",
-        "configTitle": "Cấu hình",
-        "currentProps": "Props hiện tại",
-        "description": "Gắn trực tiếp thành phần kinh doanh AssistantSelector để xác minh hành vi đa/đơn, id/mục, ghim, sắp xếp và tìm kiếm.",
-        "lastOnChange": "Cập nhật mới nhất về onChange",
-        "previewDescription": "Nhấp vào kích hoạt để mở bộ chọn",
-        "previewTitle": "Xem trước",
-        "title": "Trình chọn Trợ lý",
-        "triggerPlaceholder": "Chọn một trợ lý",
-        "triggerSelectedCount": "{{count}} trợ lý đã được chọn",
-        "valueProp": "Giá trị hiện tại"
-      },
-      "description": "Chỉ hiển thị trong quá trình phát triển để thử nghiệm trình chọn mô hình mới trực tiếp trong ứng dụng.",
-      "fileProcessing": {
-        "artifact": {
-          "file": "Tệp Markdown",
-          "text": "Kết quả văn bản"
-        },
-        "description": "Chạy mọi trình xử lý tệp đã cấu hình qua IPC xử lý tệp thực và so sánh kết quả.",
-        "duration": "{{seconds}} giây",
-        "jobId": "ID công việc",
-        "markdown": {
-          "description": "Chọn một tài liệu và chạy tất cả các bộ xử lý chuyển đổi tài liệu sang markdown.",
-          "fileFilterName": "Tài liệu",
-          "noFile": "Không có tài liệu nào được chọn",
-          "select": "Chọn tài liệu",
-          "start": "Kiểm tra đánh dấu",
-          "title": "Markdown"
-        },
-        "noProcessors": "Không có bộ xử lý nào hỗ trợ tính năng này.",
-        "ocr": {
-          "description": "Chọn một hình ảnh và chạy tất cả các bộ xử lý OCR.",
-          "fileFilterName": "Hình ảnh",
-          "noFile": "Chưa chọn hình ảnh",
-          "select": "Chọn hình ảnh",
-          "start": "Kiểm tra OCR",
-          "title": "OCR"
-        },
-        "processorCount": "{{count}} bộ xử lý",
-        "status": {
-          "cancelled": "Đã hủy",
-          "completed": "Hoàn thành",
-          "delayed": "Trì hoãn",
-          "failed": "Thất bại",
-          "idle": "Nhàn rỗi",
-          "pending": "Đang chờ",
-          "processing": "Đang xử lý",
-          "running": "Chạy",
-          "starting": "Bắt đầu"
-        },
-        "title": "Phân tích tài liệu"
-      },
-      "label": "Phòng thí nghiệm linh kiện",
-      "modelSelector": {
-        "behaviorConfig": "Cấu hình Hành vi & Hiển thị",
-        "callbackEmpty": "Chưa nhận được bất kỳ callback thành phần nào",
-        "clearSelection": "Xóa lựa chọn",
-        "configDescription": "Chuyển đổi các thuộc tính ModelSelector chính ở trên và kiểm tra giá trị đầu vào cùng với các payload callback bên dưới.",
-        "configTitle": "Sân chơi Đạo cụ",
-        "controlMultiSelectMode": "Chế độ chọn nhiều được kiểm soát",
-        "currentProps": "Props Hiện Tại",
-        "defaultMultiSelectMode": "chế độ chọn nhiều mặc định",
-        "description": "Trang này gắn trực tiếp thành phần kinh doanh ModelSelector hiện tại để chúng ta có thể xác minh hành vi lựa chọn, lọc, tìm kiếm và ghim.",
-        "empty": "Hiện không có mô hình nào khả dụng nên bộ chọn chưa thể hiển thị.",
-        "lastModeChangeReturn": "Cập nhật mới nhất về Return onMultiSelectModeChange",
-        "lastSelectReturn": "Mới nhất vềSelect Return",
-        "loading": "Đang tải mô hình...",
-        "modelId": "ID mô hình",
-        "multiSelectMode": "chế độ chọn nhiều",
-        "multiple": "nhiều",
-        "normalizedIds": "ID Đã Chọn Được Chuẩn Hóa",
-        "outputEmpty": "Chưa có dữ liệu để hiển thị",
-        "provider": "Nhà cung cấp",
-        "resetOutputs": "Đặt lại đầu ra",
-        "resultsDescription": "Điều này hiển thị giá trị đề xuất hiện tại, các id đã chọn được chuẩn hóa và đầu ra gọi lại mới nhất từ thành phần.",
-        "resultsTitle": "Đầu ra & Trạng thái",
-        "selected": "Lựa chọn hiện tại",
-        "selectedEmpty": "Chưa chọn mô hình nào",
-        "selectionConfig": "Cấu hình Giá trị Lựa chọn",
-        "selectionType": "loại lựa chọn",
-        "selectionTypeId": "Trả về ID mô hình",
-        "selectionTypeModel": "Trả về các đối tượng mô hình",
-        "showPinnedModels": "hiển thị các mô hình được ghim",
-        "showTagFilter": "hiển thịBộLọcThẻ",
-        "title": "Bộ chọn mô hình",
-        "triggerPlaceholder": "Chọn một mô hình",
-        "triggerSelectedCount": "{{count}} mô hình đã được chọn",
-        "valueProp": "Giá trị đề xuất hiện tại"
-      },
-      "title": "Phòng thí nghiệm Thành phần Phát triển"
-    },
     "data": {
       "app_data": {
         "copy_data_option": "Sao chép dữ liệu, sẽ tự động khởi động lại sau khi sao chép dữ liệu thư mục gốc vào thư mục mới",
@@ -4977,96 +4873,6 @@
       },
       "data": {
         "title": "Thư mục dữ liệu"
-      },
-      "data_sync": {
-        "auto_sync": "[to be translated]:Auto Sync",
-        "current_device": "[to be translated]:Current Device",
-        "diagnose": "[to be translated]:Diagnose",
-        "diagnosis": {
-          "checked_at": "[to be translated]:Checked at: {{time}}",
-          "device": "[to be translated]:Device: {{deviceId}}",
-          "title": "[to be translated]:WebDAV Diagnosis",
-          "write_path": "[to be translated]:Write path: {{path}}",
-          "write_success": "[to be translated]:WebDAV connection and write access are available."
-        },
-        "effective_path": "[to be translated]:Effective Sync Path",
-        "effective_path_help": "[to be translated]:This is the final WebDAV directory Cherry Studio Pi will read and write.",
-        "help": "[to be translated]:Sync local settings, providers, assistants, agents, conversations, knowledge data, notes, and runtime metadata through WebDAV.",
-        "interval": {
-          "day_one": "[to be translated]:Every day",
-          "hour_one": "[to be translated]:Every hour",
-          "hour_other": "[to be translated]:Every {{count}} hours",
-          "minute_one": "[to be translated]:Every minute",
-          "minute_other": "[to be translated]:Every {{count}} minutes",
-          "off": "[to be translated]:Off"
-        },
-        "last_result": "[to be translated]:Latest Result",
-        "method": "[to be translated]:Sync Method",
-        "method_value": "[to be translated]:WebDAV",
-        "password": "[to be translated]:Password",
-        "password_placeholder": "[to be translated]:WebDAV password",
-        "refresh_status": "[to be translated]:Refresh Status",
-        "remote_browser": {
-          "current_path": "[to be translated]:Current path: {{path}}",
-          "empty": "[to be translated]:No folders found",
-          "error_title": "[to be translated]:Unable to load remote directory",
-          "path_hint": "[to be translated]:You can continue using the configured path: {{path}}",
-          "path_hint_title": "[to be translated]:Directory path",
-          "refresh": "[to be translated]:Refresh",
-          "select": "[to be translated]:Select",
-          "select_current": "[to be translated]:Select Current",
-          "title": "[to be translated]:Browse WebDAV Directory",
-          "use_current_path": "[to be translated]:Use configured path",
-          "use_root": "[to be translated]:Use root"
-        },
-        "remote_path": "[to be translated]:Sync Directory",
-        "remote_path_browse": "[to be translated]:Browse",
-        "remote_path_help": "[to be translated]:Choose a dedicated WebDAV directory. Use the same directory on every device that should sync together.",
-        "restore_confirm_content": "[to be translated]:Restore the latest remote safety snapshot to this device? Current local data may be overwritten.",
-        "restore_confirm_title": "[to be translated]:Restore Latest Snapshot",
-        "restore_latest": "[to be translated]:Restore Latest",
-        "snapshot": {
-          "join_safety": "[to be translated]:Local safety snapshot: {{file}} ({{size}})",
-          "open_local": "[to be translated]:Show local snapshot",
-          "uploaded": "[to be translated]:Remote safety snapshot: {{file}} ({{size}})"
-        },
-        "storage": {
-          "blobs": "[to be translated]:Files: uploaded {{uploaded}}, downloaded {{downloaded}}",
-          "conflicts": "[to be translated]:Storage conflicts: {{count}}",
-          "records": "[to be translated]:Storage records: uploaded {{uploaded}}, downloaded {{downloaded}}",
-          "resolved_conflicts": "[to be translated]:Resolved storage conflicts: {{count}}"
-        },
-        "summary": {
-          "conflicts": "[to be translated]:Conflicts: {{count}}",
-          "deleted": "[to be translated]:Deleted: {{count}}",
-          "downloaded": "[to be translated]:Downloaded: {{count}}",
-          "error": "[to be translated]:Error: {{message}}",
-          "remote_path": "[to be translated]:Remote path: {{path}}",
-          "resolved_conflicts": "[to be translated]:Resolved conflicts: {{count}}",
-          "status_failed": "[to be translated]:Failed",
-          "status_success": "[to be translated]:Success",
-          "uploaded": "[to be translated]:Uploaded: {{count}}"
-        },
-        "sync": "[to be translated]:Sync",
-        "sync_now": "[to be translated]:Manual Sync",
-        "title": "[to be translated]:Data Sync",
-        "toast": {
-          "diagnose_failed": "[to be translated]:Diagnosis failed: {{message}}",
-          "diagnose_success": "[to be translated]:Diagnosis passed",
-          "open_snapshot_failed": "[to be translated]:Failed to open local safety snapshot: {{message}}",
-          "remote_path_selected": "[to be translated]:Selected WebDAV directory: {{path}}",
-          "restore_failed": "[to be translated]:Restore failed: {{message}}",
-          "restore_success": "[to be translated]:Restore completed",
-          "sync_failed": "[to be translated]:Data sync failed: {{message}}",
-          "sync_running": "[to be translated]:Data sync is still running.",
-          "sync_success": "[to be translated]:Data sync completed.",
-          "webdav_required": "[to be translated]:Please configure the WebDAV host, username, and password first."
-        },
-        "uninitialized": "[to be translated]:Not initialized",
-        "unresolved_conflicts": "[to be translated]:Unresolved Conflicts",
-        "username": "[to be translated]:Username",
-        "username_placeholder": "[to be translated]:WebDAV username",
-        "webdav_host": "[to be translated]:WebDAV Host"
       },
       "divider": {
         "basic": "Cài đặt Dữ liệu Cơ bản",
@@ -5632,6 +5438,96 @@
         "title": "Cấu hình Yuque",
         "token": "Mã thông báo Yuque",
         "token_placeholder": "Vui lòng nhập Token Yuque"
+      },
+      "data_sync": {
+        "auto_sync": "[to be translated]:Auto Sync",
+        "current_device": "[to be translated]:Current Device",
+        "diagnose": "[to be translated]:Diagnose",
+        "diagnosis": {
+          "checked_at": "[to be translated]:Checked at: {{time}}",
+          "device": "[to be translated]:Device: {{deviceId}}",
+          "title": "[to be translated]:WebDAV Diagnosis",
+          "write_path": "[to be translated]:Write path: {{path}}",
+          "write_success": "[to be translated]:WebDAV connection and write access are available."
+        },
+        "effective_path": "[to be translated]:Effective Sync Path",
+        "effective_path_help": "[to be translated]:This is the final WebDAV directory Cherry Studio Pi will read and write.",
+        "help": "[to be translated]:Sync local settings, providers, assistants, agents, conversations, knowledge data, notes, and runtime metadata through WebDAV.",
+        "interval": {
+          "day_one": "[to be translated]:Every day",
+          "hour_one": "[to be translated]:Every hour",
+          "hour_other": "[to be translated]:Every {{count}} hours",
+          "minute_one": "[to be translated]:Every minute",
+          "minute_other": "[to be translated]:Every {{count}} minutes",
+          "off": "[to be translated]:Off"
+        },
+        "last_result": "[to be translated]:Latest Result",
+        "method": "[to be translated]:Sync Method",
+        "method_value": "[to be translated]:WebDAV",
+        "password": "[to be translated]:Password",
+        "password_placeholder": "[to be translated]:WebDAV password",
+        "refresh_status": "[to be translated]:Refresh Status",
+        "remote_browser": {
+          "current_path": "[to be translated]:Current path: {{path}}",
+          "empty": "[to be translated]:No folders found",
+          "error_title": "[to be translated]:Unable to load remote directory",
+          "path_hint": "[to be translated]:You can continue using the configured path: {{path}}",
+          "path_hint_title": "[to be translated]:Directory path",
+          "refresh": "[to be translated]:Refresh",
+          "select": "[to be translated]:Select",
+          "select_current": "[to be translated]:Select Current",
+          "title": "[to be translated]:Browse WebDAV Directory",
+          "use_current_path": "[to be translated]:Use configured path",
+          "use_root": "[to be translated]:Use root"
+        },
+        "remote_path": "[to be translated]:Sync Directory",
+        "remote_path_browse": "[to be translated]:Browse",
+        "remote_path_help": "[to be translated]:Choose a dedicated WebDAV directory. Use the same directory on every device that should sync together.",
+        "restore_confirm_content": "[to be translated]:Restore the latest remote safety snapshot to this device? Current local data may be overwritten.",
+        "restore_confirm_title": "[to be translated]:Restore Latest Snapshot",
+        "restore_latest": "[to be translated]:Restore Latest",
+        "snapshot": {
+          "join_safety": "[to be translated]:Local safety snapshot: {{file}} ({{size}})",
+          "open_local": "[to be translated]:Show local snapshot",
+          "uploaded": "[to be translated]:Remote safety snapshot: {{file}} ({{size}})"
+        },
+        "storage": {
+          "blobs": "[to be translated]:Files: uploaded {{uploaded}}, downloaded {{downloaded}}",
+          "conflicts": "[to be translated]:Storage conflicts: {{count}}",
+          "records": "[to be translated]:Storage records: uploaded {{uploaded}}, downloaded {{downloaded}}",
+          "resolved_conflicts": "[to be translated]:Resolved storage conflicts: {{count}}"
+        },
+        "summary": {
+          "conflicts": "[to be translated]:Conflicts: {{count}}",
+          "deleted": "[to be translated]:Deleted: {{count}}",
+          "downloaded": "[to be translated]:Downloaded: {{count}}",
+          "error": "[to be translated]:Error: {{message}}",
+          "remote_path": "[to be translated]:Remote path: {{path}}",
+          "resolved_conflicts": "[to be translated]:Resolved conflicts: {{count}}",
+          "status_failed": "[to be translated]:Failed",
+          "status_success": "[to be translated]:Success",
+          "uploaded": "[to be translated]:Uploaded: {{count}}"
+        },
+        "sync": "[to be translated]:Sync",
+        "sync_now": "[to be translated]:Manual Sync",
+        "title": "[to be translated]:Data Sync",
+        "toast": {
+          "diagnose_failed": "[to be translated]:Diagnosis failed: {{message}}",
+          "diagnose_success": "[to be translated]:Diagnosis passed",
+          "open_snapshot_failed": "[to be translated]:Failed to open local safety snapshot: {{message}}",
+          "remote_path_selected": "[to be translated]:Selected WebDAV directory: {{path}}",
+          "restore_failed": "[to be translated]:Restore failed: {{message}}",
+          "restore_success": "[to be translated]:Restore completed",
+          "sync_failed": "[to be translated]:Data sync failed: {{message}}",
+          "sync_running": "[to be translated]:Data sync is still running.",
+          "sync_success": "[to be translated]:Data sync completed.",
+          "webdav_required": "[to be translated]:Please configure the WebDAV host, username, and password first."
+        },
+        "uninitialized": "[to be translated]:Not initialized",
+        "unresolved_conflicts": "[to be translated]:Unresolved Conflicts",
+        "username": "[to be translated]:Username",
+        "username_placeholder": "[to be translated]:WebDAV username",
+        "webdav_host": "[to be translated]:WebDAV Host"
       }
     },
     "developer": {
@@ -6012,11 +5908,11 @@
         "selectProvider": "Chọn Nhà cung cấp:",
         "setToken": "Nhập mã thông báo của bạn",
         "success": "Đồng bộ máy chủ MCP thành công",
-        "timeout": "[to be translated]:Sync timed out after {{seconds}}s. Please check your network connection and try again.",
         "title": "Máy chủ đồng bộ",
         "tokenPlaceholder": "Nhập mã API vào đây",
         "tokenRequired": "Cần có Mã thông báo API",
-        "unauthorized": "Đồng bộ không được ủy quyền"
+        "unauthorized": "Đồng bộ không được ủy quyền",
+        "timeout": "[to be translated]:Sync timed out after {{seconds}}s. Please check your network connection and try again."
       },
       "system": "Hệ thống",
       "tabs": {
@@ -6206,6 +6102,7 @@
       "disabled": "Ứng dụng mini ẩn",
       "display_title": "Cài đặt hiển thị Mini App",
       "empty": "Nhấp vào biểu tượng ẩn của một ứng dụng bên trái và nó sẽ chuyển đến đây",
+      "hide_app": "Ẩn {{name}}",
       "open_link_external": {
         "title": "Mở liên kết cửa sổ mới trong trình duyệt"
       },
@@ -6217,6 +6114,7 @@
         "title": "Bộ lọc Mini Program"
       },
       "reset_tooltip": "Đặt lại về mặc định",
+      "show_app": "Hiển thị {{name}}",
       "sidebar_description": "Hiển thị các mini app đang hoạt động trong thanh bên",
       "sidebar_title": "Hiển thị Ứng dụng Nhỏ Hoạt động trong Thanh bên",
       "title": "Cài đặt Mini Apps",
@@ -6264,11 +6162,11 @@
           "placeholder": "Opcional p. ej. GPT-4",
           "tooltip": "Opcjonalnie np. GPT-4"
         },
-        "provider_enable_failed": "[to be translated]:The model was added, but the provider could not be enabled. Enable this provider first, otherwise these models will not appear in Chat or Agent model selectors.",
         "supported_text_delta": {
           "label": "Hỗ trợ xuất văn bản tăng dần",
           "tooltip": "Mô hình trả về văn bản theo từng phần, thay vì toàn bộ cùng lúc. Được bật theo mặc định, nếu mô hình không hỗ trợ, vui lòng tắt tùy chọn này"
-        }
+        },
+        "provider_enable_failed": "[to be translated]:The model was added, but the provider could not be enabled. Enable this provider first, otherwise these models will not appear in Chat or Agent model selectors."
       },
       "api_key": "Khóa API",
       "base_url": "URL cơ sở",
@@ -6519,7 +6417,8 @@
       "add": {
         "name": {
           "label": "Tên nhà cung cấp",
-          "placeholder": "Ví dụ: OpenAI"
+          "placeholder": "Ví dụ: OpenAI",
+          "required": "Vui lòng nhập tên nhà cung cấp"
         },
         "title": "Thêm Nhà cung cấp",
         "type": "Loại nhà cung cấp"
@@ -6630,7 +6529,8 @@
       "balance": "Cân bằng",
       "base_url": {
         "label": "URL cơ sở",
-        "placeholder": "https://api.example.com"
+        "placeholder": "https://api.example.com",
+        "required": "Vui lòng nhập URL cơ sở"
       },
       "basic_auth": {
         "label": "Xác thực HTTP",
@@ -6707,7 +6607,6 @@
         "content": "Bạn có chắc chắn muốn xóa nhà cung cấp này không?",
         "title": "Xóa Nhà Cung Cấp"
       },
-      "delete_failed": "[to be translated]:Failed to delete provider",
       "dmxapi": {
         "platform_enterprise": "ssvip.DMXAPI.com (Doanh nghiệp)",
         "platform_international": "www.DMXAPI.com (Quốc tế)",
@@ -6827,7 +6726,8 @@
           "toggle_private_key_visibility": "[to be translated]:Toggle private key visibility",
           "toggle_project_id_visibility": "[to be translated]:Toggle project ID visibility"
         }
-      }
+      },
+      "delete_failed": "[to be translated]:Failed to delete provider"
     },
     "proxy": {
       "address": "Địa chỉ Proxy",
@@ -6998,10 +6898,12 @@
         },
         "features": {
           "document_to_markdown": {
-            "title": "Xử lý tài liệu"
+            "title": "Xử lý tài liệu",
+            "tooltip": "Dùng để phân tích tài liệu trong cơ sở tri thức"
           },
           "image_to_text": {
-            "title": "OCR"
+            "title": "OCR",
+            "tooltip": "Dùng để nhận dạng chữ trong hình ảnh cho tính năng dịch"
           }
         },
         "fields": {
@@ -7213,6 +7115,117 @@
     "zoom": {
       "reset": "Đặt lại",
       "title": "Zoom de página"
+    },
+    "componentLab": {
+      "agentSelector": {
+        "clearSelection": "Rõ ràng",
+        "configDescription": "Chuyển đổi props để xem trước hành vi của thành phần",
+        "configTitle": "Cấu hình",
+        "currentProps": "Props hiện tại",
+        "description": "AgentSelector hiện đọc dữ liệu DataApi /agents thực tế để xác minh hành vi chọn id/mục, ghim, sắp xếp và tìm kiếm.",
+        "emptyShellNotice": "Bản xem trước này sử dụng danh sách tác nhân thực được trả về bởi /agents DataApi.",
+        "lastOnChange": "Cập nhật mới nhất về onChange",
+        "previewDescription": "Nhấp vào công tắc để mở bộ chọn",
+        "previewTitle": "Xem trước",
+        "title": "Bộ chọn tác nhân",
+        "triggerPlaceholder": "Chọn một đại lý",
+        "valueProp": "Giá trị hiện tại"
+      },
+      "agentTodoList": {
+        "title": "Danh sách việc cần làm của đại lý"
+      },
+      "assistantSelector": {
+        "clearSelection": "Rõ ràng",
+        "configDescription": "Chuyển đổi props để xem trước hành vi của component",
+        "configTitle": "Cấu hình",
+        "currentProps": "Props hiện tại",
+        "description": "Gắn trực tiếp thành phần kinh doanh AssistantSelector để xác minh hành vi đa/đơn, id/mục, ghim, sắp xếp và tìm kiếm.",
+        "lastOnChange": "Cập nhật mới nhất về onChange",
+        "previewDescription": "Nhấp vào kích hoạt để mở bộ chọn",
+        "previewTitle": "Xem trước",
+        "title": "Trình chọn Trợ lý",
+        "triggerPlaceholder": "Chọn một trợ lý",
+        "triggerSelectedCount": "{{count}} trợ lý đã được chọn",
+        "valueProp": "Giá trị hiện tại"
+      },
+      "description": "Chỉ hiển thị trong quá trình phát triển để thử nghiệm trình chọn mô hình mới trực tiếp trong ứng dụng.",
+      "fileProcessing": {
+        "artifact": {
+          "file": "Tệp Markdown",
+          "text": "Kết quả văn bản"
+        },
+        "description": "Chạy mọi trình xử lý tệp đã cấu hình qua IPC xử lý tệp thực và so sánh kết quả.",
+        "duration": "{{seconds}} giây",
+        "jobId": "ID công việc",
+        "markdown": {
+          "description": "Chọn một tài liệu và chạy tất cả các bộ xử lý chuyển đổi tài liệu sang markdown.",
+          "fileFilterName": "Tài liệu",
+          "noFile": "Không có tài liệu nào được chọn",
+          "select": "Chọn tài liệu",
+          "start": "Kiểm tra đánh dấu",
+          "title": "Markdown"
+        },
+        "noProcessors": "Không có bộ xử lý nào hỗ trợ tính năng này.",
+        "ocr": {
+          "description": "Chọn một hình ảnh và chạy tất cả các bộ xử lý OCR.",
+          "fileFilterName": "Hình ảnh",
+          "noFile": "Chưa chọn hình ảnh",
+          "select": "Chọn hình ảnh",
+          "start": "Kiểm tra OCR",
+          "title": "OCR"
+        },
+        "processorCount": "{{count}} bộ xử lý",
+        "status": {
+          "cancelled": "Đã hủy",
+          "completed": "Hoàn thành",
+          "delayed": "Trì hoãn",
+          "failed": "Thất bại",
+          "idle": "Nhàn rỗi",
+          "pending": "Đang chờ",
+          "processing": "Đang xử lý",
+          "running": "Chạy",
+          "starting": "Bắt đầu"
+        },
+        "title": "Phân tích tài liệu"
+      },
+      "label": "Phòng thí nghiệm linh kiện",
+      "modelSelector": {
+        "behaviorConfig": "Cấu hình Hành vi & Hiển thị",
+        "callbackEmpty": "Chưa nhận được bất kỳ callback thành phần nào",
+        "clearSelection": "Xóa lựa chọn",
+        "configDescription": "Chuyển đổi các thuộc tính ModelSelector chính ở trên và kiểm tra giá trị đầu vào cùng với các payload callback bên dưới.",
+        "configTitle": "Sân chơi Đạo cụ",
+        "controlMultiSelectMode": "Chế độ chọn nhiều được kiểm soát",
+        "currentProps": "Props Hiện Tại",
+        "defaultMultiSelectMode": "chế độ chọn nhiều mặc định",
+        "description": "Trang này gắn trực tiếp thành phần kinh doanh ModelSelector hiện tại để chúng ta có thể xác minh hành vi lựa chọn, lọc, tìm kiếm và ghim.",
+        "empty": "Hiện không có mô hình nào khả dụng nên bộ chọn chưa thể hiển thị.",
+        "lastModeChangeReturn": "Cập nhật mới nhất về Return onMultiSelectModeChange",
+        "lastSelectReturn": "Mới nhất vềSelect Return",
+        "loading": "Đang tải mô hình...",
+        "modelId": "ID mô hình",
+        "multiSelectMode": "chế độ chọn nhiều",
+        "multiple": "nhiều",
+        "normalizedIds": "ID Đã Chọn Được Chuẩn Hóa",
+        "outputEmpty": "Chưa có dữ liệu để hiển thị",
+        "provider": "Nhà cung cấp",
+        "resetOutputs": "Đặt lại đầu ra",
+        "resultsDescription": "Điều này hiển thị giá trị đề xuất hiện tại, các id đã chọn được chuẩn hóa và đầu ra gọi lại mới nhất từ thành phần.",
+        "resultsTitle": "Đầu ra & Trạng thái",
+        "selected": "Lựa chọn hiện tại",
+        "selectedEmpty": "Chưa chọn mô hình nào",
+        "selectionConfig": "Cấu hình Giá trị Lựa chọn",
+        "selectionType": "loại lựa chọn",
+        "selectionTypeId": "Trả về ID mô hình",
+        "selectionTypeModel": "Trả về các đối tượng mô hình",
+        "showPinnedModels": "hiển thị các mô hình được ghim",
+        "showTagFilter": "hiển thịBộLọcThẻ",
+        "title": "Bộ chọn mô hình",
+        "triggerPlaceholder": "Chọn một mô hình",
+        "triggerSelectedCount": "{{count}} mô hình đã được chọn",
+        "valueProp": "Giá trị đề xuất hiện tại"
+      },
+      "title": "Phòng thí nghiệm Thành phần Phát triển"
     }
   },
   "tab": {
@@ -7449,5 +7462,13 @@
     "quit": "Thôi",
     "show_window": "Hiển thị Cửa sổ",
     "visualization": "Trực quan hóa"
+  },
+  "privacy_policy": {
+    "title": "Chính sách quyền riêng tư"
+  },
+  "privacy_policy_update": {
+    "description_before_link": "Chúng tôi đã cập nhật chính sách quyền riêng tư. Vui lòng xem lại bản mới nhất ",
+    "policy": "Chính sách quyền riêng tư",
+    "title": "Chính sách quyền riêng tư đã được cập nhật"
   }
 }

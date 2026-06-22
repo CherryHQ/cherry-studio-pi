@@ -1,11 +1,12 @@
 import '@testing-library/jest-dom/vitest'
 
+import { KNOWLEDGE_ITEM_ERROR_DIRECTORY_NOT_MIGRATED } from '@shared/data/types/knowledge'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { ReactElement, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import KnowledgeItemRow from '../KnowledgeItemRow'
-import { createFileItem, createUrlItem } from './testUtils'
+import { createDirectoryItem, createFileItem, createUrlItem } from './testUtils'
 
 const mockUseQuery = vi.fn()
 
@@ -36,9 +37,7 @@ vi.mock('@cherrystudio/ui', async () => {
       <span {...props}>{children}</span>
     ),
     Button: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) => (
-      <button type="button" {...props}>
-        {children}
-      </button>
+      <button {...props}>{children}</button>
     ),
     Checkbox: ({
       checked,
@@ -83,7 +82,7 @@ vi.mock('@cherrystudio/ui', async () => {
       </td>
     ),
     MenuItem: ({ icon, label, ...props }: { icon?: ReactNode; label: string; [key: string]: unknown }) => (
-      <button type="button" {...props}>
+      <button {...props}>
         {icon}
         {label}
       </button>
@@ -125,7 +124,6 @@ vi.mock('@cherrystudio/ui', async () => {
           onClick?: (event: React.MouseEvent) => void
         }>
 
-        // eslint-disable-next-line @eslint-react/no-clone-element -- Test double mirrors PopoverTrigger asChild semantics.
         return React.cloneElement(child, {
           onClick: (event: React.MouseEvent) => {
             child.props.onClick?.(event)
@@ -154,6 +152,7 @@ vi.mock('react-i18next', () => ({
         ({
           'knowledge.data_source.status.ready': '就绪',
           'knowledge.data_source.status.error': '失败',
+          'knowledge.error.directory_not_migrated': '该文件夹内容迁移失败，请删除后重新上传。',
           'knowledge.data_source.status.embedding': '向量化中',
           'knowledge.data_source.status.chunking': '分块中',
           'knowledge.data_source.status.pending': '等待中',
@@ -186,14 +185,6 @@ const defaultHandlers = {
   onViewChunks: () => undefined
 }
 
-function renderKnowledgeItemRow(row: ReactElement) {
-  return render(
-    <table>
-      <tbody>{row}</tbody>
-    </table>
-  )
-}
-
 describe('KnowledgeItemRow', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -209,63 +200,61 @@ describe('KnowledgeItemRow', () => {
     })
   })
 
-  it('renders the file suffix and meta parts from the file entry row view model', () => {
-    mockUseQuery.mockReturnValueOnce({
-      data: {
-        id: '019606a0-0000-7000-8000-000000000001',
-        name: '季度报告',
-        ext: 'pdf',
-        origin: 'external',
-        externalPath: '/tmp/季度报告.pdf',
-        createdAt: 1776948000000,
-        updatedAt: 1776948000000
-      },
-      isLoading: false,
-      error: undefined
-    })
-
-    renderKnowledgeItemRow(
-      <KnowledgeItemRow item={createFileItem({ id: 'file-1', originName: 'old-name.md' })} {...defaultHandlers} />
-    )
+  it('renders the file title from the knowledge item path', () => {
+    render(<KnowledgeItemRow item={createFileItem({ id: 'file-1', originName: 'old-name.md' })} {...defaultHandlers} />)
 
     expect(screen.getByText('old-name.md')).toBeInTheDocument()
-    expect(screen.getByText('md')).toBeInTheDocument()
     expect(screen.getByText('文件')).toBeInTheDocument()
-    expect(screen.getAllByText('刚刚')).toHaveLength(2)
+    expect(screen.getByText('刚刚')).toBeInTheDocument()
     expect(mockUseQuery).not.toHaveBeenCalledWith('/files/entries/:id', expect.anything())
   })
 
   it('falls back to the file source when the file entry is not loaded', () => {
-    renderKnowledgeItemRow(
+    render(
       <KnowledgeItemRow item={createFileItem({ id: 'file-1', source: '/tmp/fallback.md' })} {...defaultHandlers} />
     )
 
     expect(screen.getByText('fallback.md')).toBeInTheDocument()
-    expect(screen.getByText('md')).toBeInTheDocument()
     expect(screen.getByText('文件')).toBeInTheDocument()
   })
 
   it('renders the completed status label for ready items', () => {
-    renderKnowledgeItemRow(
-      <KnowledgeItemRow item={createFileItem({ id: 'file-1', status: 'completed' })} {...defaultHandlers} />
-    )
+    render(<KnowledgeItemRow item={createFileItem({ id: 'file-1', status: 'completed' })} {...defaultHandlers} />)
 
     expect(screen.getByText('就绪')).toBeInTheDocument()
   })
 
   it('renders the failed status label for failed items', () => {
-    renderKnowledgeItemRow(
-      <KnowledgeItemRow item={createFileItem({ id: 'file-1', status: 'failed' })} {...defaultHandlers} />
-    )
+    render(<KnowledgeItemRow item={createFileItem({ id: 'file-1', status: 'failed' })} {...defaultHandlers} />)
 
     expect(screen.getByText('失败')).toBeInTheDocument()
     expect(screen.getByRole('tooltip')).toHaveTextContent('Indexing failed')
   })
 
-  it('renders the processing status label for in-flight items', () => {
-    renderKnowledgeItemRow(
-      <KnowledgeItemRow item={createFileItem({ id: 'file-1', status: 'reading' })} {...defaultHandlers} />
+  it('renders a not-migrated directory as a red failure, reindexable but not chunk-viewable', () => {
+    render(
+      <KnowledgeItemRow
+        item={createDirectoryItem({
+          id: 'directory-1',
+          status: 'failed',
+          error: KNOWLEDGE_ITEM_ERROR_DIRECTORY_NOT_MIGRATED
+        })}
+        {...defaultHandlers}
+      />
     )
+
+    // Red failure label with the localized migration-failed tooltip.
+    expect(screen.getByText('失败')).toBeInTheDocument()
+    expect(screen.getByRole('tooltip')).toHaveTextContent('该文件夹内容迁移失败')
+
+    // Re-indexing restores the index, but there are no chunks to view yet.
+    fireEvent.click(screen.getByRole('button', { name: '更多' }))
+    expect(screen.getByRole('button', { name: '重新索引' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '查看 Chunks' })).not.toBeInTheDocument()
+  })
+
+  it('renders the processing status label for in-flight items', () => {
+    render(<KnowledgeItemRow item={createFileItem({ id: 'file-1', status: 'reading' })} {...defaultHandlers} />)
 
     expect(screen.getByText('文件处理')).toBeInTheDocument()
   })
@@ -273,7 +262,7 @@ describe('KnowledgeItemRow', () => {
   it('calls onClick when the row is clicked', () => {
     const handleClick = vi.fn()
 
-    renderKnowledgeItemRow(
+    render(
       <KnowledgeItemRow
         item={createUrlItem({ id: 'url-1', source: 'https://example.com/product-docs' })}
         {...defaultHandlers}
@@ -289,7 +278,7 @@ describe('KnowledgeItemRow', () => {
   it('does not call onClick for non-completed items', () => {
     const handleClick = vi.fn()
 
-    renderKnowledgeItemRow(
+    render(
       <KnowledgeItemRow
         item={createUrlItem({ id: 'url-1', source: 'https://example.com/product-docs', status: 'processing' })}
         {...defaultHandlers}
@@ -303,7 +292,7 @@ describe('KnowledgeItemRow', () => {
   })
 
   it('renders the more button', () => {
-    renderKnowledgeItemRow(
+    render(
       <KnowledgeItemRow
         item={createUrlItem({ id: 'url-1', source: 'https://example.com/product-docs' })}
         {...defaultHandlers}
@@ -316,7 +305,7 @@ describe('KnowledgeItemRow', () => {
   it('does not call onClick when the more button is clicked', () => {
     const handleClick = vi.fn()
 
-    renderKnowledgeItemRow(
+    render(
       <KnowledgeItemRow
         item={createUrlItem({ id: 'url-1', source: 'https://example.com/product-docs' })}
         {...defaultHandlers}
@@ -330,7 +319,7 @@ describe('KnowledgeItemRow', () => {
   })
 
   it('opens the more menu with placeholder actions', () => {
-    renderKnowledgeItemRow(
+    render(
       <KnowledgeItemRow
         item={createUrlItem({ id: 'url-1', source: 'https://example.com/product-docs' })}
         {...defaultHandlers}
@@ -348,7 +337,7 @@ describe('KnowledgeItemRow', () => {
   it('does not call onClick when a more menu action is clicked', () => {
     const handleClick = vi.fn()
 
-    renderKnowledgeItemRow(
+    render(
       <KnowledgeItemRow
         item={createUrlItem({ id: 'url-1', source: 'https://example.com/product-docs' })}
         {...defaultHandlers}
@@ -366,7 +355,7 @@ describe('KnowledgeItemRow', () => {
     const handleClick = vi.fn()
     const handlePreviewSource = vi.fn()
 
-    renderKnowledgeItemRow(
+    render(
       <KnowledgeItemRow
         item={createUrlItem({ id: 'url-1', source: 'https://example.com/product-docs' })}
         {...defaultHandlers}
@@ -387,7 +376,7 @@ describe('KnowledgeItemRow', () => {
   it('shows a failure toast when preview source rejects', async () => {
     const handlePreviewSource = vi.fn().mockRejectedValue(new Error('preview failed'))
 
-    renderKnowledgeItemRow(
+    render(
       <KnowledgeItemRow
         item={createUrlItem({ id: 'url-1', source: 'https://example.com/product-docs' })}
         {...defaultHandlers}
@@ -407,7 +396,7 @@ describe('KnowledgeItemRow', () => {
     const handleClick = vi.fn()
     const handleViewChunks = vi.fn()
 
-    renderKnowledgeItemRow(
+    render(
       <KnowledgeItemRow
         item={createUrlItem({ id: 'url-1', source: 'https://example.com/product-docs' })}
         {...defaultHandlers}
@@ -426,9 +415,7 @@ describe('KnowledgeItemRow', () => {
   it.each(['idle', 'processing', 'reading', 'embedding', 'failed', 'deleting'] as const)(
     'hides view chunks for %s leaf items',
     (status) => {
-      renderKnowledgeItemRow(
-        <KnowledgeItemRow item={createUrlItem({ id: `url-${status}`, status })} {...defaultHandlers} />
-      )
+      render(<KnowledgeItemRow item={createUrlItem({ id: `url-${status}`, status })} {...defaultHandlers} />)
 
       fireEvent.click(screen.getByRole('button', { name: '更多' }))
 
@@ -441,7 +428,7 @@ describe('KnowledgeItemRow', () => {
     const handleClick = vi.fn()
     const handleDelete = vi.fn()
 
-    renderKnowledgeItemRow(
+    render(
       <KnowledgeItemRow
         item={createUrlItem({ id: 'url-1', source: 'https://example.com/product-docs' })}
         {...defaultHandlers}
@@ -462,7 +449,7 @@ describe('KnowledgeItemRow', () => {
   it('shows a failure toast when delete rejects', async () => {
     const handleDelete = vi.fn().mockRejectedValue(new Error('delete failed'))
 
-    renderKnowledgeItemRow(
+    render(
       <KnowledgeItemRow
         item={createUrlItem({ id: 'url-1', source: 'https://example.com/product-docs' })}
         {...defaultHandlers}
@@ -482,7 +469,7 @@ describe('KnowledgeItemRow', () => {
     const handleClick = vi.fn()
     const handleReindex = vi.fn()
 
-    renderKnowledgeItemRow(
+    render(
       <KnowledgeItemRow
         item={createUrlItem({ id: 'url-1', source: 'https://example.com/product-docs' })}
         {...defaultHandlers}
@@ -503,7 +490,7 @@ describe('KnowledgeItemRow', () => {
   it('shows a failure toast when reindex rejects', async () => {
     const handleReindex = vi.fn().mockRejectedValue(new Error('reindex failed'))
 
-    renderKnowledgeItemRow(
+    render(
       <KnowledgeItemRow
         item={createUrlItem({ id: 'url-1', source: 'https://example.com/product-docs' })}
         {...defaultHandlers}
@@ -520,9 +507,7 @@ describe('KnowledgeItemRow', () => {
   })
 
   it.each(['completed', 'failed'] as const)('shows reindex for %s items', (status) => {
-    renderKnowledgeItemRow(
-      <KnowledgeItemRow item={createUrlItem({ id: `url-${status}`, status })} {...defaultHandlers} />
-    )
+    render(<KnowledgeItemRow item={createUrlItem({ id: `url-${status}`, status })} {...defaultHandlers} />)
 
     fireEvent.click(screen.getByRole('button', { name: '更多' }))
 
@@ -532,9 +517,7 @@ describe('KnowledgeItemRow', () => {
   it.each(['idle', 'processing', 'reading', 'embedding', 'deleting'] as const)(
     'hides reindex for %s leaf items',
     (status) => {
-      renderKnowledgeItemRow(
-        <KnowledgeItemRow item={createUrlItem({ id: `url-${status}`, status })} {...defaultHandlers} />
-      )
+      render(<KnowledgeItemRow item={createUrlItem({ id: `url-${status}`, status })} {...defaultHandlers} />)
 
       fireEvent.click(screen.getByRole('button', { name: '更多' }))
 

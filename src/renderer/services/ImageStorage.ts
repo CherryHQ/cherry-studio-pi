@@ -1,8 +1,6 @@
 import { loggerService } from '@logger'
+import db from '@renderer/databases'
 import { convertToBase64 } from '@renderer/utils'
-
-import { storageV2DexieSettingsMirrorService } from './StorageV2DexieSettingsMirrorService'
-import { storageV2DexieSettingsRecoveryService } from './StorageV2DexieSettingsRecoveryService'
 
 const logger = loggerService.withContext('ImageStorage')
 
@@ -13,31 +11,41 @@ export default class ImageStorage {
     const id = IMAGE_PREFIX + key
     try {
       if (typeof value === 'string') {
-        // string（emoji）
-        await storageV2DexieSettingsMirrorService.putSettingAndFlush({ id, value })
+        // Pre-encoded string value, such as an emoji or data URL.
+        if (await db.settings.get(id)) {
+          await db.settings.update(id, { value })
+          return
+        }
+        await db.settings.add({ id, value })
       } else {
         // file image
         const base64Image = await convertToBase64(value)
         if (typeof base64Image === 'string') {
-          await storageV2DexieSettingsMirrorService.putSettingAndFlush({ id, value: base64Image })
+          if (await db.settings.get(id)) {
+            await db.settings.update(id, { value: base64Image })
+            return
+          }
+          await db.settings.add({ id, value: base64Image })
         }
       }
     } catch (error) {
       logger.error('Error storing the image', error as Error)
+      throw error
     }
   }
 
   static async get(key: string): Promise<string> {
     const id = IMAGE_PREFIX + key
-    return (
-      (await storageV2DexieSettingsRecoveryService.getSetting<string>(id, 'image-storage-get-missing'))?.value ?? ''
-    )
+    return (await db.settings.get(id))?.value
   }
 
   static async remove(key: string): Promise<void> {
     const id = IMAGE_PREFIX + key
     try {
-      await storageV2DexieSettingsMirrorService.deleteSettingAndFlush(id, { strict: true })
+      const record = await db.settings.get(id)
+      if (record) {
+        await db.settings.delete(id)
+      }
     } catch (error) {
       logger.error('Error removing the image', error as Error)
       throw error

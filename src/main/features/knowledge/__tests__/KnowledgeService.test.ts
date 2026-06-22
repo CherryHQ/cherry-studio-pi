@@ -7,7 +7,6 @@ import {
   type KnowledgeBase,
   type KnowledgeItemOf
 } from '@shared/data/types/knowledge'
-import { IpcChannel } from '@shared/IpcChannel'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type * as PathStorage from '../utils/storage/pathStorage'
@@ -42,7 +41,9 @@ const {
   fsLstatMock,
   fsStatMock,
   listMaterialUnitsMock,
-  storeSearchMock
+  storeSearchMock,
+  probeKnowledgeFileMock,
+  probeKnowledgeSourcePathMock
 } = vi.hoisted(() => ({
   cancelManyMock: vi.fn(),
   cancelMock: vi.fn(),
@@ -73,7 +74,9 @@ const {
   fsLstatMock: vi.fn(),
   fsStatMock: vi.fn(),
   listMaterialUnitsMock: vi.fn(),
-  storeSearchMock: vi.fn()
+  storeSearchMock: vi.fn(),
+  probeKnowledgeFileMock: vi.fn(),
+  probeKnowledgeSourcePathMock: vi.fn()
 }))
 
 vi.mock('@application', async () => {
@@ -122,7 +125,6 @@ vi.mock('@main/core/lifecycle', async (importOriginal) => {
   const actual = await importOriginal<typeof LifecycleModule>()
 
   class MockBaseService {
-    ipcHandle = vi.fn()
     registerDisposable = vi.fn((disposableOrFn: { dispose: () => void } | (() => void)) => {
       return typeof disposableOrFn === 'function' ? { dispose: disposableOrFn } : disposableOrFn
     })
@@ -166,7 +168,9 @@ vi.mock('../utils/storage/pathStorage', async () => {
   return {
     ...actual,
     copyFileIntoKnowledgeBaseAt: copyFileIntoKnowledgeBaseAtMock,
-    deleteKnowledgeItemFilesBestEffort: deleteKnowledgeItemFilesBestEffortMock
+    deleteKnowledgeItemFilesBestEffort: deleteKnowledgeItemFilesBestEffortMock,
+    probeKnowledgeFile: probeKnowledgeFileMock,
+    probeKnowledgeSourcePath: probeKnowledgeSourcePathMock
   }
 })
 
@@ -234,7 +238,7 @@ function createDirectoryItem(
     baseId: 'kb-1',
     groupId,
     type: 'directory',
-    data: { source: id, path: `/docs/${id}` },
+    data: { source: id },
     ...lifecycle,
     createdAt: '2026-04-08T00:00:00.000Z',
     updatedAt: '2026-04-08T00:00:00.000Z'
@@ -303,6 +307,10 @@ describe('KnowledgeService', () => {
       birthtime: new Date('2026-04-08T00:00:00.000Z')
     })
     fsLstatMock.mockRejectedValue(Object.assign(new Error('missing'), { code: 'ENOENT' }))
+    // Reindex source-existence gate: default every source readable so existing reindex tests are
+    // unaffected; the missing/unverifiable-source tests override these per case.
+    probeKnowledgeFileMock.mockResolvedValue('readable')
+    probeKnowledgeSourcePathMock.mockResolvedValue('readable')
     copyFileIntoKnowledgeBaseAtMock.mockImplementation(
       async (_baseId: string, _sourcePath: string, relativePath: string) => relativePath
     )
@@ -362,7 +370,7 @@ describe('KnowledgeService', () => {
     ])
   })
 
-  it('registers formal knowledge job handlers and caller-facing IPC handlers', () => {
+  it('registers formal knowledge job handlers', () => {
     const service = new KnowledgeService()
 
     ;(service as unknown as { onInit: () => void }).onInit()
@@ -373,18 +381,6 @@ describe('KnowledgeService', () => {
       'knowledge.check-file-processing-result',
       'knowledge.delete-subtree',
       'knowledge.reindex-subtree'
-    ])
-    expect(
-      (service as unknown as { ipcHandle: ReturnType<typeof vi.fn> }).ipcHandle.mock.calls.map((call) => call[0])
-    ).toEqual([
-      IpcChannel.Knowledge_CreateBase,
-      IpcChannel.Knowledge_RestoreBase,
-      IpcChannel.Knowledge_DeleteBase,
-      IpcChannel.Knowledge_AddItems,
-      IpcChannel.Knowledge_DeleteItems,
-      IpcChannel.Knowledge_ReindexItems,
-      IpcChannel.Knowledge_Search,
-      IpcChannel.Knowledge_ListItemChunks
     ])
   })
 
@@ -1100,6 +1096,19 @@ describe('KnowledgeService', () => {
     expect(copyFileIntoKnowledgeBaseAtMock).toHaveBeenCalledWith('kb-1', '/Users/me/c/brief.md', 'brief_1.md')
   })
 
+  it('rejects unsupported uploaded file extensions before copying files', async () => {
+    const service = new KnowledgeService()
+    knowledgeBaseGetByIdMock.mockResolvedValue(createBase({ fileProcessorId: null }))
+
+    await expect(
+      service.addItems('kb-1', [{ type: 'file', data: { source: '/Users/me/app.exe', path: '/Users/me/app.exe' } }])
+    ).rejects.toThrow('Unsupported knowledge file type: /Users/me/app.exe')
+
+    expect(knowledgeItemCreateMock).not.toHaveBeenCalled()
+    expect(copyFileIntoKnowledgeBaseAtMock).not.toHaveBeenCalled()
+    expect(fileProcessingStartJobMock).not.toHaveBeenCalled()
+  })
+
   it('passes the parent job when starting file processing during reindex', async () => {
     const service = new KnowledgeService()
     const processingFile = createFileItem('file-1', 'kb-1', '/docs/source.pdf', 'processing')
@@ -1407,6 +1416,76 @@ describe('KnowledgeService', () => {
 
     expect(enqueueMock).not.toHaveBeenCalled()
     expect(knowledgeItemSetSubtreeStatusMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects reindex of a directory whose source folder no longer exists, without deleting its vectors', async () => {
+    const service = new KnowledgeService()
+    // A v1-migrated folder: completed, but its original folder path is gone (untrustworthy v1 path)
+    // and its child carries a virtual relativePath with no raw/ file behind it.
+    const root = createDirectoryItem('dir-1', null, 'completed')
+    const migratedChild: KnowledgeItemOf<'file'> = {
+      ...createFileItem('file-1', 'kb-1', '/legacy/abs/x.md', 'completed'),
+      groupId: 'dir-1',
+      data: { source: '/legacy/abs/x.md', relativePath: 'file-1' }
+    }
+    probeKnowledgeSourcePathMock.mockResolvedValue('missing')
+    knowledgeItemGetByIdMock.mockResolvedValue(root)
+    knowledgeItemGetSubtreeItemsMock.mockImplementation(
+      async (_baseId: string, _rootIds: string[], options: { includeRoots?: boolean } = {}) =>
+        options.includeRoots ? [root, migratedChild] : [migratedChild]
+    )
+
+    await expect(service.reindexItems('kb-1', ['dir-1'])).rejects.toMatchObject({
+      code: ErrorCode.VALIDATION_ERROR,
+      message:
+        'Cannot reindex a knowledge item whose source file or folder no longer exists; delete it and add it again to rebuild'
+    })
+
+    // The reindex-subtree job — which deletes vectors before re-reading — is never enqueued,
+    // so the migrated vectors survive.
+    expect(enqueueMock).not.toHaveBeenCalled()
+    expect(knowledgeItemSetSubtreeStatusMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects reindex with a retry hint when a directory source cannot be verified (transient error)', async () => {
+    const service = new KnowledgeService()
+    const root = createDirectoryItem('dir-1', null, 'completed')
+    // A transient/permission error (not ENOENT): the folder may still exist, so the user must be
+    // told to retry — never to delete and re-add a source that is probably still there.
+    probeKnowledgeSourcePathMock.mockResolvedValue('unverifiable')
+    knowledgeItemGetByIdMock.mockResolvedValue(root)
+    knowledgeItemGetSubtreeItemsMock.mockImplementation(
+      async (_baseId: string, _rootIds: string[], options: { includeRoots?: boolean } = {}) =>
+        options.includeRoots ? [root] : []
+    )
+
+    await expect(service.reindexItems('kb-1', ['dir-1'])).rejects.toMatchObject({
+      code: ErrorCode.VALIDATION_ERROR,
+      message: 'Could not verify the knowledge item source (it may be temporarily unavailable); please try again'
+    })
+
+    // No destructive action: the existing vectors are kept and nothing is enqueued.
+    expect(enqueueMock).not.toHaveBeenCalled()
+    expect(knowledgeItemSetSubtreeStatusMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects reindex of a file whose source file no longer exists on disk', async () => {
+    const service = new KnowledgeService()
+    const root = createFileItem('file-1', 'kb-1', '/docs/gone.pdf', 'completed')
+    probeKnowledgeFileMock.mockResolvedValue('missing')
+    knowledgeItemGetByIdMock.mockResolvedValue(root)
+    knowledgeItemGetSubtreeItemsMock.mockImplementation(
+      async (_baseId: string, _rootIds: string[], options: { includeRoots?: boolean } = {}) =>
+        options.includeRoots ? [root] : []
+    )
+
+    await expect(service.reindexItems('kb-1', ['file-1'])).rejects.toMatchObject({
+      code: ErrorCode.VALIDATION_ERROR,
+      message:
+        'Cannot reindex a knowledge item whose source file or folder no longer exists; delete it and add it again to rebuild'
+    })
+
+    expect(enqueueMock).not.toHaveBeenCalled()
   })
 
   it('rejects a whole reindex batch when one root subtree is still active', async () => {

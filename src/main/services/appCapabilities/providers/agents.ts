@@ -8,6 +8,7 @@ import {
   listAgentsWithStorageV2Recovery
 } from '@main/services/agents/AgentStorageV2ReadThrough'
 import type { CreateTaskDto } from '@shared/data/api/schemas/agents'
+import { type UniqueModelId, UniqueModelIdSchema } from '@shared/data/types/model'
 
 import type { AppCapabilityDefinition } from '../types'
 import { okResult, sanitizeForAgent } from '../utils'
@@ -33,6 +34,7 @@ const TEXT_REQUIRED_ERROR_SUFFIX = '不能为空。'
 const BOOLEAN_ERROR_SUFFIX = '必须是布尔值。'
 const ARRAY_ERROR_SUFFIX = '必须是数组。'
 const OBJECT_ERROR_SUFFIX = '必须是对象。'
+const UNIQUE_MODEL_ID_ERROR_SUFFIX = '必须是 provider::model 格式的模型 ID。'
 const DEFAULT_TEXT_LABEL = '输入值'
 const PROVIDER_TYPE_LABEL = '服务商类型'
 const AGENT_SORT_FIELD_LABEL = '智能体排序字段'
@@ -119,6 +121,21 @@ function normalizeRequiredText(value: unknown, label: string) {
   const text = normalizeOptionalText(value, label)
   if (!text) throw new Error(label + TEXT_REQUIRED_ERROR_SUFFIX)
   return text
+}
+
+function parseUniqueModelId(value: string, label: string): UniqueModelId {
+  const parsed = UniqueModelIdSchema.safeParse(value)
+  if (!parsed.success) throw new Error(label + UNIQUE_MODEL_ID_ERROR_SUFFIX)
+  return parsed.data
+}
+
+function normalizeRequiredModelId(value: unknown, label: string) {
+  return parseUniqueModelId(normalizeRequiredText(value, label), label)
+}
+
+function normalizeOptionalModelId(value: unknown, label: string) {
+  const text = normalizeOptionalText(value, label)
+  return text ? parseUniqueModelId(text, label) : undefined
 }
 
 function normalizeOptionalBoolean(value: unknown, label: string) {
@@ -360,7 +377,7 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: any, context) => {
         const inputObject = normalizeInputObject(input)
         const name = normalizeRequiredText(inputObject.name, AGENT_NAME_LABEL)
-        const model = normalizeRequiredText(inputObject.model, AGENT_MODEL_LABEL)
+        const model = normalizeRequiredModelId(inputObject.model, AGENT_MODEL_LABEL)
         const sessionName =
           normalizeOptionalText(inputObject.sessionName, AGENT_SESSION_NAME_LABEL) || 'Default session'
         const accessiblePaths = normalizeOptionalTextArray(
@@ -375,8 +392,11 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
         const type = normalizeAgentType(inputObject.type)
         const description = normalizeOptionalText(inputObject.description, AGENT_DESCRIPTION_LABEL)
         const instructions = normalizeOptionalText(inputObject.instructions, AGENT_INSTRUCTIONS_LABEL)
-        const planModel = normalizeOptionalText(inputObject.planModel ?? inputObject.plan_model, AGENT_PLAN_MODEL_LABEL)
-        const smallModel = normalizeOptionalText(
+        const planModel = normalizeOptionalModelId(
+          inputObject.planModel ?? inputObject.plan_model,
+          AGENT_PLAN_MODEL_LABEL
+        )
+        const smallModel = normalizeOptionalModelId(
           inputObject.smallModel ?? inputObject.small_model,
           AGENT_SMALL_MODEL_LABEL
         )

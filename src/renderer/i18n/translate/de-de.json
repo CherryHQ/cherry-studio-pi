@@ -390,9 +390,6 @@
       },
       "label_one": "Sitzung",
       "label_other": "Sitzungen",
-      "orphan": {
-        "message": "[to be translated]:This session's agent is missing. The conversation is read-only until you switch to another session or create a new one."
-      },
       "reorder": {
         "error": {
           "failed": "Fehler beim Neuordnen der Sitzungen"
@@ -403,17 +400,20 @@
           "failed": "Sitzung aktualisieren fehlgeschlagen"
         }
       },
+      "workspace_status": {
+        "inaccessible": "Arbeitsbereichspfad ist nicht zugänglich: {{path}}",
+        "missing": "Arbeitsbereichspfad existiert nicht: {{path}}",
+        "not_directory": "Der Workspace-Pfad ist kein Verzeichnis: {{path}}"
+      },
+      "orphan": {
+        "message": "[to be translated]:This session's agent is missing. The conversation is read-only until you switch to another session or create a new one."
+      },
       "workspace": {
         "change": "[to be translated]:Change workspace",
         "create_failed": "[to be translated]:Failed to create workspace",
         "select": "[to be translated]:Select workspace",
         "select_failed": "[to be translated]:Failed to select workspace",
         "updated": "[to be translated]:Workspace updated"
-      },
-      "workspace_status": {
-        "inaccessible": "Arbeitsbereichspfad ist nicht zugänglich: {{path}}",
-        "missing": "Arbeitsbereichspfad existiert nicht: {{path}}",
-        "not_directory": "Der Workspace-Pfad ist kein Verzeichnis: {{path}}"
       }
     },
     "settings": {
@@ -593,9 +593,6 @@
       }
     },
     "sidebar_title": "Agenten",
-    "system_agent": {
-      "auto_triggered": "[to be translated]:System Agent checked automatically"
-    },
     "todo": {
       "mock": {
         "actions": {
@@ -789,10 +786,21 @@
       "error": {
         "failed": "Agent aktualisieren fehlgeschlagen"
       }
+    },
+    "warning": {
+      "enable_and_start": "Aktivieren & Starten",
+      "enable_server": "Bitte aktivieren Sie den API-Server, um Agent-Funktionen zu verwenden",
+      "enable_server_description": "Der API-Server muss aktiviert sein, damit Agents funktionieren. Sie können ihn direkt aktivieren oder in den Einstellungen konfigurieren.",
+      "server_not_running": "API-Server ist aktiviert, läuft aber nicht. Bitte überprüfen Sie die Serverkonfiguration.",
+      "server_not_running_description": "Der API-Server muss laufen, damit die Agents funktionieren. Sie können ihn direkt starten oder die Einstellungen überprüfen."
+    },
+    "system_agent": {
+      "auto_triggered": "[to be translated]:System Agent checked automatically"
     }
   },
   "apiGateway": {
     "actions": {
+      "copy": "Kopieren",
       "regenerate": "Neu generieren",
       "restart": {
         "button": "Neustarten",
@@ -805,6 +813,7 @@
       "title": "Autorisierungs-Header"
     },
     "authHeaderText": "Im Autorisierungs-Header verwenden:",
+    "configuration": "Konfiguration",
     "description": "Stellen Sie die KI-Funktionen von Cherry Studio über eine OpenAI-kompatible HTTP-API bereit",
     "documentation": {
       "title": "API-Dokumentation"
@@ -818,16 +827,17 @@
       },
       "port": {
         "description": "TCP-Portnummer des HTTP-Servers (1000-65535)",
+        "helpText": "Server stoppen, um Port zu ändern",
         "label": "Port"
       },
       "url": {
+        "copyTooltip": "URL kopieren",
         "label": "URL"
       }
     },
     "messages": {
       "apiKeyCopied": "API-Schlüssel in die Zwischenablage kopiert",
       "apiKeyRegenerated": "API-Schlüssel wurde neu generiert",
-      "invalidPort": "[to be translated]:Enter a port number between 1000 and 65535",
       "notEnabled": "API server is not enabled.",
       "operationFailed": "API-Server-Operation fehlgeschlagen:",
       "restartError": "API-Server-Neustart fehlgeschlagen:",
@@ -836,7 +846,9 @@
       "startError": "API-Server starten fehlgeschlagen:",
       "startSuccess": "API-Server erfolgreich gestartet",
       "stopError": "API-Server stoppen fehlgeschlagen:",
-      "stopSuccess": "API-Server erfolgreich gestoppt"
+      "stopSuccess": "API-Server erfolgreich gestoppt",
+      "urlCopied": "Server-URL in die Zwischenablage kopiert",
+      "invalidPort": "[to be translated]:Enter a port number between 1000 and 65535"
     },
     "status": {
       "running": "Läuft",
@@ -1269,11 +1281,11 @@
         "collapse_in": "Zum Falten hinzufügen",
         "collapse_out": "Aus Falten entfernen",
         "expand": "Ausklappen",
-        "external_app_not_found": "[to be translated]:External app not found: {{name}}",
         "file_not_found": "Datei nicht gefunden: {{path}}",
         "open_file": "Datei öffnen",
         "open_file_error": "Fehler beim Öffnen der Datei: {{path}}",
-        "reveal_in_finder": "Im Finder anzeigen"
+        "reveal_in_finder": "Im Finder anzeigen",
+        "external_app_not_found": "[to be translated]:External app not found: {{name}}"
       },
       "topics": "Themen",
       "translate": "Übersetzen nach {{target_language}}",
@@ -1659,11 +1671,12 @@
       "claude_code": "Anthropics offizieller KI-Coding-Assistent für die Kommandozeile",
       "gemini_cli": "Googles offizieller Gemini-Befehlszeilenassistent",
       "github_copilot_cli": "Offizieller Copilot-Befehlszeilenbegleiter von GitHub",
-      "iflow_cli": "iFlows Multi-Model-Kommandozeilenassistent",
       "kimi_cli": "Moonshots Kommandozeilenassistent Kimi",
       "openai_codex": "Offizielle Code-Generierungs-CLI von OpenAI",
       "opencode": "Open-Source-Multi-Model-Coding-Agent",
-      "qwen_code": "Alibaba Tongyis Open-Source-CLI-Coding-Tool"
+      "qoder_cli": "Alibaba Qoders agentisches Befehlszeilen-Coding-Tool",
+      "qwen_code": "Alibaba Tongyis Open-Source-CLI-Coding-Tool",
+      "iflow_cli": "iFlows Multi-Model-Kommandozeilenassistent"
     },
     "update_options": "Update-Optionen",
     "working_directory": "Arbeitsverzeichnis",
@@ -1737,7 +1750,6 @@
     "copy_failed": "Kopieren fehlgeschlagen",
     "current": "Aktuell",
     "cut": "Ausschneiden",
-    "decline": "Ablehnen",
     "default": "Standard",
     "delete": "Löschen",
     "delete_confirm": "Möchten Sie wirklich löschen?",
@@ -1844,7 +1856,8 @@
     "upload_image": "Bilddatei hochladen",
     "uploaded_image": "Hochgeladenes Bild",
     "warning": "Warnung",
-    "you": "Sie"
+    "you": "Sie",
+    "decline": "Ablehnen"
   },
   "dialog": {
     "all_files": "Alle Dateien",
@@ -1919,7 +1932,6 @@
     "detail": "Fehlerdetails",
     "details": "Details",
     "diagnosis": {
-      "abnormal_finish": "Antwort wurde abnormal beendet, bitte erneut versuchen oder Modell wechseln",
       "ai_button": "KI-Diagnose",
       "ai_done": "Diagnostiziert",
       "ai_loading": "Wird diagnostiziert",
@@ -1935,7 +1947,6 @@
       "model_conflict": "Diagnosemodell ist identisch mit dem fehlerhaften Modell",
       "network": "Verbindung zum Server nicht möglich, Netzwerk- oder Proxy-Einstellungen prüfen",
       "ocr": "OCR-Engine nicht initialisiert, OCR-Einstellungen prüfen",
-      "output_truncated": "Antwort hat die maximale Länge erreicht und wurde abgeschnitten",
       "parse": "Die KI hat eine ungültige Antwort zurückgegeben, bitte versuchen Sie es erneut oder wechseln Sie das Modell.",
       "payload": "Anfrageinhalt zu groß, bitte verringern Sie die Datei- oder Textgröße",
       "proxy": "Proxy- oder SSL-Zertifikatsfehler, überprüfen Sie die Proxy- und Netzwerkeinstellungen",
@@ -1943,7 +1954,9 @@
       "server": "Serverfehler, bitte später erneut versuchen",
       "stream": "Antwort unterbrochen, überprüfen Sie die Netzwerkstabilität oder versuchen Sie es erneut",
       "unknown": "Ein Fehler ist aufgetreten",
-      "view_details": "Details anzeigen"
+      "view_details": "Details anzeigen",
+      "abnormal_finish": "Antwort wurde abnormal beendet, bitte erneut versuchen oder Modell wechseln",
+      "output_truncated": "Antwort hat die maximale Länge erreicht und wurde abgeschnitten"
     },
     "errors": "Fehler",
     "finishReason": "Beendigungsgrund",
@@ -2051,11 +2064,11 @@
     "preview": {
       "error": "Datei konnte nicht geöffnet werden"
     },
-    "rename_failed": "[to be translated]:Rename failed",
     "size": "Größe",
     "text": "Text",
     "title": "Dateien",
-    "type": "Typ"
+    "type": "Typ",
+    "rename_failed": "[to be translated]:Rename failed"
   },
   "gpustack": {
     "keep_alive_time": {
@@ -2084,10 +2097,10 @@
         "newest": "Neueste zuerst",
         "oldest": "Älteste zuerst"
       },
-      "stats": "[to be translated]:Found {{count}} results in {{time}} seconds",
       "topics": {
         "empty": "Keine passenden Themen gefunden. Drücken Sie Enter, um alle Nachrichten zu durchsuchen"
-      }
+      },
+      "stats": "[to be translated]:Found {{count}} results in {{time}} seconds"
     },
     "title": "Themensuche"
   },
@@ -2185,6 +2198,7 @@
           "success": "Datenquelle zur Wissensbasis hinzugefügt"
         },
         "title": "Datenquelle hinzufügen",
+        "unsupported_files_skipped": "{{count}} nicht unterstützte Datei(en) übersprungen",
         "url": {
           "description": "Gib eine Webseiten-URL ein:",
           "help": "Der Seitentext wird automatisch abgerufen, in Blöcke unterteilt und indiziert.",
@@ -2194,12 +2208,12 @@
         }
       },
       "bulk": {
-        "cancel": "Abbrechen",
         "delete": "Löschen",
         "delete_confirm_description": "{{count}} ausgewählte Datenquellen löschen? Dies kann nicht rückgängig gemacht werden.",
         "delete_confirm_title": "Ausgewählte Datenquellen löschen?",
         "reindex": "Neuindizierung",
-        "selected_count": "{{count}} ausgewählt"
+        "selected_count": "{{count}} ausgewählt",
+        "cancel": "Abbrechen"
       },
       "chunks_count": "{{count}} Chunks",
       "delete_confirm_description": "Diese Datenquelle und ihre Indexdaten können nach dem Löschen nicht wiederhergestellt werden.",
@@ -2264,6 +2278,7 @@
     "embedding_model_required": "Ein Einbettungsmodell für die Wissensbasis ist erforderlich",
     "empty": "Keine Wissensdatenbanken",
     "error": {
+      "directory_not_migrated": "Ordnermigration fehlgeschlagen. Bitte löschen Sie ihn und laden Sie ihn erneut hoch.",
       "failed_base_unknown": "Diese Wissensbasis ist während der Migration fehlgeschlagen. Erstellen Sie sie neu und wählen Sie ein neues Einbettungsmodell.",
       "failed_to_create": "Fehler beim Erstellen der Wissensdatenbank",
       "failed_to_delete": "Fehler beim Löschen der Wissensdatenbank",
@@ -2496,18 +2511,6 @@
             "empty": "Keine gebunden",
             "label": "MCP-Server (id)"
           },
-          "mode": {
-            "option": {
-              "enhanced": {
-                "desc": "[to be translated]:Best for more complex scenarios. Uses the Claude Agent SDK, with stronger behavior but usually slower responses and higher token usage.",
-                "title": "[to be translated]:Enhanced mode"
-              },
-              "standard": {
-                "desc": "[to be translated]:Best for most cases. Uses Pi Agent, responds faster, uses fewer tokens, and matches the default Cherry Studio Pi experience.",
-                "title": "[to be translated]:Standard mode"
-              }
-            }
-          },
           "model": {
             "help": "UniqueModelId; wird später zu einem Picker, der auf /models basiert, wechseln",
             "hint": "Hauptbeweisführung und Ausführung",
@@ -2540,6 +2543,18 @@
             "help": "Wenn aktiviert, wird bypassPermissions automatisch gewährt",
             "label": "Seelenmodus"
           },
+          "mode": {
+            "option": {
+              "enhanced": {
+                "desc": "[to be translated]:Best for more complex scenarios. Uses the Claude Agent SDK, with stronger behavior but usually slower responses and higher token usage.",
+                "title": "[to be translated]:Enhanced mode"
+              },
+              "standard": {
+                "desc": "[to be translated]:Best for most cases. Uses Pi Agent, responds faster, uses fewer tokens, and matches the default Cherry Studio Pi experience.",
+                "title": "[to be translated]:Standard mode"
+              }
+            }
+          },
           "workspace": {
             "auto": "[to be translated]:Create a dedicated workspace automatically",
             "change": "[to be translated]:Change directory",
@@ -2560,11 +2575,6 @@
             "desc": "Agent-Name, Beschreibung und primäres Modell",
             "label": "Grundlegend",
             "title": "Grundlegend"
-          },
-          "mode": {
-            "desc": "[to be translated]:Choose how this agent runs under the hood",
-            "label": "[to be translated]:Runtime mode",
-            "title": "[to be translated]:Choose runtime mode"
           },
           "permission": {
             "desc": "Autorisierungsumfang für Agentenaktionen",
@@ -2592,6 +2602,11 @@
               "tools": "Integrierte Werkzeuge"
             },
             "title": "Tools & Runtime"
+          },
+          "mode": {
+            "desc": "[to be translated]:Choose how this agent runs under the hood",
+            "label": "[to be translated]:Runtime mode",
+            "title": "[to be translated]:Choose runtime mode"
           },
           "workspace": {
             "desc": "[to be translated]:Choose where this agent reads and writes local project files",
@@ -3165,10 +3180,6 @@
       "completed": "Abgeschlossen",
       "error": "Fehler aufgetreten",
       "groupHeader": "{{count}} Toolaufrufe",
-      "groupHeaderMessages": "{{count}} Nachrichten",
-      "groupHeaderThinking": "{{count}} Gedanken",
-      "groupHeaderWithDetails": "{{toolCount}} Toolaufrufe · {{thinkingCount}} Gedanken · {{messageCount}} Nachrichten",
-      "groupHeaderWithMessages": "{{toolCount}} Toolaufrufe · {{messageCount}} Nachrichten",
       "invoking": "Wird aufgerufen",
       "labels": {
         "bash": "Bash",
@@ -3229,7 +3240,11 @@
         "plan_other": "{{count}} Pläne",
         "result_one": "{{count}} Ergebnis",
         "result_other": "{{count}} Ergebnisse"
-      }
+      },
+      "groupHeaderMessages": "{{count}} Nachrichten",
+      "groupHeaderThinking": "{{count}} Gedanken",
+      "groupHeaderWithDetails": "{{toolCount}} Toolaufrufe · {{thinkingCount}} Gedanken · {{messageCount}} Nachrichten",
+      "groupHeaderWithMessages": "{{toolCount}} Toolaufrufe · {{messageCount}} Nachrichten"
     },
     "topic": {
       "added": "Thema erfolgreich hinzugefügt"
@@ -3650,12 +3665,6 @@
     "title": "Ollama"
   },
   "onboarding": {
-    "privacy": {
-      "accept_and_continue": "Akzeptieren und fortfahren",
-      "notice": "Durch die Fortsetzung bestätigen Sie, dass Sie gelesen haben und zustimmen",
-      "period": ".",
-      "policy": "Datenschutzerklärung"
-    },
     "select_model": {
       "change_later": "Sie können dies jederzeit in den Einstellungen ändern.",
       "start": "Loslegen",
@@ -3674,6 +3683,12 @@
       "setup_hint": "Bitte konfigurieren Sie mindestens einen Anbieter für die beste Erfahrung.",
       "subtitle": "Genießen Sie erstklassige KI-Dienste mit CherryIN",
       "title": "Willkommen bei Cherry Studio"
+    },
+    "privacy": {
+      "accept_and_continue": "Akzeptieren und fortfahren",
+      "notice": "Durch die Fortsetzung bestätigen Sie, dass Sie gelesen haben und zustimmen",
+      "period": ".",
+      "policy": "Datenschutzerklärung"
     }
   },
   "openclaw": {
@@ -4161,14 +4176,6 @@
     "source": "Quellcode anzeigen",
     "zoom_in": "Vergrößern",
     "zoom_out": "Verkleinern"
-  },
-  "privacy_policy": {
-    "title": "Datenschutzrichtlinie"
-  },
-  "privacy_policy_update": {
-    "description_before_link": "Wir haben die Datenschutzrichtlinie aktualisiert. Bitte lesen Sie die neueste ",
-    "policy": "Datenschutzrichtlinie",
-    "title": "Datenschutzrichtlinie aktualisiert"
   },
   "prompts": {
     "explanation": "Helfen Sie mir, dieses Konzept zu erklären",
@@ -4821,117 +4828,6 @@
       "description": "Verbinden Sie Agenten mit Messaging-Plattformen wie Telegram, Feishu, Discord und vielen mehr.",
       "title": "Kanäle"
     },
-    "componentLab": {
-      "agentSelector": {
-        "clearSelection": "Klar",
-        "configDescription": "Schalten Sie Props um, um das Verhalten der Komponente in der Vorschau anzuzeigen",
-        "configTitle": "Konfig",
-        "currentProps": "Aktuelle Requisiten",
-        "description": "AgentSelector liest jetzt echte /agents-Daten der DataApi, um die Auswahl der ID/des Elements, das Anheften, Sortieren und Suchverhalten zu überprüfen.",
-        "emptyShellNotice": "Diese Vorschau verwendet die echte Agentenliste, die von der /agents DataApi zurückgegeben wird.",
-        "lastOnChange": "Neuestes onChange",
-        "previewDescription": "Klicken Sie auf den Auslöser, um den Selektor zu öffnen",
-        "previewTitle": "Vorschau",
-        "title": "Agenten-Auswahl",
-        "triggerPlaceholder": "Wählen Sie einen Agenten",
-        "valueProp": "Aktueller Wert"
-      },
-      "agentTodoList": {
-        "title": "Agent-Aufgabenliste"
-      },
-      "assistantSelector": {
-        "clearSelection": "Klar",
-        "configDescription": "Schalten Sie Props um, um das Verhalten der Komponente in der Vorschau anzuzeigen",
-        "configTitle": "Konfig",
-        "currentProps": "Aktuelle Requisiten",
-        "description": "Bindet die AssistantSelector-Business-Komponente direkt ein, um das Verhalten bei Multi-/Single-Auswahl, ID/Element, Anheften, Sortierung und Suche zu überprüfen.",
-        "lastOnChange": "Neuestes onChange",
-        "previewDescription": "Klicken Sie auf den Auslöser, um den Selektor zu öffnen",
-        "previewTitle": "Vorschau",
-        "title": "Assistentenauswahl",
-        "triggerPlaceholder": "Wählen Sie einen Assistenten",
-        "triggerSelectedCount": "{{count}} Assistenten ausgewählt",
-        "valueProp": "Aktueller Wert"
-      },
-      "description": "Nur in der Entwicklung sichtbar, um die neue Modellauswahl direkt in der App zu testen.",
-      "fileProcessing": {
-        "artifact": {
-          "file": "Markdown-Datei",
-          "text": "Textergebnis"
-        },
-        "description": "Führe jeden konfigurierten Dateiprozessor über die echte Dateiverarbeitungs-IPC aus und vergleiche die Ergebnisse.",
-        "duration": "{{seconds}}s",
-        "jobId": "Auftrags-ID",
-        "markdown": {
-          "description": "Wählen Sie ein Dokument aus und führen Sie alle Dokument-zu-Markdown-Prozessoren aus.",
-          "fileFilterName": "Dokumente",
-          "noFile": "Kein Dokument ausgewählt",
-          "select": "Dokument auswählen",
-          "start": "Test markdown",
-          "title": "Markdown"
-        },
-        "noProcessors": "Keine Prozessoren unterstützen diese Funktion.",
-        "ocr": {
-          "description": "Wählen Sie ein Bild aus und führen Sie alle OCR-Prozessoren aus.",
-          "fileFilterName": "Bilder",
-          "noFile": "Kein Bild ausgewählt",
-          "select": "Bild auswählen",
-          "start": "Test-OCR",
-          "title": "OCR"
-        },
-        "processorCount": "{{count}} Prozessoren",
-        "status": {
-          "cancelled": "Abgesagt",
-          "completed": "Abgeschlossen",
-          "delayed": "Verzögert",
-          "failed": "Fehlgeschlagen",
-          "idle": "Leerlauf",
-          "pending": "Ausstehend",
-          "processing": "Verarbeitung",
-          "running": "Laufen",
-          "starting": "Start"
-        },
-        "title": "Dokumentenanalyse"
-      },
-      "label": "Komponentenlabor",
-      "modelSelector": {
-        "behaviorConfig": "Verhalten & Anzeige-Konfiguration",
-        "callbackEmpty": "Noch kein Komponenten-Callback erhalten",
-        "clearSelection": "Auswahl aufheben",
-        "configDescription": "Schalten Sie die oben genannten ModelSelector-Schlüsseleigenschaften um und untersuchen Sie den Eingabewert sowie die Callback-Nutzlasten unten.",
-        "configTitle": "Requisiten-Spielplatz",
-        "controlMultiSelectMode": "Gesteuerte Mehrfachauswahl-Modus",
-        "currentProps": "Aktuelle Props",
-        "defaultMultiSelectMode": "Standard-Mehrfachauswahlmodus",
-        "description": "Diese Seite bindet die aktuelle ModelSelector-Businesskomponente direkt ein, sodass wir Auswahl, Filterung, Suche und Anheftverhalten überprüfen können.",
-        "empty": "Derzeit sind keine Modelle verfügbar, daher kann die Auswahl noch nicht angezeigt werden.",
-        "lastModeChangeReturn": "Neuestes zu onMultiSelectModeChange Rückgabe",
-        "lastSelectReturn": "Neuestes onSelect Return",
-        "loading": "Modelle werden geladen...",
-        "modelId": "Modell-ID",
-        "multiSelectMode": "Mehrfachauswahlmodus",
-        "multiple": "mehrere",
-        "normalizedIds": "Normalisierte ausgewählte IDs",
-        "outputEmpty": "Noch keine Daten anzuzeigen",
-        "provider": "Anbieter",
-        "resetOutputs": "Ausgaben zurücksetzen",
-        "resultsDescription": "Dies zeigt die aktuelle Value-Prop, die normalisierten ausgewählten IDs und die neueste Callback-Ausgabe der Komponente.",
-        "resultsTitle": "Ausgaben & Zustand",
-        "selected": "Aktuelle Auswahl",
-        "selectedEmpty": "Noch kein Modell ausgewählt",
-        "selectionConfig": "Auswahlwert-Konfiguration",
-        "selectionType": "Auswahltyp",
-        "selectionTypeId": "Modell-IDs zurückgeben",
-        "selectionTypeModel": "Modellobjekte zurückgeben",
-        "showPinnedModels": "angeheftete Modelle anzeigen",
-        "showTagFilter": "showTagFilter",
-        "title": "Modell-Auswahl",
-        "triggerPlaceholder": "Wählen Sie ein Modell",
-        "triggerSelectedCount": "{{count}} Modelle ausgewählt",
-        "valueProp": "Aktueller Wertvorschlag"
-      },
-      "title": "Entwicklungskomponentenlabor"
-    },
     "data": {
       "app_data": {
         "copy_data_option": "Daten kopieren, wird nach Neustart automatisch vom Original- ins neue Verzeichnis kopiert",
@@ -4977,96 +4873,6 @@
       },
       "data": {
         "title": "Datenverzeichnis"
-      },
-      "data_sync": {
-        "auto_sync": "[to be translated]:Auto Sync",
-        "current_device": "[to be translated]:Current Device",
-        "diagnose": "[to be translated]:Diagnose",
-        "diagnosis": {
-          "checked_at": "[to be translated]:Checked at: {{time}}",
-          "device": "[to be translated]:Device: {{deviceId}}",
-          "title": "[to be translated]:WebDAV Diagnosis",
-          "write_path": "[to be translated]:Write path: {{path}}",
-          "write_success": "[to be translated]:WebDAV connection and write access are available."
-        },
-        "effective_path": "[to be translated]:Effective Sync Path",
-        "effective_path_help": "[to be translated]:This is the final WebDAV directory Cherry Studio Pi will read and write.",
-        "help": "[to be translated]:Sync local settings, providers, assistants, agents, conversations, knowledge data, notes, and runtime metadata through WebDAV.",
-        "interval": {
-          "day_one": "[to be translated]:Every day",
-          "hour_one": "[to be translated]:Every hour",
-          "hour_other": "[to be translated]:Every {{count}} hours",
-          "minute_one": "[to be translated]:Every minute",
-          "minute_other": "[to be translated]:Every {{count}} minutes",
-          "off": "[to be translated]:Off"
-        },
-        "last_result": "[to be translated]:Latest Result",
-        "method": "[to be translated]:Sync Method",
-        "method_value": "[to be translated]:WebDAV",
-        "password": "[to be translated]:Password",
-        "password_placeholder": "[to be translated]:WebDAV password",
-        "refresh_status": "[to be translated]:Refresh Status",
-        "remote_browser": {
-          "current_path": "[to be translated]:Current path: {{path}}",
-          "empty": "[to be translated]:No folders found",
-          "error_title": "[to be translated]:Unable to load remote directory",
-          "path_hint": "[to be translated]:You can continue using the configured path: {{path}}",
-          "path_hint_title": "[to be translated]:Directory path",
-          "refresh": "[to be translated]:Refresh",
-          "select": "[to be translated]:Select",
-          "select_current": "[to be translated]:Select Current",
-          "title": "[to be translated]:Browse WebDAV Directory",
-          "use_current_path": "[to be translated]:Use configured path",
-          "use_root": "[to be translated]:Use root"
-        },
-        "remote_path": "[to be translated]:Sync Directory",
-        "remote_path_browse": "[to be translated]:Browse",
-        "remote_path_help": "[to be translated]:Choose a dedicated WebDAV directory. Use the same directory on every device that should sync together.",
-        "restore_confirm_content": "[to be translated]:Restore the latest remote safety snapshot to this device? Current local data may be overwritten.",
-        "restore_confirm_title": "[to be translated]:Restore Latest Snapshot",
-        "restore_latest": "[to be translated]:Restore Latest",
-        "snapshot": {
-          "join_safety": "[to be translated]:Local safety snapshot: {{file}} ({{size}})",
-          "open_local": "[to be translated]:Show local snapshot",
-          "uploaded": "[to be translated]:Remote safety snapshot: {{file}} ({{size}})"
-        },
-        "storage": {
-          "blobs": "[to be translated]:Files: uploaded {{uploaded}}, downloaded {{downloaded}}",
-          "conflicts": "[to be translated]:Storage conflicts: {{count}}",
-          "records": "[to be translated]:Storage records: uploaded {{uploaded}}, downloaded {{downloaded}}",
-          "resolved_conflicts": "[to be translated]:Resolved storage conflicts: {{count}}"
-        },
-        "summary": {
-          "conflicts": "[to be translated]:Conflicts: {{count}}",
-          "deleted": "[to be translated]:Deleted: {{count}}",
-          "downloaded": "[to be translated]:Downloaded: {{count}}",
-          "error": "[to be translated]:Error: {{message}}",
-          "remote_path": "[to be translated]:Remote path: {{path}}",
-          "resolved_conflicts": "[to be translated]:Resolved conflicts: {{count}}",
-          "status_failed": "[to be translated]:Failed",
-          "status_success": "[to be translated]:Success",
-          "uploaded": "[to be translated]:Uploaded: {{count}}"
-        },
-        "sync": "[to be translated]:Sync",
-        "sync_now": "[to be translated]:Manual Sync",
-        "title": "[to be translated]:Data Sync",
-        "toast": {
-          "diagnose_failed": "[to be translated]:Diagnosis failed: {{message}}",
-          "diagnose_success": "[to be translated]:Diagnosis passed",
-          "open_snapshot_failed": "[to be translated]:Failed to open local safety snapshot: {{message}}",
-          "remote_path_selected": "[to be translated]:Selected WebDAV directory: {{path}}",
-          "restore_failed": "[to be translated]:Restore failed: {{message}}",
-          "restore_success": "[to be translated]:Restore completed",
-          "sync_failed": "[to be translated]:Data sync failed: {{message}}",
-          "sync_running": "[to be translated]:Data sync is still running.",
-          "sync_success": "[to be translated]:Data sync completed.",
-          "webdav_required": "[to be translated]:Please configure the WebDAV host, username, and password first."
-        },
-        "uninitialized": "[to be translated]:Not initialized",
-        "unresolved_conflicts": "[to be translated]:Unresolved Conflicts",
-        "username": "[to be translated]:Username",
-        "username_placeholder": "[to be translated]:WebDAV username",
-        "webdav_host": "[to be translated]:WebDAV Host"
       },
       "divider": {
         "basic": "Grundlegende Dateneinstellungen",
@@ -5632,6 +5438,96 @@
         "title": "Yuque-Konfiguration",
         "token": "Yuque Token",
         "token_placeholder": "Bitte Yuque-Token eingeben"
+      },
+      "data_sync": {
+        "auto_sync": "[to be translated]:Auto Sync",
+        "current_device": "[to be translated]:Current Device",
+        "diagnose": "[to be translated]:Diagnose",
+        "diagnosis": {
+          "checked_at": "[to be translated]:Checked at: {{time}}",
+          "device": "[to be translated]:Device: {{deviceId}}",
+          "title": "[to be translated]:WebDAV Diagnosis",
+          "write_path": "[to be translated]:Write path: {{path}}",
+          "write_success": "[to be translated]:WebDAV connection and write access are available."
+        },
+        "effective_path": "[to be translated]:Effective Sync Path",
+        "effective_path_help": "[to be translated]:This is the final WebDAV directory Cherry Studio Pi will read and write.",
+        "help": "[to be translated]:Sync local settings, providers, assistants, agents, conversations, knowledge data, notes, and runtime metadata through WebDAV.",
+        "interval": {
+          "day_one": "[to be translated]:Every day",
+          "hour_one": "[to be translated]:Every hour",
+          "hour_other": "[to be translated]:Every {{count}} hours",
+          "minute_one": "[to be translated]:Every minute",
+          "minute_other": "[to be translated]:Every {{count}} minutes",
+          "off": "[to be translated]:Off"
+        },
+        "last_result": "[to be translated]:Latest Result",
+        "method": "[to be translated]:Sync Method",
+        "method_value": "[to be translated]:WebDAV",
+        "password": "[to be translated]:Password",
+        "password_placeholder": "[to be translated]:WebDAV password",
+        "refresh_status": "[to be translated]:Refresh Status",
+        "remote_browser": {
+          "current_path": "[to be translated]:Current path: {{path}}",
+          "empty": "[to be translated]:No folders found",
+          "error_title": "[to be translated]:Unable to load remote directory",
+          "path_hint": "[to be translated]:You can continue using the configured path: {{path}}",
+          "path_hint_title": "[to be translated]:Directory path",
+          "refresh": "[to be translated]:Refresh",
+          "select": "[to be translated]:Select",
+          "select_current": "[to be translated]:Select Current",
+          "title": "[to be translated]:Browse WebDAV Directory",
+          "use_current_path": "[to be translated]:Use configured path",
+          "use_root": "[to be translated]:Use root"
+        },
+        "remote_path": "[to be translated]:Sync Directory",
+        "remote_path_browse": "[to be translated]:Browse",
+        "remote_path_help": "[to be translated]:Choose a dedicated WebDAV directory. Use the same directory on every device that should sync together.",
+        "restore_confirm_content": "[to be translated]:Restore the latest remote safety snapshot to this device? Current local data may be overwritten.",
+        "restore_confirm_title": "[to be translated]:Restore Latest Snapshot",
+        "restore_latest": "[to be translated]:Restore Latest",
+        "snapshot": {
+          "join_safety": "[to be translated]:Local safety snapshot: {{file}} ({{size}})",
+          "open_local": "[to be translated]:Show local snapshot",
+          "uploaded": "[to be translated]:Remote safety snapshot: {{file}} ({{size}})"
+        },
+        "storage": {
+          "blobs": "[to be translated]:Files: uploaded {{uploaded}}, downloaded {{downloaded}}",
+          "conflicts": "[to be translated]:Storage conflicts: {{count}}",
+          "records": "[to be translated]:Storage records: uploaded {{uploaded}}, downloaded {{downloaded}}",
+          "resolved_conflicts": "[to be translated]:Resolved storage conflicts: {{count}}"
+        },
+        "summary": {
+          "conflicts": "[to be translated]:Conflicts: {{count}}",
+          "deleted": "[to be translated]:Deleted: {{count}}",
+          "downloaded": "[to be translated]:Downloaded: {{count}}",
+          "error": "[to be translated]:Error: {{message}}",
+          "remote_path": "[to be translated]:Remote path: {{path}}",
+          "resolved_conflicts": "[to be translated]:Resolved conflicts: {{count}}",
+          "status_failed": "[to be translated]:Failed",
+          "status_success": "[to be translated]:Success",
+          "uploaded": "[to be translated]:Uploaded: {{count}}"
+        },
+        "sync": "[to be translated]:Sync",
+        "sync_now": "[to be translated]:Manual Sync",
+        "title": "[to be translated]:Data Sync",
+        "toast": {
+          "diagnose_failed": "[to be translated]:Diagnosis failed: {{message}}",
+          "diagnose_success": "[to be translated]:Diagnosis passed",
+          "open_snapshot_failed": "[to be translated]:Failed to open local safety snapshot: {{message}}",
+          "remote_path_selected": "[to be translated]:Selected WebDAV directory: {{path}}",
+          "restore_failed": "[to be translated]:Restore failed: {{message}}",
+          "restore_success": "[to be translated]:Restore completed",
+          "sync_failed": "[to be translated]:Data sync failed: {{message}}",
+          "sync_running": "[to be translated]:Data sync is still running.",
+          "sync_success": "[to be translated]:Data sync completed.",
+          "webdav_required": "[to be translated]:Please configure the WebDAV host, username, and password first."
+        },
+        "uninitialized": "[to be translated]:Not initialized",
+        "unresolved_conflicts": "[to be translated]:Unresolved Conflicts",
+        "username": "[to be translated]:Username",
+        "username_placeholder": "[to be translated]:WebDAV username",
+        "webdav_host": "[to be translated]:WebDAV Host"
       }
     },
     "developer": {
@@ -6012,11 +5908,11 @@
         "selectProvider": "Anbieter auswählen:",
         "setToken": "Ihren Token eingeben",
         "success": "MCP-Server erfolgreich synchronisiert",
-        "timeout": "[to be translated]:Sync timed out after {{seconds}}s. Please check your network connection and try again.",
         "title": "Server synchronisieren",
         "tokenPlaceholder": "API-Token hier eingeben",
         "tokenRequired": "API-Token ist erforderlich",
-        "unauthorized": "Synchronisation nicht autorisiert"
+        "unauthorized": "Synchronisation nicht autorisiert",
+        "timeout": "[to be translated]:Sync timed out after {{seconds}}s. Please check your network connection and try again."
       },
       "system": "System",
       "tabs": {
@@ -6206,6 +6102,7 @@
       "disabled": "Versteckte Mini-Apps",
       "display_title": "Mini-App-Anzeigeeinstellungen",
       "empty": "Klicke auf das Ausblenden-Symbol bei einer App links, und sie wird hierher verschoben",
+      "hide_app": "{{name}} ausblenden",
       "open_link_external": {
         "title": "Neue-Fenster-Links im Browser öffnen"
       },
@@ -6217,6 +6114,7 @@
         "title": "Mini-Programm-Filter"
       },
       "reset_tooltip": "Auf Standard zurücksetzen",
+      "show_app": "Zeige {{name}}",
       "sidebar_description": "Aktive Mini-Apps in der Seitenleiste anzeigen",
       "sidebar_title": "Seitenleiste Aktive Mini-Apps-Anzeige",
       "title": "Mini-Apps-Einstellungen",
@@ -6264,11 +6162,11 @@
           "placeholder": "Beispiel: GPT-4",
           "tooltip": "Beispiel: GPT-4"
         },
-        "provider_enable_failed": "[to be translated]:The model was added, but the provider could not be enabled. Enable this provider first, otherwise these models will not appear in Chat or Agent model selectors.",
         "supported_text_delta": {
           "label": "Unterstützt inkrementelle Textausgabe",
           "tooltip": "Modell gibt Text inkrementell zurück statt alles auf einmal. Standardmäßig aktiviert, bei Nicht-Unterstützung deaktivieren"
-        }
+        },
+        "provider_enable_failed": "[to be translated]:The model was added, but the provider could not be enabled. Enable this provider first, otherwise these models will not appear in Chat or Agent model selectors."
       },
       "api_key": "API-Schlüssel",
       "base_url": "Basis-URL",
@@ -6519,7 +6417,8 @@
       "add": {
         "name": {
           "label": "Anbietername",
-          "placeholder": "Beispiel: OpenAI"
+          "placeholder": "Beispiel: OpenAI",
+          "required": "Bitte geben Sie den Namen des Anbieters ein"
         },
         "title": "Anbieter hinzufügen",
         "type": "Anbietertyp"
@@ -6630,7 +6529,8 @@
       "balance": "Guthaben",
       "base_url": {
         "label": "Basis-URL",
-        "placeholder": "https://api.example.com"
+        "placeholder": "https://api.example.com",
+        "required": "Bitte geben Sie die Basis-URL ein"
       },
       "basic_auth": {
         "label": "HTTP-Authentifizierung",
@@ -6707,7 +6607,6 @@
         "content": "Diesen Modellanbieter wirklich löschen?",
         "title": "Anbieter löschen"
       },
-      "delete_failed": "[to be translated]:Failed to delete provider",
       "dmxapi": {
         "platform_enterprise": "ssvip.DMXAPI.com (Unternehmen)",
         "platform_international": "www.DMXAPI.com (International)",
@@ -6827,7 +6726,8 @@
           "toggle_private_key_visibility": "[to be translated]:Toggle private key visibility",
           "toggle_project_id_visibility": "[to be translated]:Toggle project ID visibility"
         }
-      }
+      },
+      "delete_failed": "[to be translated]:Failed to delete provider"
     },
     "proxy": {
       "address": "Proxy-Adresse",
@@ -6998,10 +6898,12 @@
         },
         "features": {
           "document_to_markdown": {
-            "title": "Dokumentenverarbeitung"
+            "title": "Dokumentenverarbeitung",
+            "tooltip": "Zum Parsen von Dokumenten in Wissensdatenbanken"
           },
           "image_to_text": {
-            "title": "OCR"
+            "title": "OCR",
+            "tooltip": "Zum Erkennen von Text in Bildern für die Übersetzungsfunktion"
           }
         },
         "fields": {
@@ -7213,6 +7115,117 @@
     "zoom": {
       "reset": "Zurücksetzen",
       "title": "Zoom"
+    },
+    "componentLab": {
+      "agentSelector": {
+        "clearSelection": "Klar",
+        "configDescription": "Schalten Sie Props um, um das Verhalten der Komponente in der Vorschau anzuzeigen",
+        "configTitle": "Konfig",
+        "currentProps": "Aktuelle Requisiten",
+        "description": "AgentSelector liest jetzt echte /agents-Daten der DataApi, um die Auswahl der ID/des Elements, das Anheften, Sortieren und Suchverhalten zu überprüfen.",
+        "emptyShellNotice": "Diese Vorschau verwendet die echte Agentenliste, die von der /agents DataApi zurückgegeben wird.",
+        "lastOnChange": "Neuestes onChange",
+        "previewDescription": "Klicken Sie auf den Auslöser, um den Selektor zu öffnen",
+        "previewTitle": "Vorschau",
+        "title": "Agenten-Auswahl",
+        "triggerPlaceholder": "Wählen Sie einen Agenten",
+        "valueProp": "Aktueller Wert"
+      },
+      "agentTodoList": {
+        "title": "Agent-Aufgabenliste"
+      },
+      "assistantSelector": {
+        "clearSelection": "Klar",
+        "configDescription": "Schalten Sie Props um, um das Verhalten der Komponente in der Vorschau anzuzeigen",
+        "configTitle": "Konfig",
+        "currentProps": "Aktuelle Requisiten",
+        "description": "Bindet die AssistantSelector-Business-Komponente direkt ein, um das Verhalten bei Multi-/Single-Auswahl, ID/Element, Anheften, Sortierung und Suche zu überprüfen.",
+        "lastOnChange": "Neuestes onChange",
+        "previewDescription": "Klicken Sie auf den Auslöser, um den Selektor zu öffnen",
+        "previewTitle": "Vorschau",
+        "title": "Assistentenauswahl",
+        "triggerPlaceholder": "Wählen Sie einen Assistenten",
+        "triggerSelectedCount": "{{count}} Assistenten ausgewählt",
+        "valueProp": "Aktueller Wert"
+      },
+      "description": "Nur in der Entwicklung sichtbar, um die neue Modellauswahl direkt in der App zu testen.",
+      "fileProcessing": {
+        "artifact": {
+          "file": "Markdown-Datei",
+          "text": "Textergebnis"
+        },
+        "description": "Führe jeden konfigurierten Dateiprozessor über die echte Dateiverarbeitungs-IPC aus und vergleiche die Ergebnisse.",
+        "duration": "{{seconds}}s",
+        "jobId": "Auftrags-ID",
+        "markdown": {
+          "description": "Wählen Sie ein Dokument aus und führen Sie alle Dokument-zu-Markdown-Prozessoren aus.",
+          "fileFilterName": "Dokumente",
+          "noFile": "Kein Dokument ausgewählt",
+          "select": "Dokument auswählen",
+          "start": "Test markdown",
+          "title": "Markdown"
+        },
+        "noProcessors": "Keine Prozessoren unterstützen diese Funktion.",
+        "ocr": {
+          "description": "Wählen Sie ein Bild aus und führen Sie alle OCR-Prozessoren aus.",
+          "fileFilterName": "Bilder",
+          "noFile": "Kein Bild ausgewählt",
+          "select": "Bild auswählen",
+          "start": "Test-OCR",
+          "title": "OCR"
+        },
+        "processorCount": "{{count}} Prozessoren",
+        "status": {
+          "cancelled": "Abgesagt",
+          "completed": "Abgeschlossen",
+          "delayed": "Verzögert",
+          "failed": "Fehlgeschlagen",
+          "idle": "Leerlauf",
+          "pending": "Ausstehend",
+          "processing": "Verarbeitung",
+          "running": "Laufen",
+          "starting": "Start"
+        },
+        "title": "Dokumentenanalyse"
+      },
+      "label": "Komponentenlabor",
+      "modelSelector": {
+        "behaviorConfig": "Verhalten & Anzeige-Konfiguration",
+        "callbackEmpty": "Noch kein Komponenten-Callback erhalten",
+        "clearSelection": "Auswahl aufheben",
+        "configDescription": "Schalten Sie die oben genannten ModelSelector-Schlüsseleigenschaften um und untersuchen Sie den Eingabewert sowie die Callback-Nutzlasten unten.",
+        "configTitle": "Requisiten-Spielplatz",
+        "controlMultiSelectMode": "Gesteuerte Mehrfachauswahl-Modus",
+        "currentProps": "Aktuelle Props",
+        "defaultMultiSelectMode": "Standard-Mehrfachauswahlmodus",
+        "description": "Diese Seite bindet die aktuelle ModelSelector-Businesskomponente direkt ein, sodass wir Auswahl, Filterung, Suche und Anheftverhalten überprüfen können.",
+        "empty": "Derzeit sind keine Modelle verfügbar, daher kann die Auswahl noch nicht angezeigt werden.",
+        "lastModeChangeReturn": "Neuestes zu onMultiSelectModeChange Rückgabe",
+        "lastSelectReturn": "Neuestes onSelect Return",
+        "loading": "Modelle werden geladen...",
+        "modelId": "Modell-ID",
+        "multiSelectMode": "Mehrfachauswahlmodus",
+        "multiple": "mehrere",
+        "normalizedIds": "Normalisierte ausgewählte IDs",
+        "outputEmpty": "Noch keine Daten anzuzeigen",
+        "provider": "Anbieter",
+        "resetOutputs": "Ausgaben zurücksetzen",
+        "resultsDescription": "Dies zeigt die aktuelle Value-Prop, die normalisierten ausgewählten IDs und die neueste Callback-Ausgabe der Komponente.",
+        "resultsTitle": "Ausgaben & Zustand",
+        "selected": "Aktuelle Auswahl",
+        "selectedEmpty": "Noch kein Modell ausgewählt",
+        "selectionConfig": "Auswahlwert-Konfiguration",
+        "selectionType": "Auswahltyp",
+        "selectionTypeId": "Modell-IDs zurückgeben",
+        "selectionTypeModel": "Modellobjekte zurückgeben",
+        "showPinnedModels": "angeheftete Modelle anzeigen",
+        "showTagFilter": "showTagFilter",
+        "title": "Modell-Auswahl",
+        "triggerPlaceholder": "Wählen Sie ein Modell",
+        "triggerSelectedCount": "{{count}} Modelle ausgewählt",
+        "valueProp": "Aktueller Wertvorschlag"
+      },
+      "title": "Entwicklungskomponentenlabor"
     }
   },
   "tab": {
@@ -7449,5 +7462,13 @@
     "quit": "Beenden",
     "show_window": "Fenster anzeigen",
     "visualization": "Visualisierung"
+  },
+  "privacy_policy": {
+    "title": "Datenschutzrichtlinie"
+  },
+  "privacy_policy_update": {
+    "description_before_link": "Wir haben die Datenschutzrichtlinie aktualisiert. Bitte lesen Sie die neueste ",
+    "policy": "Datenschutzrichtlinie",
+    "title": "Datenschutzrichtlinie aktualisiert"
   }
 }

@@ -1,36 +1,30 @@
-import { createHash } from 'node:crypto'
 import * as fs from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
+import { application } from '@application'
 import { loggerService } from '@logger'
-import { audioExts, documentExts, HOME_CHERRY_DIR, imageExts, MB, textExts, videoExts } from '@shared/config/constant'
-import { sanitizeFilename, validateFileName } from '@shared/file/types/filename'
-import type { FileMetadata, FileType, NotesTreeNode } from '@types'
-import { FILE_TYPE } from '@types'
+import type { FileMetadata } from '@shared/data/types/file/legacyFileMetadata'
+import type { FileType } from '@shared/types/file'
+import { FILE_TYPE } from '@shared/types/file'
+import type { NotesTreeNode } from '@shared/types/note'
+import { MB } from '@shared/utils/constants'
+import { audioExts, documentExts, imageExts, textExts, videoExts } from '@shared/utils/file'
+import { sanitizeFilename, validateFileName } from '@shared/utils/file/filename'
+
+import { getDataPath } from '..'
 
 // Re-export the promoted utilities so existing import sites
 // (`@main/utils/file → sanitizeFilename / validateFileName`) keep working.
-// SoT lives in `@shared/file/types/filename` per `utils-file-migration.md`
+// SoT lives in `@shared/utils/file/filename` per `utils-file-migration.md`
 // Phase 1b.1; callers migrate to the shared path opportunistically.
-export { sanitizeFilename, validateFileName } from '@shared/file/types/filename'
+export { sanitizeFilename, validateFileName } from '@shared/utils/file/filename'
 import chardet from 'chardet'
-import { app } from 'electron'
 import iconv from 'iconv-lite'
 import { v4 as uuidv4 } from 'uuid'
 
-import { getDataPath } from '..'
-import { summarizeTextForLog } from '../logging'
-
 const logger = loggerService.withContext('Utils:File')
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    const timer = setTimeout(resolve, ms)
-    timer.unref?.()
-  })
-}
 
 // 创建文件类型映射表，提高查找效率
 const fileTypeMap = new Map<string, FileType>()
@@ -59,7 +53,8 @@ initFileTypeMap()
 export function resolveAndValidatePath(baseDir: string, relativePath: string): string {
   const resolvedBase = path.resolve(baseDir)
   const resolvedPath = path.resolve(baseDir, relativePath)
-  if (resolvedPath === resolvedBase || !isPathInside(resolvedPath, resolvedBase)) {
+  const separator = resolvedBase.endsWith(path.sep) ? '' : path.sep
+  if (!resolvedPath.startsWith(resolvedBase + separator)) {
     throw new Error('Invalid file path: path traversal detected')
   }
   return resolvedPath
@@ -128,6 +123,18 @@ export function getFileDir(filePath: string) {
   return path.dirname(filePath)
 }
 
+export function getFilesDir() {
+  return getDataPath('Files')
+}
+
+export function getNotesDir() {
+  return getDataPath('Notes')
+}
+
+export function getConfigDir() {
+  return getDataPath('Config')
+}
+
 export function getFileName(filePath: string) {
   return path.basename(filePath)
 }
@@ -177,41 +184,34 @@ export function getAllFiles(dirPath: string, arrayOfFiles: FileMetadata[] = []):
   return arrayOfFiles
 }
 
-export function getTempDir() {
-  return path.join(app.getPath('temp'), 'CherryStudioPi')
-}
+export async function scanDir(dirPath: string, rootPath = dirPath): Promise<NotesTreeNode[]> {
+  const entries = await fs.promises.readdir(dirPath, { withFileTypes: true })
+  const nodes = await Promise.all(
+    entries
+      .filter((entry) => !entry.name.startsWith('.'))
+      .map(async (entry): Promise<NotesTreeNode> => {
+        const externalPath = path.join(dirPath, entry.name)
+        const stats = await fs.promises.stat(externalPath)
+        const relativePath = path.relative(rootPath, externalPath).replace(/\\/g, '/')
+        const treePath = `/${relativePath.replace(/\.md$/i, '')}`
+        const isDirectory = entry.isDirectory()
+        return {
+          id: treePath,
+          name: isDirectory ? entry.name : entry.name.replace(/\.md$/i, ''),
+          type: isDirectory ? 'folder' : 'file',
+          treePath,
+          externalPath,
+          children: isDirectory ? await scanDir(externalPath, rootPath) : undefined,
+          createdAt: new Date(stats.birthtimeMs || stats.ctimeMs).toISOString(),
+          updatedAt: new Date(stats.mtimeMs).toISOString()
+        }
+      })
+  )
 
-export function getFilesDir() {
-  return getDataPath('Files')
-}
-
-export function getNotesDir() {
-  const notesDir = getDataPath('Notes')
-  if (!fs.existsSync(notesDir)) {
-    fs.mkdirSync(notesDir, { recursive: true })
-    logger.info(`Notes directory created at: ${notesDir}`)
-  }
-  return notesDir
-}
-
-export function getConfigDir() {
-  return path.join(os.homedir(), HOME_CHERRY_DIR, 'config')
-}
-
-export function getCacheDir() {
-  return path.join(app.getPath('userData'), 'Cache')
-}
-
-export function getAppConfigDir(name: string) {
-  return path.join(getConfigDir(), name)
-}
-
-export function getMcpDir() {
-  return getDataPath('MCP')
-}
-
-export function getLegacyMcpDir() {
-  return path.join(os.homedir(), HOME_CHERRY_DIR, 'mcp')
+  return nodes.sort((a, b) => {
+    if (a.type !== b.type) return a.type === 'folder' ? -1 : 1
+    return a.name.localeCompare(b.name, 'zh')
+  })
 }
 
 /**
@@ -222,8 +222,7 @@ export function getLegacyMcpDir() {
  */
 export async function readTextFileWithAutoEncoding(filePath: string): Promise<string> {
   const encoding = (await chardet.detectFile(filePath, { sampleSize: MB })) || 'UTF-8'
-  const filePathForLog = summarizeTextForLog(filePath)
-  logger.debug('File detected encoding', { filePath: filePathForLog, encoding })
+  logger.debug(`File ${filePath} detected encoding: ${encoding}`)
 
   const encodings = [encoding, 'UTF-8']
   const data = await readFile(filePath)
@@ -234,17 +233,16 @@ export async function readTextFileWithAutoEncoding(filePath: string): Promise<st
       if (!content.includes('\uFFFD')) {
         return content
       } else {
-        logger.warn('File auto-detected encoding produced invalid characters; trying other encodings', {
-          filePath: filePathForLog,
-          encoding
-        })
+        logger.warn(
+          `File ${filePath} was auto-detected as ${encoding} encoding, but contains invalid characters. Trying other encodings`
+        )
       }
     } catch (error) {
-      logger.error('Failed to decode file with detected encoding', { filePath: filePathForLog, encoding, error })
+      logger.error(`Failed to decode file ${filePath} with encoding ${encoding}: ${error}`)
     }
   }
 
-  logger.error('File failed to decode with all possible encodings; trying UTF-8 encoding', { filePath: filePathForLog })
+  logger.error(`File ${filePath} failed to decode with all possible encodings, trying UTF-8 encoding`)
   return iconv.decode(data, 'UTF-8')
 }
 
@@ -307,13 +305,13 @@ export async function writeWithLock(
         }
       }
 
-      await sleep(retryDelayMs)
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs))
     }
   }
 }
 
 export async function base64Image(file: FileMetadata): Promise<{ mime: string; base64: string; data: string }> {
-  const filePath = path.join(getFilesDir(), `${file.id}${file.ext}`)
+  const filePath = application.getPath('feature.files.data', `${file.id}${file.ext}`)
   const data = await fs.promises.readFile(filePath)
   const base64 = data.toString('base64')
   const rawExt = path.extname(filePath).slice(1)
@@ -324,92 +322,6 @@ export async function base64Image(file: FileMetadata): Promise<{ mime: string; b
     base64,
     data: `data:${mime};base64,${base64}`
   }
-}
-
-export async function scanDir(dirPath: string, depth = 0, basePath?: string): Promise<NotesTreeNode[]> {
-  const options = {
-    includeFiles: true,
-    includeDirectories: true,
-    fileExtensions: ['.md'],
-    ignoreHiddenFiles: true,
-    recursive: true,
-    maxDepth: 10
-  }
-
-  const rootPath = basePath ?? dirPath
-  if (options.maxDepth !== undefined && depth > options.maxDepth) {
-    return []
-  }
-
-  if (!fs.existsSync(dirPath)) {
-    logger.warn(`Dir not exist: ${dirPath}`)
-    return []
-  }
-
-  const entries = await fs.promises.readdir(dirPath, { withFileTypes: true })
-  const result: NotesTreeNode[] = []
-
-  for (const entry of entries) {
-    if (options.ignoreHiddenFiles && entry.name.startsWith('.')) {
-      continue
-    }
-
-    const entryPath = path.join(dirPath, entry.name)
-    const relativePath = path.relative(rootPath, entryPath)
-    const treePath = `/${relativePath.replace(/\\/g, '/')}`
-
-    if (entry.isDirectory() && options.includeDirectories) {
-      const stats = await fs.promises.stat(entryPath)
-      const externalDirPath = entryPath.replace(/\\/g, '/')
-      const dirTreeNode: NotesTreeNode = {
-        id: createHash('sha1').update(externalDirPath).digest('hex'),
-        name: entry.name,
-        treePath,
-        externalPath: externalDirPath,
-        createdAt: stats.birthtime.toISOString(),
-        updatedAt: stats.mtime.toISOString(),
-        type: 'folder',
-        children: []
-      }
-
-      if (options.recursive) {
-        dirTreeNode.children = await scanDir(entryPath, depth + 1, rootPath)
-      }
-
-      result.push(dirTreeNode)
-      continue
-    }
-
-    if (entry.isFile() && options.includeFiles) {
-      const ext = path.extname(entry.name).toLowerCase()
-      if (options.fileExtensions.length > 0 && !options.fileExtensions.includes(ext)) {
-        continue
-      }
-
-      const stats = await fs.promises.stat(entryPath)
-      const name = entry.name.endsWith(options.fileExtensions[0])
-        ? entry.name.slice(0, -options.fileExtensions[0].length)
-        : entry.name
-      const nameWithoutExt = path.basename(entryPath, path.extname(entryPath))
-      const dirRelativePath = path.relative(rootPath, path.dirname(entryPath))
-      const fileTreePath = dirRelativePath
-        ? `/${dirRelativePath.replace(/\\/g, '/')}/${nameWithoutExt}`
-        : `/${nameWithoutExt}`
-      const externalFilePath = entryPath.replace(/\\/g, '/')
-
-      result.push({
-        id: createHash('sha1').update(externalFilePath).digest('hex'),
-        name,
-        treePath: fileTreePath,
-        externalPath: externalFilePath,
-        createdAt: stats.birthtime.toISOString(),
-        updatedAt: stats.mtime.toISOString(),
-        type: 'file'
-      })
-    }
-  }
-
-  return result
 }
 
 /**

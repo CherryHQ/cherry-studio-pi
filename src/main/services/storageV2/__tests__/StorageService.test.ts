@@ -1,5 +1,6 @@
+import type { Provider } from '@main/data/migration/v2/legacyTypes'
 import { RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY } from '@shared/data/cache/cacheSchemas'
-import type { Assistant, Provider } from '@types'
+import type { Assistant } from '@shared/data/types/assistant'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({

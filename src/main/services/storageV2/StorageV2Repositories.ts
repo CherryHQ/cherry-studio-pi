@@ -3,8 +3,9 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import type { Client } from '@libsql/client'
+import type { Model, Provider } from '@main/data/migration/v2/legacyTypes'
+import type { Assistant } from '@shared/data/types/assistant'
 import { createUniqueModelId, isUniqueModelId, parseUniqueModelId } from '@shared/data/types/model'
-import type { Assistant, Model, Provider } from '@types'
 
 import { storageV2DataRootService } from './DataRootService'
 import { isProviderAuthConfigSecretKey, isSensitiveHeaderName } from './SecretFieldDetection'

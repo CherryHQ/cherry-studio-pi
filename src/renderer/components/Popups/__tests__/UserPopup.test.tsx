@@ -127,7 +127,7 @@ vi.mock('@renderer/services/ImageStorage', () => ({
 }))
 
 vi.mock('@renderer/utils', () => ({
-  compressImage: vi.fn(async (file: File) => file),
+  fileToAvatarDataUrl: vi.fn(async () => 'data:image/png;base64,avatar'),
   isEmoji: (value: string) => value === '🙂'
 }))
 

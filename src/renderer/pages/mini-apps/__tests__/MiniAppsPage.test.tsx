@@ -196,11 +196,11 @@ describe('MiniAppsPage', () => {
 
     render(<MiniAppsPage />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'miniApp.add_to_sidebar' }))
-    expect(mocks.updateAppStatus).toHaveBeenCalledWith('custom', 'pinned')
+    fireEvent.click(screen.getByRole('button', { name: 'miniApp.add_to_launchpad' }))
+    await waitFor(() => expect(mocks.updateAppStatus).toHaveBeenCalledWith('custom', 'pinned'))
 
     fireEvent.click(screen.getByRole('button', { name: 'miniApp.sidebar.hide.title' }))
-    expect(mocks.updateAppStatus).toHaveBeenCalledWith('custom', 'disabled')
+    await waitFor(() => expect(mocks.updateAppStatus).toHaveBeenCalledWith('custom', 'disabled'))
 
     fireEvent.click(screen.getByRole('button', { name: 'miniApp.sidebar.remove_custom.title' }))
     await waitFor(() => expect(mocks.removeCustomMiniApp).toHaveBeenCalledWith('custom'))

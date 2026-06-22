@@ -3,7 +3,6 @@ import { cn } from '@cherrystudio/ui/lib/utils'
 import CodeViewer from '@renderer/components/CodeViewer'
 import GeneralPopup from '@renderer/components/Popups/GeneralPopup'
 import { useCodeStyle } from '@renderer/context/CodeStyleProvider'
-import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import i18n from '@renderer/i18n'
 import type { DiagnosisContext, DiagnosisResult } from '@renderer/services/ErrorDiagnosisService'
 import type { SerializedAiSdkError, SerializedAiSdkErrorUnion, SerializedError } from '@renderer/types/error'
@@ -32,8 +31,7 @@ import {
   isSerializedError
 } from '@renderer/types/error'
 import { formatAiSdkError, formatError, safeToString } from '@renderer/utils/error'
-import { escapeHtmlText, sanitizeHtml } from '@renderer/utils/html'
-import { parseDataUrl } from '@shared/utils'
+import { parseDataUrl } from '@shared/utils/dataUrl'
 import { CheckCircle, Copy, Loader2, Stethoscope } from 'lucide-react'
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -164,25 +162,13 @@ const AiSdkErrorBase = memo(({ error }: { error: SerializedAiSdkError }) => {
   const cause = error.cause
 
   useEffect(() => {
-    let cancelled = false
-    const setHighlightedStringSafely = (value: string) => {
-      if (!cancelled) {
-        setHighlightedString(value)
-      }
-    }
-    const setIsTruncatedSafely = (value: boolean) => {
-      if (!cancelled) {
-        setIsTruncated(value)
-      }
-    }
-
     const highlight = async () => {
       try {
         const { content: truncatedCause, truncated, isLikelyBase64 } = truncateLargeData(cause || '', tRef.current)
-        setIsTruncatedSafely(truncated)
+        setIsTruncated(truncated)
 
         if (isLikelyBase64) {
-          setHighlightedStringSafely(escapeHtmlText(truncatedCause))
+          setHighlightedString(truncatedCause)
           return
         }
 
@@ -190,20 +176,17 @@ const AiSdkErrorBase = memo(({ error }: { error: SerializedAiSdkError }) => {
           const parsed = JSON.parse(truncatedCause || '{}')
           const formatted = JSON.stringify(parsed, null, 2)
           const result = await highlightCode(formatted, 'json')
-          setHighlightedStringSafely(sanitizeHtml(result))
+          setHighlightedString(result)
         } catch {
-          setHighlightedStringSafely(escapeHtmlText(truncatedCause || ''))
+          setHighlightedString(truncatedCause || '')
         }
       } catch {
-        setHighlightedStringSafely(escapeHtmlText(cause || ''))
+        setHighlightedString(cause || '')
       }
     }
     const timer = setTimeout(highlight, 0)
 
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
-    }
+    return () => clearTimeout(timer)
   }, [highlightCode, cause])
 
   return (
@@ -518,16 +501,6 @@ const ErrorDetailContent: React.FC<ErrorDetailContentProps> = ({
   const diagSectionRef = useRef<{ runDiagnosis: () => void }>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const isInitialRenderRef = useRef(true)
-  const mountedRef = useRef(true)
-  const showCopyFailed = useSaveFailedToast('common.copy_failed')
-
-  useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
 
   // Scroll to bottom when diagnosis status changes, but skip initial render
   useEffect(() => {
@@ -543,7 +516,7 @@ const ErrorDetailContent: React.FC<ErrorDetailContentProps> = ({
     }
   }, [diagStatus])
 
-  const copyErrorDetails = useCallback(async () => {
+  const copyErrorDetails = useCallback(() => {
     if (!error) {
       return
     }
@@ -557,15 +530,9 @@ const ErrorDetailContent: React.FC<ErrorDetailContentProps> = ({
       errorText = safeToString(error)
     }
 
-    try {
-      await navigator.clipboard.writeText(errorText)
-      if (mountedRef.current) {
-        window.toast?.success(t('message.copied'))
-      }
-    } catch (clipboardError) {
-      showCopyFailed(clipboardError)
-    }
-  }, [error, t, showCopyFailed])
+    void navigator.clipboard.writeText(errorText)
+    window.toast.success(t('message.copied'))
+  }, [error, t])
 
   const renderErrorDetails = (error?: SerializedError) => {
     if (!error) {

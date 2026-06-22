@@ -115,16 +115,10 @@ function buildSearchPredicate(q: string | undefined): SQL | undefined {
 }
 
 export class TopicService {
-  private get dbService() {
-    return application.get('DbService')
-  }
-
-  private get db() {
-    return this.dbService.getDb()
-  }
-
   async getById(id: string): Promise<Topic> {
-    const [row] = await this.db
+    const db = application.get('DbService').getDb()
+
+    const [row] = await db
       .select()
       .from(topicTable)
       .where(and(eq(topicTable.id, id), isNull(topicTable.deletedAt)))
@@ -138,7 +132,7 @@ export class TopicService {
   }
 
   async ensureTraceId(topicId: string): Promise<string> {
-    return this.dbService.withWriteTx(async (tx) => {
+    return application.get('DbService').withWriteTx(async (tx) => {
       const [row] = await tx
         .select({ traceId: topicTable.traceId })
         .from(topicTable)
@@ -159,10 +153,12 @@ export class TopicService {
   }
 
   async create(dto: CreateTopicDto): Promise<Topic> {
+    const dbService = application.get('DbService')
+    const messageService = getDataService('MessageService')
     const groupId = dto.groupId ?? null
 
-    const row = (await this.dbService.withWriteTx((tx) => {
-      return insertWithOrderKey(
+    const row = await dbService.withWriteTx(async (tx) => {
+      const topicRow = (await insertWithOrderKey(
         tx,
         topicTable,
         {
@@ -175,8 +171,10 @@ export class TopicService {
           pkColumn: topicTable.id,
           scope: topicScopePredicate(groupId)
         }
-      )
-    })) as TopicRow
+      )) as TopicRow
+      await messageService.createRootMessageTx(tx, topicRow.id)
+      return topicRow
+    })
 
     logger.info('Created empty topic', { id: row.id })
 
@@ -184,9 +182,10 @@ export class TopicService {
   }
 
   async duplicate(sourceTopicId: string, dto: DuplicateTopicDto): Promise<Topic> {
+    const dbService = application.get('DbService')
     const messageService = getDataService('MessageService')
 
-    const copiedTopic = await this.dbService.withWriteTx(async (tx) => {
+    const copiedTopic = await dbService.withWriteTx(async (tx) => {
       const [sourceTopic] = await tx
         .select()
         .from(topicTable)
@@ -195,9 +194,6 @@ export class TopicService {
       if (!sourceTopic) throw DataApiErrorFactory.notFound('Topic', sourceTopicId)
 
       const sourcePathRows = await messageService.getPathRowsToNodeTx(tx, dto.nodeId, { topicId: sourceTopicId })
-      if (sourcePathRows[0]?.parentId !== null) {
-        throw DataApiErrorFactory.invalidOperation('duplicate topic', 'Source path does not start at root message')
-      }
 
       const newTopicRow = (await insertWithOrderKey(
         tx,
@@ -216,6 +212,10 @@ export class TopicService {
           scope: topicScopePredicate(sourceTopic.groupId ?? null)
         }
       )) as TopicRow
+
+      // New topic is a creation path → create its virtual root before copying the path
+      // (copyPathRowsTx reparents the copied head onto it).
+      await messageService.createRootMessageTx(tx, newTopicRow.id)
 
       const { copiedMessageIds, copiedActiveNodeId } = await messageService.copyPathRowsTx(tx, sourcePathRows, {
         topicId: newTopicRow.id
@@ -246,7 +246,9 @@ export class TopicService {
 
   /** Pin state and ordering go through `/pins` and `/topics/:id/order` — not this DTO. */
   async update(id: string, dto: UpdateTopicDto): Promise<Topic> {
-    const topic = await this.dbService.withWriteTx(async (tx) => {
+    const db = application.get('DbService').getDb()
+
+    const topic = await db.transaction(async (tx) => {
       const [existing] = await tx
         .select({ id: topicTable.id })
         .from(topicTable)
@@ -279,13 +281,15 @@ export class TopicService {
    * TODO: Clean up associated files (images, attachments) from disk.
    */
   async delete(id: string): Promise<void> {
-    await this.dbService.withWriteTx((tx) => this.deleteManyByIdsTx(tx, [id], { requireAll: true }))
+    const dbService = application.get('DbService')
+    await dbService.withWriteTx((tx) => this.deleteManyByIdsTx(tx, [id], { requireAll: true }))
 
     logger.info('Deleted topic', { id })
   }
 
   async deleteByIds(ids: string[]): Promise<DeleteTopicsResult> {
-    const deletedIds = await this.dbService.withWriteTx((tx) => this.deleteManyByIdsTx(tx, ids, { requireAll: true }))
+    const dbService = application.get('DbService')
+    const deletedIds = await dbService.withWriteTx((tx) => this.deleteManyByIdsTx(tx, ids, { requireAll: true }))
 
     logger.info('Deleted topics', { count: deletedIds.length })
 
@@ -323,7 +327,7 @@ export class TopicService {
   }
 
   async setActiveNode(topicId: string, nodeId: string): Promise<{ activeNodeId: string }> {
-    await this.dbService.withWriteTx((tx) => this.setActiveNodeTx(tx, topicId, nodeId))
+    await application.get('DbService').withWriteTx((tx) => this.setActiveNodeTx(tx, topicId, nodeId))
     logger.info('Set active node', { topicId, activeNodeId: nodeId })
     return { activeNodeId: nodeId }
   }
@@ -349,12 +353,20 @@ export class TopicService {
       if (!topic) throw DataApiErrorFactory.notFound('Topic', topicId)
 
       const [message] = await tx
-        .select({ topicId: messageTable.topicId })
+        .select({ topicId: messageTable.topicId, role: messageTable.role })
         .from(messageTable)
         .where(and(eq(messageTable.id, nodeId), isNull(messageTable.deletedAt)))
         .limit(1)
       if (!message || message.topicId !== topicId) {
         throw DataApiErrorFactory.notFound('Message', nodeId)
+      }
+      // The virtual root is structural and never the active node — pointing activeNodeId
+      // at it would make the branch/tree reads resolve to an empty conversation.
+      if (message.role === 'root') {
+        throw DataApiErrorFactory.invalidOperation(
+          'set active node to the virtual root',
+          'the virtual root cannot be the active node'
+        )
       }
     }
 
@@ -383,7 +395,7 @@ export class TopicService {
    * toggle.
    */
   async listByCursor(query: ListTopicsQuery = {}): Promise<CursorPaginationResponse<Topic>> {
-    const db = this.db
+    const db = application.get('DbService').getDb()
     const limit = Math.min(query.limit ?? DEFAULT_LIMIT, MAX_LIMIT)
     const cursor: Cursor = query.cursor ? decodeCursor(query.cursor) : { section: 'pin', orderKey: '' }
     const search = buildSearchPredicate(query.q)
@@ -464,7 +476,7 @@ export class TopicService {
   }
 
   async search(query: { q: string; limit: number; updatedAtFrom?: number }): Promise<TopicEntitySearchItem[]> {
-    const db = this.db
+    const db = application.get('DbService').getDb()
     const limit = Math.min(query.limit, MAX_LIMIT)
     const filters: SQL[] = [isNull(topicTable.deletedAt)]
     const search = buildSearchPredicate(query.q)
@@ -498,7 +510,8 @@ export class TopicService {
   }
 
   async reorder(id: string, anchor: OrderRequest): Promise<void> {
-    await this.dbService.withWriteTx(async (tx) => {
+    const db = application.get('DbService').getDb()
+    await db.transaction(async (tx) => {
       const [target] = await tx
         .select({ groupId: topicTable.groupId })
         .from(topicTable)
@@ -517,7 +530,8 @@ export class TopicService {
   async reorderBatch(moves: Array<{ id: string; anchor: OrderRequest }>): Promise<void> {
     if (moves.length === 0) return
 
-    await this.dbService.withWriteTx(async (tx) => {
+    const db = application.get('DbService').getDb()
+    await db.transaction(async (tx) => {
       const ids = moves.map((m) => m.id)
       const targets = await tx
         .select({ id: topicTable.id, groupId: topicTable.groupId })

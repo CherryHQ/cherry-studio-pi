@@ -14,7 +14,7 @@ import type {
   GetAgentResponse,
   UpdateAgentRequest,
   UpdateAgentResponse
-} from '@types'
+} from '@shared/data/types/agent'
 
 type LegacyListOptions = Omit<ListOptions, 'sortBy'> & { sortBy?: string }
 

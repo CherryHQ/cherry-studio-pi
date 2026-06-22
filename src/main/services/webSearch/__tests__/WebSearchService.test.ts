@@ -1,9 +1,7 @@
 import { BaseService } from '@main/core/lifecycle'
 import type { WebSearchProvider } from '@shared/data/preference/preferenceTypes'
 import type { WebSearchExecutionConfig, WebSearchResponse } from '@shared/data/types/webSearch'
-import { IpcChannel } from '@shared/IpcChannel'
 import { MockMainPreferenceServiceUtils } from '@test-mocks/main/PreferenceService'
-import { ipcMain } from 'electron'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type * as WebSearchProviderFactoryModule from '../providers/factory'
@@ -144,47 +142,6 @@ describe('WebSearchService', () => {
     webSearchService = new WebSearchService()
   })
 
-  it('registers IPC handlers for keyword search, URL fetching, and provider check', async () => {
-    const keywordResponse = response('tavily', 'searchKeywords', 'hello', [
-      { title: 'Hello', content: 'ok', url: 'https://hello.test' }
-    ])
-    const fetchResponse = response('fetch', 'fetchUrls', 'https://example.com', [
-      { title: 'Example', content: 'ok', url: 'https://example.com' }
-    ])
-    const checkResponse = { valid: true } as const
-    const searchKeywordsSpy = vi.spyOn(webSearchService, 'searchKeywords').mockResolvedValue(keywordResponse)
-    const fetchUrlsSpy = vi.spyOn(webSearchService, 'fetchUrls').mockResolvedValue(fetchResponse)
-    const checkProviderSpy = vi.spyOn(webSearchService, 'checkProvider').mockResolvedValue(checkResponse)
-
-    await webSearchService._doInit()
-
-    expect(ipcMain.handle).toHaveBeenCalledWith(IpcChannel.WebSearch_SearchKeywords, expect.any(Function))
-    expect(ipcMain.handle).toHaveBeenCalledWith(IpcChannel.WebSearch_FetchUrls, expect.any(Function))
-    expect(ipcMain.handle).toHaveBeenCalledWith(IpcChannel.WebSearch_CheckProvider, expect.any(Function))
-
-    const searchKeywordsHandler = vi
-      .mocked(ipcMain.handle)
-      .mock.calls.find(([channel]) => channel === IpcChannel.WebSearch_SearchKeywords)?.[1]
-    const fetchUrlsHandler = vi
-      .mocked(ipcMain.handle)
-      .mock.calls.find(([channel]) => channel === IpcChannel.WebSearch_FetchUrls)?.[1]
-    const checkProviderHandler = vi
-      .mocked(ipcMain.handle)
-      .mock.calls.find(([channel]) => channel === IpcChannel.WebSearch_CheckProvider)?.[1]
-
-    await expect(searchKeywordsHandler?.({} as any, { keywords: ['hello'] })).resolves.toBe(keywordResponse)
-    await expect(fetchUrlsHandler?.({} as any, { urls: ['https://example.com'] })).resolves.toBe(fetchResponse)
-    await expect(checkProviderHandler?.({} as any, { provider: providerOverrides[0] })).resolves.toBe(checkResponse)
-    expect(searchKeywordsSpy).toHaveBeenCalledWith({ keywords: ['hello'] })
-    expect(fetchUrlsSpy).toHaveBeenCalledWith({ urls: ['https://example.com'] })
-    expect(checkProviderSpy).toHaveBeenCalledWith({ provider: providerOverrides[0] })
-
-    await webSearchService._doStop()
-    expect(ipcMain.removeHandler).toHaveBeenCalledWith(IpcChannel.WebSearch_SearchKeywords)
-    expect(ipcMain.removeHandler).toHaveBeenCalledWith(IpcChannel.WebSearch_FetchUrls)
-    expect(ipcMain.removeHandler).toHaveBeenCalledWith(IpcChannel.WebSearch_CheckProvider)
-  })
-
   it('uses the keyword default provider and returns service-owned response metadata', async () => {
     const searchKeywords = vi
       .fn()
@@ -201,18 +158,8 @@ describe('WebSearchService', () => {
       expect.objectContaining({ id: 'tavily' }),
       expect.any(Object)
     )
-    expect(searchKeywords).toHaveBeenNthCalledWith(
-      1,
-      'first',
-      expect.objectContaining({ maxResults: 4 }),
-      expect.objectContaining({ signal: expect.any(AbortSignal) })
-    )
-    expect(searchKeywords).toHaveBeenNthCalledWith(
-      2,
-      'second',
-      expect.objectContaining({ maxResults: 4 }),
-      expect.objectContaining({ signal: expect.any(AbortSignal) })
-    )
+    expect(searchKeywords).toHaveBeenNthCalledWith(1, 'first', expect.objectContaining({ maxResults: 4 }), undefined)
+    expect(searchKeywords).toHaveBeenNthCalledWith(2, 'second', expect.objectContaining({ maxResults: 4 }), undefined)
     expect(result).toEqual({
       query: 'first | second',
       providerId: 'tavily',
@@ -448,11 +395,7 @@ describe('WebSearchService', () => {
       expect.objectContaining({ id: 'fetch' }),
       expect.any(Object)
     )
-    expect(fetchUrls).toHaveBeenCalledWith(
-      'https://example.com/first',
-      expect.any(Object),
-      expect.objectContaining({ signal: expect.any(AbortSignal) })
-    )
+    expect(fetchUrls).toHaveBeenCalledWith('https://example.com/first', expect.any(Object), undefined)
     expect(result).toEqual({
       query: 'https://example.com/first',
       providerId: 'fetch',
@@ -524,75 +467,5 @@ describe('WebSearchService', () => {
         capability: 'searchKeywords'
       }
     )
-  })
-
-  describe('checkProvider', () => {
-    it('passes the caller-supplied provider to the driver factory (no preference lookup)', async () => {
-      const searchKeywords = vi
-        .fn()
-        .mockResolvedValue(
-          response('tavily', 'searchKeywords', 'test query', [{ title: 'ok', content: 'ok', url: 'https://ok.test' }])
-        )
-      createWebSearchProviderMock.mockReturnValue({ searchKeywords })
-
-      const tentativeProvider: WebSearchProvider = {
-        ...providerOverrides[0],
-        apiKeys: ['unsaved-key'],
-        capabilities: [{ feature: 'searchKeywords', apiHost: 'https://unsaved.tavily.dev' }]
-      }
-
-      const result = await webSearchService.checkProvider({ provider: tentativeProvider })
-
-      expect(result).toEqual({ valid: true })
-      expect(createWebSearchProviderMock).toHaveBeenCalledWith(tentativeProvider, expect.any(Object))
-      expect(searchKeywords).toHaveBeenCalledWith(
-        'test query',
-        expect.any(Object),
-        expect.objectContaining({ signal: expect.any(AbortSignal) })
-      )
-    })
-
-    it('uses fetchUrls capability with a probe URL when requested', async () => {
-      const fetchUrls = vi
-        .fn()
-        .mockResolvedValue(
-          response('jina', 'fetchUrls', 'https://example.com', [
-            { title: 'Example', content: 'ok', url: 'https://example.com' }
-          ])
-        )
-      createWebSearchProviderMock.mockReturnValue({ fetchUrls })
-
-      const result = await webSearchService.checkProvider({
-        provider: providerOverrides[2],
-        capability: 'fetchUrls'
-      })
-
-      expect(result).toEqual({ valid: true })
-      expect(fetchUrls).toHaveBeenCalledWith(
-        'https://example.com',
-        expect.any(Object),
-        expect.objectContaining({ signal: expect.any(AbortSignal) })
-      )
-    })
-
-    it('returns { valid: false, error } when the driver throws', async () => {
-      const searchKeywords = vi.fn().mockRejectedValue(new Error('Unauthorized'))
-      createWebSearchProviderMock.mockReturnValue({ searchKeywords })
-
-      const result = await webSearchService.checkProvider({ provider: providerOverrides[0] })
-
-      expect(result).toEqual({ valid: false, error: 'Unauthorized' })
-    })
-
-    it('returns { valid: false, error } when the provider lacks the requested capability', async () => {
-      createWebSearchProviderMock.mockReturnValue({})
-
-      const result = await webSearchService.checkProvider({ provider: providerOverrides[0] })
-
-      expect(result).toEqual({
-        valid: false,
-        error: 'Provider tavily does not implement capability searchKeywords'
-      })
-    })
   })
 })

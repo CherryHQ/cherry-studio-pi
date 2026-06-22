@@ -1,44 +1,27 @@
 import '@testing-library/jest-dom/vitest'
 
-import { codeCLI, terminalApps } from '@shared/config/constant'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type { EndpointType, Model } from '@shared/data/types/model'
+import { ENDPOINT_TYPE, MODEL_CAPABILITY } from '@shared/data/types/model'
+import type { Provider } from '@shared/data/types/provider'
+import { codeCLI, terminalApps } from '@shared/types/codeCli'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type React from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const testState = vi.hoisted(() => ({
   isBunInstalled: true,
   selectedCliTool: 'github-copilot-cli',
+  selectedModel: null as string | null,
   canLaunch: true,
   codeCliRun: vi.fn(),
-  setCliTool: vi.fn(),
   setModel: vi.fn(),
-  setTerminal: vi.fn(),
-  setEnvVars: vi.fn(),
-  setCurrentDir: vi.fn(),
-  removeDir: vi.fn(),
-  selectFolder: vi.fn(),
-  setIsBunInstalled: vi.fn(),
-  setTimeoutTimer: vi.fn()
+  setTimeoutTimer: vi.fn(),
+  providers: [] as Provider[],
+  models: [] as Model[],
+  modelSelectorProps: [] as any[]
 }))
 
 import CodeCliPage from '../CodeCliPage'
-
-type Deferred<T> = {
-  promise: Promise<T>
-  reject: (reason?: unknown) => void
-  resolve: (value: T | PromiseLike<T>) => void
-}
-
-function deferred<T>(): Deferred<T> {
-  let resolve!: Deferred<T>['resolve']
-  let reject!: Deferred<T>['reject']
-  const promise = new Promise<T>((promiseResolve, promiseReject) => {
-    resolve = promiseResolve
-    reject = promiseReject
-  })
-
-  return { promise, reject, resolve }
-}
 
 vi.mock('@cherrystudio/ui', async () => {
   const React = await import('react')
@@ -91,41 +74,65 @@ vi.mock('@renderer/components/Avatar/ModelAvatar', () => ({
   default: () => null
 }))
 
+vi.mock('@renderer/components/Selector/model', async () => {
+  const React = await import('react')
+
+  return {
+    ModelSelector: (props: any) => {
+      testState.modelSelectorProps.push(props)
+
+      return React.createElement(
+        'div',
+        { 'data-testid': 'code-model-selector' },
+        props.trigger,
+        React.createElement(
+          'button',
+          {
+            type: 'button',
+            onClick: () => props.onSelect('openai::gpt-4o')
+          },
+          'select mock model'
+        )
+      )
+    }
+  }
+})
+
 vi.mock('@renderer/config/constant', () => ({
   isMac: false,
   isWin: false
 }))
 
 vi.mock('@renderer/data/hooks/useCache', () => ({
-  usePersistCache: () => [testState.isBunInstalled, testState.setIsBunInstalled]
+  usePersistCache: () => [testState.isBunInstalled, vi.fn()]
 }))
 
 vi.mock('@renderer/hooks/useCodeCli', () => ({
   useCodeCli: () => ({
     selectedCliTool: testState.selectedCliTool as codeCLI,
-    selectedModel: null,
+    selectedModel: testState.selectedModel,
     selectedTerminal: terminalApps.systemDefault,
     environmentVariables: '',
     directories: [],
     currentDirectory: '',
     canLaunch: testState.canLaunch,
-    setCliTool: testState.setCliTool,
+    setCliTool: vi.fn().mockResolvedValue(undefined),
     setModel: testState.setModel,
-    setTerminal: testState.setTerminal,
-    setEnvVars: testState.setEnvVars,
-    setCurrentDir: testState.setCurrentDir,
-    removeDir: testState.removeDir,
-    selectFolder: testState.selectFolder
+    setTerminal: vi.fn(),
+    setEnvVars: vi.fn(),
+    setCurrentDir: vi.fn().mockResolvedValue(undefined),
+    removeDir: vi.fn().mockResolvedValue(undefined),
+    selectFolder: vi.fn().mockResolvedValue(undefined)
   })
 }))
 
 vi.mock('@renderer/hooks/useProvider', () => ({
-  useProviders: () => ({ providers: [] }),
+  useProviders: () => ({ providers: testState.providers }),
   getProviderDisplayName: (provider: { name?: string; id?: string }) => provider?.name ?? provider?.id ?? ''
 }))
 
 vi.mock('@renderer/hooks/useModel', () => ({
-  useModels: () => ({ models: [] })
+  useModels: () => ({ models: testState.models })
 }))
 
 vi.mock('@renderer/hooks/useTimer', () => ({
@@ -158,25 +165,14 @@ vi.mock('react-i18next', () => ({
 vi.mock('../components/CodeToolGallery', () => ({
   CodeToolGallery: ({
     tools,
-    isBunInstalled,
-    handleInstallBun,
     handleSelectTool
   }: {
     tools: Array<{ value: codeCLI; label: string }>
-    isBunInstalled: boolean
-    handleInstallBun: () => void
     handleSelectTool: (value: codeCLI) => void
   }) => (
-    <div>
-      {!isBunInstalled && (
-        <button type="button" onClick={handleInstallBun}>
-          code.install_bun
-        </button>
-      )}
-      <button type="button" onClick={() => handleSelectTool(tools[0].value)}>
-        open tool
-      </button>
-    </div>
+    <button type="button" onClick={() => handleSelectTool(tools[0].value)}>
+      open tool
+    </button>
   )
 }))
 
@@ -188,20 +184,16 @@ beforeEach(() => {
   vi.clearAllMocks()
   testState.isBunInstalled = true
   testState.selectedCliTool = codeCLI.githubCopilotCli
+  testState.selectedModel = null
   testState.canLaunch = true
   testState.codeCliRun.mockResolvedValue({ success: true })
-  testState.setCliTool.mockResolvedValue(undefined)
   testState.setModel.mockResolvedValue(undefined)
-  testState.setTerminal.mockResolvedValue(undefined)
-  testState.setEnvVars.mockResolvedValue(undefined)
-  testState.setCurrentDir.mockResolvedValue(undefined)
-  testState.removeDir.mockResolvedValue(undefined)
-  testState.selectFolder.mockResolvedValue(undefined)
-  testState.setIsBunInstalled.mockReset()
+  testState.providers = []
+  testState.models = []
+  testState.modelSelectorProps = []
   Object.assign(window, {
     api: {
       isBinaryExist: vi.fn().mockResolvedValue(true),
-      installBunBinary: vi.fn().mockResolvedValue(undefined),
       codeCli: {
         getAvailableTerminals: vi.fn().mockResolvedValue([]),
         run: testState.codeCliRun
@@ -221,11 +213,147 @@ async function openCodeToolDialog() {
   await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
 }
 
-describe('CodeCliPage', () => {
-  it('constrains the page height so the gallery can scroll', () => {
-    const { container } = render(<CodeCliPage />)
+function makeProvider(
+  id: string,
+  defaultChatEndpoint: EndpointType | undefined = ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS,
+  overrides: Partial<Provider> = {}
+): Provider {
+  return {
+    id,
+    name: id,
+    apiKeys: [],
+    authType: 'api-key',
+    defaultChatEndpoint,
+    endpointConfigs: {},
+    apiFeatures: {},
+    settings: {},
+    isEnabled: true,
+    ...overrides
+  } as Provider
+}
 
-    expect(container.firstElementChild).toHaveClass('h-full', 'min-h-0', 'overflow-hidden')
+function makeModel(id: string, providerId: string, overrides: Partial<Model> = {}): Model {
+  return {
+    id,
+    providerId,
+    name: id.split('::')[1] ?? id,
+    capabilities: [],
+    supportsStreaming: true,
+    isEnabled: true,
+    isHidden: false,
+    ...overrides
+  } as Model
+}
+
+function latestModelSelectorProps() {
+  return testState.modelSelectorProps.at(-1)
+}
+
+describe('CodeCliPage', () => {
+  it('uses the shared model selector for non-copilot tools and writes selected ids back', async () => {
+    testState.selectedCliTool = codeCLI.qwenCode
+
+    await openCodeToolDialog()
+
+    expect(screen.getByTestId('code-model-selector')).toBeInTheDocument()
+    expect(latestModelSelectorProps()).toMatchObject({
+      multiple: false,
+      selectionType: 'id',
+      showTagFilter: false
+    })
+    await waitFor(() => expect(latestModelSelectorProps().portalContainer).toBeInstanceOf(HTMLElement))
+    expect(latestModelSelectorProps().portalContainer.closest('[role="dialog"]')).toBe(screen.getByRole('dialog'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'select mock model' }))
+
+    await waitFor(() => expect(testState.setModel).toHaveBeenCalledWith('openai::gpt-4o'))
+  })
+
+  it('does not pass malformed stored model ids to the shared model selector', async () => {
+    testState.selectedCliTool = codeCLI.qwenCode
+    testState.selectedModel = 'legacy-model-id'
+
+    await openCodeToolDialog()
+
+    expect(latestModelSelectorProps().value).toBeUndefined()
+  })
+
+  it('keeps the code-cli provider and model filter when using the shared model selector', async () => {
+    testState.selectedCliTool = codeCLI.qwenCode
+    testState.providers = [
+      makeProvider('openai'),
+      makeProvider('anthropic', ENDPOINT_TYPE.ANTHROPIC_MESSAGES),
+      makeProvider('cherryai')
+    ]
+    const chatModel = makeModel('openai::gpt-4o', 'openai', {
+      endpointTypes: [ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS]
+    })
+    const anthropicModel = makeModel('anthropic::claude-3-5-sonnet', 'anthropic', {
+      endpointTypes: [ENDPOINT_TYPE.ANTHROPIC_MESSAGES]
+    })
+    const embeddingModel = makeModel('openai::text-embedding-3-small', 'openai', {
+      capabilities: [MODEL_CAPABILITY.EMBEDDING],
+      endpointTypes: [ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS]
+    })
+    const rerankModel = makeModel('openai::rerank', 'openai', {
+      capabilities: [MODEL_CAPABILITY.RERANK],
+      endpointTypes: [ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS]
+    })
+    const imageModel = makeModel('openai::image', 'openai', {
+      capabilities: [MODEL_CAPABILITY.IMAGE_GENERATION],
+      endpointTypes: [ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS]
+    })
+    const cherryAiModel = makeModel('cherryai::gpt-4o', 'cherryai', {
+      endpointTypes: [ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS]
+    })
+
+    await openCodeToolDialog()
+
+    const filter = latestModelSelectorProps().filter as (model: Model) => boolean
+    expect(filter(chatModel)).toBe(true)
+    expect(filter(anthropicModel)).toBe(false)
+    expect(filter(embeddingModel)).toBe(false)
+    expect(filter(rerankModel)).toBe(false)
+    expect(filter(imageModel)).toBe(false)
+    expect(filter(cherryAiModel)).toBe(false)
+  })
+
+  it('keeps the OpenCode provider fallback equivalent to the pre-v2 frontend filter', async () => {
+    testState.selectedCliTool = codeCLI.openCode
+    testState.providers = [
+      makeProvider('openai-chat', ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS),
+      makeProvider('new-api', ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS, {
+        presetProviderId: 'new-api',
+        defaultChatEndpoint: undefined
+      }),
+      makeProvider('anthropic', ENDPOINT_TYPE.ANTHROPIC_MESSAGES),
+      makeProvider('gateway', ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS, {
+        presetProviderId: 'gateway',
+        defaultChatEndpoint: undefined
+      })
+    ]
+
+    await openCodeToolDialog()
+
+    const filter = latestModelSelectorProps().filter as (model: Model) => boolean
+    expect(filter(makeModel('openai-chat::gpt-4o', 'openai-chat'))).toBe(true)
+    expect(filter(makeModel('new-api::claude-3-5-sonnet', 'new-api'))).toBe(true)
+    expect(filter(makeModel('anthropic::claude-3-5-sonnet', 'anthropic'))).toBe(true)
+    expect(
+      filter(
+        makeModel('gateway::gpt-4o', 'gateway', {
+          endpointTypes: [ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS]
+        })
+      )
+    ).toBe(false)
+  })
+
+  it('does not render the model selector for GitHub Copilot CLI', async () => {
+    testState.selectedCliTool = codeCLI.githubCopilotCli
+
+    await openCodeToolDialog()
+
+    expect(screen.queryByTestId('code-model-selector')).not.toBeInTheDocument()
   })
 
   it('keeps the auto-update checkbox neutral instead of primary themed', async () => {
@@ -236,71 +364,6 @@ describe('CodeCliPage', () => {
     // Behavioral guard: page must not theme the auto-update checkbox with the global primary token.
     expect(checkbox.className).not.toMatch(/primary/)
     expect(screen.getByText('code.auto_update_to_latest')).toHaveClass('font-normal')
-  })
-
-  it('shows a save failure when switching CLI tools fails', async () => {
-    testState.setCliTool.mockRejectedValueOnce(new Error('settings unavailable'))
-
-    render(<CodeCliPage />)
-    fireEvent.click(screen.getByRole('button', { name: 'open tool' }))
-
-    await waitFor(() => expect(testState.setCliTool).toHaveBeenCalledWith(codeCLI.claudeCode))
-    await waitFor(() => expect(window.toast.error).toHaveBeenCalledWith('common.save_failed: settings unavailable'))
-  })
-
-  it('ignores stale CLI tool save failures after unmount', async () => {
-    const saveOperation = deferred<void>()
-    testState.setCliTool.mockReturnValueOnce(saveOperation.promise)
-
-    const { unmount } = render(<CodeCliPage />)
-    fireEvent.click(screen.getByRole('button', { name: 'open tool' }))
-
-    await waitFor(() => expect(testState.setCliTool).toHaveBeenCalledWith(codeCLI.claudeCode))
-    unmount()
-
-    await act(async () => {
-      saveOperation.reject(new Error('settings unavailable after unmount'))
-      await saveOperation.promise.catch(() => undefined)
-    })
-
-    expect(window.toast.error).not.toHaveBeenCalled()
-  })
-
-  it('ignores delayed bun installation checks after unmount', async () => {
-    const checkOperation = deferred<boolean>()
-    Object.assign(window, {
-      api: {
-        ...window.api,
-        isBinaryExist: vi.fn().mockReturnValueOnce(checkOperation.promise)
-      }
-    })
-
-    const { unmount } = render(<CodeCliPage />)
-    expect(window.api.isBinaryExist).toHaveBeenCalledWith('bun')
-
-    unmount()
-
-    await act(async () => {
-      checkOperation.resolve(false)
-      await checkOperation.promise
-    })
-
-    expect(testState.setIsBunInstalled).not.toHaveBeenCalled()
-  })
-
-  it('preserves nested bun installation failure details', async () => {
-    testState.isBunInstalled = false
-    vi.mocked(window.api.installBunBinary).mockRejectedValueOnce({
-      error: { message: 'download refused by mirror' }
-    })
-
-    render(<CodeCliPage />)
-    fireEvent.click(screen.getByRole('button', { name: 'code.install_bun' }))
-
-    await waitFor(() =>
-      expect(window.toast.error).toHaveBeenCalledWith('settings.mcp.installError: download refused by mirror')
-    )
-    expect(testState.setTimeoutTimer).toHaveBeenCalledWith('handleInstallBun', expect.any(Function), 1000)
   })
 
   it('disables launch when the tool cannot launch', async () => {
@@ -350,38 +413,6 @@ describe('CodeCliPage', () => {
     expect(testState.setTimeoutTimer).toHaveBeenCalledWith('launchSuccess', expect.any(Function), 2500)
   })
 
-  it('ignores a delayed launch result after unmount', async () => {
-    const runOperation = deferred<{ success: boolean }>()
-    testState.codeCliRun.mockReturnValueOnce(runOperation.promise)
-
-    const { unmount } = render(<CodeCliPage />)
-    fireEvent.click(screen.getByRole('button', { name: 'open tool' }))
-    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
-
-    fireEvent.click(screen.getByRole('button', { name: 'code.launch.label' }))
-    await waitFor(() => expect(testState.codeCliRun).toHaveBeenCalledTimes(1))
-    unmount()
-
-    await act(async () => {
-      runOperation.resolve({ success: true })
-      await runOperation.promise
-    })
-
-    expect(window.toast.success).not.toHaveBeenCalled()
-    expect(testState.setTimeoutTimer).not.toHaveBeenCalledWith('launchSuccess', expect.any(Function), 2500)
-  })
-
-  it('launches successfully when toast is unavailable', async () => {
-    Object.assign(window, { toast: undefined })
-
-    await openCodeToolDialog()
-
-    fireEvent.click(screen.getByRole('button', { name: 'code.launch.label' }))
-
-    expect(await screen.findByRole('button', { name: /code.launch.launched/ })).toBeEnabled()
-    expect(testState.codeCliRun).toHaveBeenCalledTimes(1)
-  })
-
   it('returns to idle and shows an error when launch fails', async () => {
     testState.codeCliRun.mockResolvedValue({ success: false, message: 'launch failed' })
 
@@ -390,21 +421,6 @@ describe('CodeCliPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'code.launch.label' }))
 
     await waitFor(() => expect(window.toast.error).toHaveBeenCalledWith('launch failed'))
-    expect(screen.getByRole('button', { name: 'code.launch.label' })).toBeEnabled()
-  })
-
-  it('preserves nested launch error details when the CLI bridge rejects', async () => {
-    testState.codeCliRun.mockRejectedValueOnce({
-      error: { message: 'terminal executable not found' }
-    })
-
-    await openCodeToolDialog()
-
-    fireEvent.click(screen.getByRole('button', { name: 'code.launch.label' }))
-
-    await waitFor(() => {
-      expect(window.toast.error).toHaveBeenCalledWith('code.launch.error: terminal executable not found')
-    })
     expect(screen.getByRole('button', { name: 'code.launch.label' })).toBeEnabled()
   })
 })

@@ -1,11 +1,11 @@
 import { Button, Tooltip } from '@cherrystudio/ui'
 import { usePreference } from '@data/hooks/usePreference'
-import { loggerService } from '@logger'
 import { isMac } from '@renderer/config/constant'
 import { useWindowInitData } from '@renderer/hooks/useWindowInitData'
 import i18n from '@renderer/i18n'
-import { defaultLanguage } from '@shared/config/constant'
+import { ipcApi } from '@renderer/ipc'
 import type { SelectionActionItem } from '@shared/data/preference/preferenceTypes'
+import { defaultLanguage } from '@shared/utils/languages'
 import { Slider } from 'antd'
 import { Droplet, Minus, Pin, X } from 'lucide-react'
 import { DynamicIcon } from 'lucide-react/dynamic'
@@ -16,8 +16,6 @@ import styled from 'styled-components'
 
 import ActionGeneral from './components/ActionGeneral'
 import ActionTranslate from './components/ActionTranslate'
-
-const logger = loggerService.withContext('SelectionActionWindow')
 
 /**
  * Outer shell. Pulls the current action payload via `useWindowInitData`, which
@@ -81,9 +79,7 @@ const SelectionActionContent: FC<{ action: SelectionActionItem }> = ({ action })
   // would leak stale pin/opacity/slider/scroll state across same-type reuses.
   useEffect(() => {
     setIsPinned(isAutoPin)
-    void window.api.selection.pinActionWindow(isAutoPin).catch((error) => {
-      logger.error('Failed to sync selection action pin state', error as Error)
-    })
+    void ipcApi.request('selection.pin_action_window', isAutoPin)
     setOpacity(actionWindowOpacity)
     setShowOpacitySlider(false)
     isAutoScrollEnabled.current = true
@@ -96,14 +92,10 @@ const SelectionActionContent: FC<{ action: SelectionActionItem }> = ({ action })
 
   useEffect(() => {
     if (isAutoPin) {
-      void window.api.selection.pinActionWindow(true).catch((error) => {
-        logger.error('Failed to pin selection action window', error as Error)
-      })
+      void ipcApi.request('selection.pin_action_window', true)
       setIsPinned(true)
     } else {
-      void window.api.selection.pinActionWindow(false).catch((error) => {
-        logger.error('Failed to unpin selection action window', error as Error)
-      })
+      void ipcApi.request('selection.pin_action_window', false)
       setIsPinned(false)
     }
   }, [isAutoPin])
@@ -157,15 +149,11 @@ const SelectionActionContent: FC<{ action: SelectionActionItem }> = ({ action })
   }, [actionWindowOpacity])
 
   const handleMinimize = () => {
-    void window.api.windowManager.minimize().catch((error) => {
-      logger.error('Failed to minimize selection action window', error as Error)
-    })
+    void ipcApi.request('window.minimize')
   }
 
   const handleClose = () => {
-    void window.api.windowManager.close().catch((error) => {
-      logger.error('Failed to close selection action window', error as Error)
-    })
+    void ipcApi.request('window.close')
   }
 
   /**
@@ -173,9 +161,7 @@ const SelectionActionContent: FC<{ action: SelectionActionItem }> = ({ action })
    */
   const togglePin = () => {
     setIsPinned(!isPinned)
-    void window.api.selection.pinActionWindow(!isPinned).catch((error) => {
-      logger.error('Failed to toggle selection action pin state', error as Error)
-    })
+    void ipcApi.request('selection.pin_action_window', !isPinned)
   }
 
   const handleWindowFocus = () => {
@@ -237,7 +223,7 @@ const SelectionActionContent: FC<{ action: SelectionActionItem }> = ({ action })
             <DynamicIcon
               name={action.icon as any}
               size={16}
-              style={{ color: 'var(--color-foreground)' }}
+              style={{ color: 'var(--color-text-1)' }}
               fallback={() => {}}
             />
           </TitleBarIcon>
@@ -307,7 +293,7 @@ const WindowFrame = styled.div<{ $opacity: number }>`
   margin: 2px;
   background-color: var(--color-background);
   border: 1px solid var(--color-border);
-  box-shadow: 0px 0px 2px var(--color-foreground-muted);
+  box-shadow: 0px 0px 2px var(--color-text-3);
   border-radius: 8px;
   overflow: hidden;
   box-sizing: border-box;
@@ -320,7 +306,8 @@ const TitleBar = styled.div<{ $isWindowFocus: boolean }>`
   flex-direction: row;
   height: 32px;
   padding: 0 8px;
-  background-color: ${(props) => (props.$isWindowFocus ? 'var(--color-accent)' : 'var(--color-muted)')};
+  background-color: ${(props) =>
+    props.$isWindowFocus ? 'var(--color-background-mute)' : 'var(--color-background-soft)'};
   transition: background-color 0.3s ease;
   -webkit-app-region: drag;
 `
@@ -340,7 +327,7 @@ const TitleBarCaption = styled.div`
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: var(--color-foreground);
+  color: var(--color-text-1);
 `
 
 const TitleBarButtons = styled.div`
@@ -392,7 +379,7 @@ const WinButton = styled(Button)`
 
   &.close {
     &:hover {
-      background-color: var(--color-error-base) !important;
+      background-color: var(--color-error) !important;
       color: var(--color-white) !important;
     }
   }
@@ -403,8 +390,8 @@ const WinButton = styled(Button)`
   }
 
   &:hover {
-    background-color: var(--color-accent) !important;
-    color: var(--color-white) !important;
+    background-color: var(--color-hover) !important;
+    color: var(--color-icon-white) !important;
   }
 `
 
@@ -434,7 +421,7 @@ const OpacitySlider = styled.div`
   left: 42px;
   top: 100%;
   margin-top: 8px;
-  background-color: var(--color-accent);
+  background-color: var(--color-background-mute);
   padding: 16px 8px 12px 8px;
   border-radius: 4px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);

@@ -6,18 +6,15 @@ import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { CopyIcon } from '@renderer/components/Icons'
 import { useCodeStyle } from '@renderer/context/CodeStyleProvider'
 import { useIsToolAutoApproved } from '@renderer/hooks/useMcpServer'
-import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import { useTimer } from '@renderer/hooks/useTimer'
 import type { McpToolResponse } from '@renderer/types'
-import { createDataImageUri } from '@renderer/utils/dataImage'
-import { renderPlainTextCodeHtml, sanitizeHtml } from '@renderer/utils/html'
-import type { McpProgressEvent } from '@shared/config/types'
 import { IpcChannel } from '@shared/IpcChannel'
+import type { McpProgressEvent } from '@shared/types/mcp'
 import { Collapse, ConfigProvider, Progress } from 'antd'
 import { Check, ChevronRight, ShieldCheck } from 'lucide-react'
 import { parse as parsePartialJson } from 'partial-json'
 import type { FC } from 'react'
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
@@ -54,8 +51,6 @@ const MessageMcpTool: FC<Props> = ({ toolResponse }) => {
   const [fontSize] = usePreference('chat.message.font_size')
   const [progress, setProgress] = useState<number>(0)
   const { setTimeoutTimer } = useTimer()
-  const showCopyFailed = useSaveFailedToast('common.copy_failed')
-  const mountedRef = useRef(true)
 
   const { id, tool, status, response, partialArguments } = toolResponse
   const approval = useToolApproval(toolResponse, tool)
@@ -63,17 +58,8 @@ const MessageMcpTool: FC<Props> = ({ toolResponse }) => {
   const isPending = status === 'pending'
   const isDone = status === 'done'
   const isError = status === 'error'
-  const isCancelled = status === 'cancelled'
   const isStreaming = status === 'streaming'
   const willAwaitApproval = approval.isWaiting || (!autoApproved && status === 'invoking')
-
-  useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
 
   useEffect(() => {
     const removeListener = window.electron.ipcRenderer.on(
@@ -96,26 +82,17 @@ const MessageMcpTool: FC<Props> = ({ toolResponse }) => {
     if (isStreaming || isPending) {
       // Expand when streaming starts or waiting for approval
       setActiveKeys((prev) => (prev.includes(id) ? prev : [...prev, id]))
-    } else if (isDone || isError || isCancelled) {
+    } else if (isDone || isError) {
       // Collapse when streaming ends
       setActiveKeys((prev) => prev.filter((key) => key !== id))
     }
-  }, [isStreaming, isDone, isError, isCancelled, id, isPending])
+  }, [isStreaming, isDone, isError, id, isPending])
 
-  const copyContent = async (content: string, toolId: string) => {
-    try {
-      await navigator.clipboard.writeText(content)
-      if (!mountedRef.current) {
-        return
-      }
-
-      window.toast?.success({ title: t('message.copied'), key: 'copy-message' })
-      setCopiedMap((prev) => ({ ...prev, [toolId]: true }))
-      setTimeoutTimer('copyContent', () => setCopiedMap((prev) => ({ ...prev, [toolId]: false })), 2000)
-    } catch (error) {
-      logger.error('Failed to copy MCP tool response:', error as Error)
-      showCopyFailed(error)
-    }
+  const copyContent = (content: string, toolId: string) => {
+    void navigator.clipboard.writeText(content)
+    window.toast.success({ title: t('message.copied'), key: 'copy-message' })
+    setCopiedMap((prev) => ({ ...prev, [toolId]: true }))
+    setTimeoutTimer('copyContent', () => setCopiedMap((prev) => ({ ...prev, [toolId]: false })), 2000)
   }
 
   const handleCollapseChange = (keys: string | string[]) => {
@@ -127,13 +104,13 @@ const MessageMcpTool: FC<Props> = ({ toolResponse }) => {
       try {
         const success = await window.api.mcp.abortTool(toolResponse.id)
         if (success) {
-          window.toast?.success(t('message.tools.aborted'))
+          window.toast.success(t('message.tools.aborted'))
         } else {
-          window.toast?.error(t('message.tools.abort_failed'))
+          window.toast.error(t('message.tools.abort_failed'))
         }
       } catch (error) {
         logger.error('Failed to abort tool:', error as Error)
-        window.toast?.error(t('message.tools.abort_failed'))
+        window.toast.error(t('message.tools.abort_failed'))
       }
     }
   }
@@ -172,7 +149,7 @@ const MessageMcpTool: FC<Props> = ({ toolResponse }) => {
                   className="message-action-button"
                   onClick={(e) => {
                     e.stopPropagation()
-                    void copyContent(JSON.stringify(result, null, 2), id)
+                    copyContent(JSON.stringify(result, null, 2), id)
                   }}
                   aria-label={t('common.copy')}>
                   {!copiedMap[id] && <CopyIcon size={14} />}
@@ -223,7 +200,7 @@ const MessageMcpTool: FC<Props> = ({ toolResponse }) => {
               items={getCollapseItems()}
               expandIconPosition="end"
               expandIcon={({ isActive }) => (
-                <ExpandIcon $isActive={isActive} size={18} color="var(--color-foreground-muted)" strokeWidth={1.5} />
+                <ExpandIcon $isActive={isActive} size={18} color="var(--color-text-3)" strokeWidth={1.5} />
               )}
             />
             {(isPending || approval.isWaiting || approval.isExecuting) && (
@@ -250,7 +227,7 @@ const MessageMcpTool: FC<Props> = ({ toolResponse }) => {
 
 type ExtractedContent = {
   text: string
-  images: Array<{ src: string }>
+  images: Array<{ data: string; mimeType: string }>
 }
 
 /**
@@ -265,7 +242,7 @@ const extractPreviewContent = (response: unknown): ExtractedContent => {
     if (contents.length === 0) return { text: '', images: [] }
 
     const textParts: string[] = []
-    const images: Array<{ src: string }> = []
+    const images: Array<{ data: string; mimeType: string }> = []
     for (const content of contents) {
       switch (content.type) {
         case 'text':
@@ -280,10 +257,7 @@ const extractPreviewContent = (response: unknown): ExtractedContent => {
           break
         case 'image':
           if (content.data) {
-            const src = createDataImageUri(content.data, content.mimeType ?? 'image/png')
-            if (src) {
-              images.push({ src })
-            }
+            images.push({ data: content.data, mimeType: content.mimeType ?? 'image/png' })
           }
           break
         case 'resource':
@@ -307,7 +281,7 @@ const ToolResponseContent: FC<{
 }> = ({ isExpanded, args, isStreaming, response }) => {
   const { highlightCode } = useCodeStyle()
   const [highlightedResponse, setHighlightedResponse] = useState<string>('')
-  const [responseImages, setResponseImages] = useState<Array<{ src: string }>>([])
+  const [responseImages, setResponseImages] = useState<Array<{ data: string; mimeType: string }>>([])
   const [isTruncated, setIsTruncated] = useState(false)
   const [originalLength, setOriginalLength] = useState(0)
 
@@ -327,12 +301,9 @@ const ToolResponseContent: FC<{
   // Extract and highlight response when available
   useEffect(() => {
     if (!isExpanded || !response) return
-    let cancelled = false
 
     const highlight = async () => {
       const { text: previewContent, images } = extractPreviewContent(response)
-      if (cancelled) return
-
       setResponseImages(images)
       const {
         data: truncatedContent,
@@ -341,19 +312,12 @@ const ToolResponseContent: FC<{
       } = truncateOutput(previewContent)
       setIsTruncated(wasTruncated)
       setOriginalLength(origLen)
-      try {
-        const result = await highlightCode(truncatedContent, 'json')
-        if (!cancelled) setHighlightedResponse(sanitizeHtml(result))
-      } catch {
-        if (!cancelled) setHighlightedResponse(renderPlainTextCodeHtml(truncatedContent))
-      }
+      const result = await highlightCode(truncatedContent, 'json')
+      setHighlightedResponse(result)
     }
 
     const timer = setTimeout(highlight, 0)
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
-    }
+    return () => clearTimeout(timer)
   }, [isExpanded, response, highlightCode])
 
   if (!isExpanded) return null
@@ -411,7 +375,12 @@ const ToolResponseContent: FC<{
           )}
           {isTruncated && <TruncatedIndicator originalLength={originalLength} />}
           {responseImages.map((img, idx) => (
-            <img key={idx} src={img.src} alt="Tool output" style={{ maxWidth: 300, borderRadius: 4, marginTop: 8 }} />
+            <img
+              key={idx}
+              src={`data:${img.mimeType};base64,${img.data}`}
+              alt="Tool output"
+              style={{ maxWidth: 300, borderRadius: 4, marginTop: 8 }}
+            />
           ))}
         </ResponseSection>
       )}
@@ -420,20 +389,16 @@ const ToolResponseContent: FC<{
 }
 
 const ToolContentWrapper = styled.div`
-  padding: 0;
-  border-radius: 10px;
+  padding: 1px;
+  border-radius: 8px;
   overflow: hidden;
-  width: 100%;
-  max-width: 100%;
 
   .ant-collapse {
-    border: 0.5px solid var(--color-border);
-    border-radius: 10px;
-    width: 100%;
+    border: 1px solid var(--color-border);
   }
 
   &.pending {
-    background-color: var(--color-muted);
+    background-color: var(--color-background-soft);
     .ant-collapse {
       border: none;
     }
@@ -451,7 +416,7 @@ const ActionsBar = styled.div`
 const ActionLabel = styled.div`
   flex: 1;
   font-size: 14px;
-  color: var(--color-foreground-secondary);
+  color: var(--color-text-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -463,31 +428,18 @@ const ExpandIcon = styled(ChevronRight)<{ $isActive?: boolean }>`
 `
 
 const CollapseContainer = styled(Collapse)`
-  --status-color-warning: var(--color-warning, #faad14);
+  --status-color-warning: var(--color-status-warning, #faad14);
   --status-color-invoking: var(--color-primary);
-  --status-color-error: var(--color-error-base, #ff4d4f);
-  --status-color-success: var(--color-success, green);
-  width: 100%;
-  max-width: 100%;
-  border-radius: 10px;
+  --status-color-error: var(--color-status-error, #ff4d4f);
+  --status-color-success: var(--color-primary, green);
+  border-radius: 7px;
   border: none;
   background-color: var(--color-background);
   overflow: hidden;
 
   .ant-collapse-header {
-    padding: 5px 0 5px 10px !important;
+    padding: 8px 10px !important;
     align-items: center !important;
-  }
-
-  .ant-collapse-expand-icon {
-    height: 30px !important;
-    width: 40px;
-    padding: 0 !important;
-    margin-inline-start: 0 !important;
-    color: var(--color-foreground-muted) !important;
-    display: flex !important;
-    align-items: center;
-    justify-content: center;
   }
 
   .ant-collapse-content-box {
@@ -496,8 +448,13 @@ const CollapseContainer = styled(Collapse)`
 `
 
 const ToolContainer = styled.div`
-  width: 100%;
-  max-width: 100%;
+  margin-top: 10px;
+  margin-bottom: 10px;
+
+  &:first-child {
+    margin-top: 0;
+    padding-top: 0;
+  }
 `
 
 const MarkdownContainer = styled.div`
@@ -517,7 +474,7 @@ const MessageTitleLabel = styled.div`
   width: 100%;
   gap: 10px;
   padding: 0;
-  line-height: 20px;
+  margin-left: 4px;
 `
 
 const TitleContent = styled.div`
@@ -525,15 +482,12 @@ const TitleContent = styled.div`
   flex-direction: row;
   align-items: center;
   gap: 8px;
-  min-width: 0;
 `
 
 const ToolName = styled(Flex)`
-  color: var(--color-foreground);
+  color: var(--color-text);
   font-weight: 500;
   font-size: 13px;
-  line-height: 20px;
-  min-width: 0;
 `
 
 const ActionButtonsContainer = styled.div`
@@ -546,7 +500,7 @@ const ActionButtonsContainer = styled.div`
 const ActionButton = styled.button`
   background: none;
   border: none;
-  color: var(--color-foreground-secondary);
+  color: var(--color-text-2);
   cursor: pointer;
   padding: 4px;
   display: flex;
@@ -561,15 +515,15 @@ const ActionButton = styled.button`
 
   &:hover {
     opacity: 1;
-    color: var(--color-foreground);
-    background-color: var(--color-accent);
+    color: var(--color-text);
+    background-color: var(--color-bg-3);
   }
 
   &.confirm-button {
     color: var(--color-primary);
 
     &:hover {
-      background-color: var(--color-primary-soft);
+      background-color: var(--color-primary-bg);
       color: var(--color-primary);
     }
   }

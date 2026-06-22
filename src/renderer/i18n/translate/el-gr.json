@@ -390,9 +390,6 @@
       },
       "label_one": "Συνεδρία",
       "label_other": "Συνεδρίες",
-      "orphan": {
-        "message": "[to be translated]:This session's agent is missing. The conversation is read-only until you switch to another session or create a new one."
-      },
       "reorder": {
         "error": {
           "failed": "Αποτυχία αναδιάταξης συνεδριών"
@@ -403,17 +400,20 @@
           "failed": "Αποτυχία ενημέρωσης της συνεδρίας"
         }
       },
+      "workspace_status": {
+        "inaccessible": "Η διαδρομή του χώρου εργασίας δεν είναι προσβάσιμη: {{path}}",
+        "missing": "Η διαδρομή του χώρου εργασίας δεν υπάρχει: {{path}}",
+        "not_directory": "Η διαδρομή του χώρου εργασίας δεν είναι κατάλογος: {{path}}"
+      },
+      "orphan": {
+        "message": "[to be translated]:This session's agent is missing. The conversation is read-only until you switch to another session or create a new one."
+      },
       "workspace": {
         "change": "[to be translated]:Change workspace",
         "create_failed": "[to be translated]:Failed to create workspace",
         "select": "[to be translated]:Select workspace",
         "select_failed": "[to be translated]:Failed to select workspace",
         "updated": "[to be translated]:Workspace updated"
-      },
-      "workspace_status": {
-        "inaccessible": "Η διαδρομή του χώρου εργασίας δεν είναι προσβάσιμη: {{path}}",
-        "missing": "Η διαδρομή του χώρου εργασίας δεν υπάρχει: {{path}}",
-        "not_directory": "Η διαδρομή του χώρου εργασίας δεν είναι κατάλογος: {{path}}"
       }
     },
     "settings": {
@@ -593,9 +593,6 @@
       }
     },
     "sidebar_title": "Πράκτορες",
-    "system_agent": {
-      "auto_triggered": "[to be translated]:System Agent checked automatically"
-    },
     "todo": {
       "mock": {
         "actions": {
@@ -789,10 +786,21 @@
       "error": {
         "failed": "Αποτυχία ενημέρωσης του πράκτορα"
       }
+    },
+    "warning": {
+      "enable_and_start": "Ενεργοποίηση & Εκκίνηση",
+      "enable_server": "Ενεργοποίηση του διακομιστή API για χρήση πρακτόρων.",
+      "enable_server_description": "Ο διακομιστής API πρέπει να είναι ενεργοποιημένος για να λειτουργήσουν οι πράκτορες. Μπορείτε να τον ενεργοποιήσετε απευθείας ή να τον ρυθμίσετε στις ρυθμίσεις.",
+      "server_not_running": "Ο API Server είναι ενεργοποιημένος αλλά δεν εκτελείται. Παρακαλούμε ελέγξτε τη διαμόρφωση του διακομιστή.",
+      "server_not_running_description": "Ο διακομιστής API πρέπει να βρίσκεται σε λειτουργία για να λειτουργήσουν οι πράκτορες. Μπορείτε να τον εκκινήσετε απευθείας ή να ελέγξετε τις ρυθμίσεις."
+    },
+    "system_agent": {
+      "auto_triggered": "[to be translated]:System Agent checked automatically"
     }
   },
   "apiGateway": {
     "actions": {
+      "copy": "Αντιγραφή",
       "regenerate": "Αναδημιουργία",
       "restart": {
         "button": "Επανεκκίνηση",
@@ -805,6 +813,7 @@
       "title": "Επικεφαλίδα εξουσιοδότησης"
     },
     "authHeaderText": "Χρήση στην κεφαλίδα εξουσιοδότησης:",
+    "configuration": "Διαμόρφωση",
     "description": "Εκθέτει τις δυνατότητες AI του Cherry Studio μέσω API HTTP συμβατών με OpenAI",
     "documentation": {
       "title": "Τεκμηρίωση API"
@@ -818,16 +827,17 @@
       },
       "port": {
         "description": "Ο αριθμός θύρας TCP για τον εξυπηρετητή HTTP (1000-65535)",
+        "helpText": "Σταματήστε τον διακομιστή για να αλλάξετε τη θύρα",
         "label": "Θύρα"
       },
       "url": {
+        "copyTooltip": "Αντιγραφή URL",
         "label": "URL"
       }
     },
     "messages": {
       "apiKeyCopied": "Το κλειδί API αντιγράφηκε στο πρόχειρο",
       "apiKeyRegenerated": "Το κλειδί API αναδημιουργήθηκε",
-      "invalidPort": "[to be translated]:Enter a port number between 1000 and 65535",
       "notEnabled": "Ο διακομιστής API δεν είναι ενεργοποιημένος.",
       "operationFailed": "Η λειτουργία του Διακομιστή API απέτυχε: ",
       "restartError": "Αποτυχία επανεκκίνησης του Διακομιστή API: ",
@@ -836,7 +846,9 @@
       "startError": "Αποτυχία εκκίνησης του Διακομιστή API: ",
       "startSuccess": "Ο διακομιστής API ξεκίνησε επιτυχώς",
       "stopError": "Αποτυχία διακοπής του Διακομιστή API: ",
-      "stopSuccess": "Ο διακομιστής API σταμάτησε επιτυχώς"
+      "stopSuccess": "Ο διακομιστής API σταμάτησε επιτυχώς",
+      "urlCopied": "Το URL του διακομιστή αντιγράφηκε στο πρόχειρο",
+      "invalidPort": "[to be translated]:Enter a port number between 1000 and 65535"
     },
     "status": {
       "running": "Εκτελείται",
@@ -1269,11 +1281,11 @@
         "collapse_in": "Εισαγωγή σε σύμπτυξη",
         "collapse_out": "Αφαίρεση από σύμπτυξη",
         "expand": "Επέκταση",
-        "external_app_not_found": "[to be translated]:External app not found: {{name}}",
         "file_not_found": "Δεν βρέθηκε το αρχείο: {{path}}",
         "open_file": "Άνοιγμα Αρχείου",
         "open_file_error": "Αποτυχία ανοίγματος αρχείου: {{path}}",
-        "reveal_in_finder": "Εμφάνιση στον Finder"
+        "reveal_in_finder": "Εμφάνιση στον Finder",
+        "external_app_not_found": "[to be translated]:External app not found: {{name}}"
       },
       "topics": "Θέματα",
       "translate": "Μετάφραση στο {{target_language}}",
@@ -1659,11 +1671,12 @@
       "claude_code": "Το επίσημο εργαλείο γραμμής εντολών κώδικα AI της Anthropic",
       "gemini_cli": "Επίσημη γραμμή εντολών βοηθού Gemini της Google",
       "github_copilot_cli": "Το επίσημο συνοδευτικό εργαλείο γραμμής εντολών του GitHub Copilot",
-      "iflow_cli": "ο πολυμοντέλος βηχανικός βοηθός γραμμής εντολών του iFlow",
       "kimi_cli": "Ο βοηθός γραμμής εντολών Kimi της Moonshot",
       "openai_codex": "Το επίσημο CLI δημιουργίας κώδικα της OpenAI",
       "opencode": "Ανοιχτού κώδικα πολυμοντέλος πράκτορας κωδικοποίησης",
-      "qwen_code": "Το εργαλείο κωδικοποίησης CLI ανοικτού κώδικα της Alibaba Tongyi"
+      "qoder_cli": "Το εργαλείο κωδικοποίησης γραμμής εντολών με δυνατότητες πρακτόρων της Alibaba Qoder",
+      "qwen_code": "Το εργαλείο κωδικοποίησης CLI ανοικτού κώδικα της Alibaba Tongyi",
+      "iflow_cli": "ο πολυμοντέλος βηχανικός βοηθός γραμμής εντολών του iFlow"
     },
     "update_options": "Ενημέρωση επιλογών",
     "working_directory": "κατάλογος εργασίας",
@@ -1737,7 +1750,6 @@
     "copy_failed": "Αποτυχία αντιγραφής",
     "current": "Τρέχων",
     "cut": "Κοπή",
-    "decline": "Απόρριψη",
     "default": "Προεπιλογή",
     "delete": "Διαγραφή",
     "delete_confirm": "Είστε βέβαιοι ότι θέλετε να διαγράψετε;",
@@ -1844,7 +1856,8 @@
     "upload_image": "Μεταφόρτωση αρχείου εικόνας",
     "uploaded_image": "Μεταφορτωμένη εικόνα",
     "warning": "Προσοχή",
-    "you": "Εσείς"
+    "you": "Εσείς",
+    "decline": "Απόρριψη"
   },
   "dialog": {
     "all_files": "Όλα τα Αρχεία",
@@ -1919,7 +1932,6 @@
     "detail": "Λεπτομέρειες σφάλματος",
     "details": "Λεπτομέρειες",
     "diagnosis": {
-      "abnormal_finish": "Η απάντηση τερματίστηκε μη ομαλά, δοκιμάστε ξανά ή αλλάξτε μοντέλο",
       "ai_button": "Διάγνωση AI",
       "ai_done": "Διαγνώστηκε",
       "ai_loading": "Γίνεται διάγνωση",
@@ -1935,7 +1947,6 @@
       "model_conflict": "Το μοντέλο διάγνωσης είναι ίδιο με το μοντέλο σφάλματος",
       "network": "Αδυναμία σύνδεσης με τον διακομιστή, ελέγξτε τις ρυθμίσεις δικτύου ή proxy",
       "ocr": "Η μηχανή OCR δεν έχει αρχικοποιηθεί, ελέγξτε τις ρυθμίσεις OCR",
-      "output_truncated": "Η απάντηση έφτασε στο μέγιστο μήκος και περικόπηκε",
       "parse": "Η τεχνητή νοημοσύνη επέστρεψε μη έγκυρη απάντηση, παρακαλώ δοκιμάστε ξανά ή αλλάξτε μοντέλο",
       "payload": "Το περιεχόμενο του αιτήματος είναι πολύ μεγάλο, παρακαλώ μειώστε το μέγεθος του αρχείου ή του κειμένου",
       "proxy": "Σφάλμα διακομιστή μεσολάβησης ή πιστοποιητικού SSL, ελέγξτε τις ρυθμίσεις μεσολάβησης και δικτύου",
@@ -1943,7 +1954,9 @@
       "server": "Σφάλμα διακομιστή, δοκιμάστε ξανά αργότερα",
       "stream": "Η απάντηση διακόπηκε, ελέγξτε τη σταθερότητα του δικτύου ή δοκιμάστε ξανά",
       "unknown": "Παρουσιάστηκε σφάλμα",
-      "view_details": "Προβολή λεπτομερειών"
+      "view_details": "Προβολή λεπτομερειών",
+      "abnormal_finish": "Η απάντηση τερματίστηκε μη ομαλά, δοκιμάστε ξανά ή αλλάξτε μοντέλο",
+      "output_truncated": "Η απάντηση έφτασε στο μέγιστο μήκος και περικόπηκε"
     },
     "errors": "Λάθος",
     "finishReason": "Αιτία λήξης",
@@ -2051,11 +2064,11 @@
     "preview": {
       "error": "Αποτυχία ανοίγματος του αρχείου"
     },
-    "rename_failed": "[to be translated]:Rename failed",
     "size": "Μέγεθος",
     "text": "Κείμενο",
     "title": "Αρχεία",
-    "type": "Τύπος"
+    "type": "Τύπος",
+    "rename_failed": "[to be translated]:Rename failed"
   },
   "gpustack": {
     "keep_alive_time": {
@@ -2084,10 +2097,10 @@
         "newest": "Νεότερα πρώτα",
         "oldest": "Παλαιότερα πρώτα"
       },
-      "stats": "[to be translated]:Found {{count}} results in {{time}} seconds",
       "topics": {
         "empty": "Δεν βρέθηκαν σχετικά θέματα, πατήστε Enter για να αναζητήσετε όλα τα μηνύματα"
-      }
+      },
+      "stats": "[to be translated]:Found {{count}} results in {{time}} seconds"
     },
     "title": "Αναζήτηση θεμάτων"
   },
@@ -2185,6 +2198,7 @@
           "success": "Πηγή δεδομένων προστέθηκε στη βάση γνώσεων"
         },
         "title": "Προσθήκη Πηγής Δεδομένων",
+        "unsupported_files_skipped": "Παραλείφθηκαν {{count}} μη υποστηριζόμενα αρχεία",
         "url": {
           "description": "Εισάγετε διεύθυνση ιστοσελίδας:",
           "help": "Το κείμενο της σελίδας θα ανακτηθεί, θα τεμαχιστεί και θα ευρετηριαστεί αυτόματα",
@@ -2194,12 +2208,12 @@
         }
       },
       "bulk": {
-        "cancel": "Ακύρωση",
         "delete": "Διαγραφή",
         "delete_confirm_description": "Διαγραφή {{count}} επιλεγμένων πηγών δεδομένων; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.",
         "delete_confirm_title": "Διαγραφή επιλεγμένων πηγών δεδομένων;",
         "reindex": "Επανεισαγωγή ευρετηρίου",
-        "selected_count": "{{count}} επιλεγμένα"
+        "selected_count": "{{count}} επιλεγμένα",
+        "cancel": "Ακύρωση"
       },
       "chunks_count": "{{count}} κομμάτια",
       "delete_confirm_description": "Αυτή η πηγή δεδομένων και τα δεδομένα ευρετηρίου της δεν μπορούν να ανακτηθούν μετά τη διαγραφή.",
@@ -2264,6 +2278,7 @@
     "embedding_model_required": "Απαιτείται μοντέλο ενσωμάτωσης βάσης γνώσης",
     "empty": "Καμία βάση γνώσεων",
     "error": {
+      "directory_not_migrated": "Η μεταφορά του φακέλου απέτυχε. Παρακαλώ διαγράψτε τον και ανεβάστε τον ξανά.",
       "failed_base_unknown": "Αυτή η βάση γνώσεων απέτυχε κατά τη μετεγκατάσταση. Ανακατασκευάστε την και επιλέξτε ένα νέο μοντέλο ενσωμάτωσης.",
       "failed_to_create": "Αποτυχία δημιουργίας βάσης γνώσεων",
       "failed_to_delete": "Αποτυχία διαγραφής της βάσης γνώσεων",
@@ -2496,18 +2511,6 @@
             "empty": "Κανένας δεσμευμένος",
             "label": "Διακομιστές MCP (id)"
           },
-          "mode": {
-            "option": {
-              "enhanced": {
-                "desc": "[to be translated]:Best for more complex scenarios. Uses the Claude Agent SDK, with stronger behavior but usually slower responses and higher token usage.",
-                "title": "[to be translated]:Enhanced mode"
-              },
-              "standard": {
-                "desc": "[to be translated]:Best for most cases. Uses Pi Agent, responds faster, uses fewer tokens, and matches the default Cherry Studio Pi experience.",
-                "title": "[to be translated]:Standard mode"
-              }
-            }
-          },
           "model": {
             "help": "UniqueModelId· θα μεταβεί σε έναν επιλογέα που υποστηρίζεται από το /models αργότερα",
             "hint": "Κύριος συλλογισμός και εκτέλεση",
@@ -2540,6 +2543,18 @@
             "help": "Όταν είναι ενεργοποιημένο, παραχωρεί αυτόματα bypassPermissions",
             "label": "Λειτουργία ψυχής"
           },
+          "mode": {
+            "option": {
+              "enhanced": {
+                "desc": "[to be translated]:Best for more complex scenarios. Uses the Claude Agent SDK, with stronger behavior but usually slower responses and higher token usage.",
+                "title": "[to be translated]:Enhanced mode"
+              },
+              "standard": {
+                "desc": "[to be translated]:Best for most cases. Uses Pi Agent, responds faster, uses fewer tokens, and matches the default Cherry Studio Pi experience.",
+                "title": "[to be translated]:Standard mode"
+              }
+            }
+          },
           "workspace": {
             "auto": "[to be translated]:Create a dedicated workspace automatically",
             "change": "[to be translated]:Change directory",
@@ -2560,11 +2575,6 @@
             "desc": "Όνομα πράκτορα, περιγραφή και κύριο μοντέλο",
             "label": "Βασικό",
             "title": "Βασικό"
-          },
-          "mode": {
-            "desc": "[to be translated]:Choose how this agent runs under the hood",
-            "label": "[to be translated]:Runtime mode",
-            "title": "[to be translated]:Choose runtime mode"
           },
           "permission": {
             "desc": "Εύρος εξουσιοδότησης για ενέργειες πληρεξουσίου",
@@ -2592,6 +2602,11 @@
               "tools": "Ενσωματωμένα εργαλεία"
             },
             "title": "Εργαλεία & χρόνος εκτέλεσης"
+          },
+          "mode": {
+            "desc": "[to be translated]:Choose how this agent runs under the hood",
+            "label": "[to be translated]:Runtime mode",
+            "title": "[to be translated]:Choose runtime mode"
           },
           "workspace": {
             "desc": "[to be translated]:Choose where this agent reads and writes local project files",
@@ -3165,10 +3180,6 @@
       "completed": "Ολοκληρώθηκε",
       "error": "Προέκυψε σφάλμα",
       "groupHeader": "{{count}} κλήσεις εργαλείων",
-      "groupHeaderMessages": "{{count}} μηνύματα",
-      "groupHeaderThinking": "{{count}} σκέψεις",
-      "groupHeaderWithDetails": "{{toolCount}} κλήσεις εργαλείων · {{thinkingCount}} σκέψεις · {{messageCount}} μηνύματα",
-      "groupHeaderWithMessages": "{{toolCount}} κλήσεις εργαλείων · {{messageCount}} μηνύματα",
       "invoking": "κλήση σε εξέλιξη",
       "labels": {
         "bash": "Μπας",
@@ -3229,7 +3240,11 @@
         "plan_other": "{{count}} σχέδια",
         "result_one": "{{count}} αποτέλεσμα",
         "result_other": "{{count}} αποτελέσματα"
-      }
+      },
+      "groupHeaderMessages": "{{count}} μηνύματα",
+      "groupHeaderThinking": "{{count}} σκέψεις",
+      "groupHeaderWithDetails": "{{toolCount}} κλήσεις εργαλείων · {{thinkingCount}} σκέψεις · {{messageCount}} μηνύματα",
+      "groupHeaderWithMessages": "{{toolCount}} κλήσεις εργαλείων · {{messageCount}} μηνύματα"
     },
     "topic": {
       "added": "Η θεματική προστέθηκε επιτυχώς"
@@ -3650,12 +3665,6 @@
     "title": "Ollama"
   },
   "onboarding": {
-    "privacy": {
-      "accept_and_continue": "Αποδοχή και συνέχεια",
-      "notice": "Συνεχίζοντας, επιβεβαιώνετε ότι έχετε διαβάσει και συμφωνείτε με τους",
-      "period": ".",
-      "policy": "Πολιτική Απορρήτου"
-    },
     "select_model": {
       "change_later": "Μπορείς να το αλλάξεις οποιαδήποτε στιγμή από τις ρυθμίσεις",
       "start": "Ξεκινήστε",
@@ -3674,6 +3683,12 @@
       "setup_hint": "Παρακαλούμε ρυθμίστε τουλάχιστον έναν πάροχο για την καλύτερη εμπειρία",
       "subtitle": "Απολαύστε κορυφαίες υπηρεσίες τεχνητής νοημοσύνης με την CherryIN",
       "title": "Καλώς ήρθατε στο Cherry Studio"
+    },
+    "privacy": {
+      "accept_and_continue": "Αποδοχή και συνέχεια",
+      "notice": "Συνεχίζοντας, επιβεβαιώνετε ότι έχετε διαβάσει και συμφωνείτε με τους",
+      "period": ".",
+      "policy": "Πολιτική Απορρήτου"
     }
   },
   "openclaw": {
@@ -4161,14 +4176,6 @@
     "source": "Προβολή πηγαίου κώδικα",
     "zoom_in": "Μεγέθυνση",
     "zoom_out": "συρρίκνωση"
-  },
-  "privacy_policy": {
-    "title": "Πολιτική απορρήτου"
-  },
-  "privacy_policy_update": {
-    "description_before_link": "Ενημερώσαμε την πολιτική απορρήτου. Παρακαλούμε διαβάστε την πιο πρόσφατη ",
-    "policy": "Πολιτική απορρήτου",
-    "title": "Η πολιτική απορρήτου ενημερώθηκε"
   },
   "prompts": {
     "explanation": "Με βοηθήστε να εξηγήσετε αυτό το όρισμα",
@@ -4821,117 +4828,6 @@
       "description": "Συνδέστε πράκτορες με πλατφόρμες μηνυμάτων όπως το Telegram, το Feishu, το Discord και άλλες.",
       "title": "Κανάλια"
     },
-    "componentLab": {
-      "agentSelector": {
-        "clearSelection": "Καθαρό",
-        "configDescription": "Εναλλαγή ιδιοτήτων για προεπισκόπηση της συμπεριφοράς του στοιχείου",
-        "configTitle": "Διαμόρφωση",
-        "currentProps": "Τρέχοντα props",
-        "description": "Το AgentSelector διαβάζει πλέον πραγματικά δεδομένα από το /agents του DataApi για να επαληθεύει τη συμπεριφορά επιλογής id/item, καρφιτσώματος, ταξινόμησης και αναζήτησης.",
-        "emptyShellNotice": "Αυτή η προεπισκόπηση χρησιμοποιει την πραγματική λίστα πρακτόρων που επιστρέφεται από το /agents DataApi.",
-        "lastOnChange": "Τελευταίο onChange",
-        "previewDescription": "Κάντε κλικ στον διακόπτη για να ανοίξετε τον επιλογέα",
-        "previewTitle": "Προεπισκόπηση",
-        "title": "Επιλογέας Πράκτορα",
-        "triggerPlaceholder": "Επιλέξτε έναν πράκτορα",
-        "valueProp": "Τρέχουσα τιμή"
-      },
-      "agentTodoList": {
-        "title": "Λίστα Εργασιών Πράκτορα"
-      },
-      "assistantSelector": {
-        "clearSelection": "Καθαρό",
-        "configDescription": "Εναλλαγή ιδιοτήτων για προεπισκόπηση της συμπεριφοράς του στοιχείου",
-        "configTitle": "Διαμόρφωση",
-        "currentProps": "Τρέχοντα props",
-        "description": "Τοποθετεί το επιχειρησιακό στοιχείο AssistantSelector απευθείας για να επαληθεύσει τη συμπεριφορά πολλαπλού/μονού, αναγνωριστικού/αντικειμένου, καρφίτσας, ταξινόμησης και αναζήτησης.",
-        "lastOnChange": "Τελευταίο onChange",
-        "previewDescription": "Κάντε κλικ στον διακόπτη για να ανοίξετε τον επιλογέα",
-        "previewTitle": "Προεπισκόπηση",
-        "title": "Επιλογέας Βοηθού",
-        "triggerPlaceholder": "Επιλέξτε βοηθό",
-        "triggerSelectedCount": "{{count}} βοηθοί επιλέχθηκαν",
-        "valueProp": "Τρέχουσα τιμή"
-      },
-      "description": "Ορατό μόνο κατά την ανάπτυξη για τη δοκιμή του νέου επιλογέα μοντέλου απευθείας μέσα στην εφαρμογή.",
-      "fileProcessing": {
-        "artifact": {
-          "file": "Αρχείο Markdown",
-          "text": "Αποτέλεσμα κειμένου"
-        },
-        "description": "Εκτελέστε κάθε διαμορφωμένο επεξεργαστή αρχείων μέσω του πραγματικού IPC επεξεργασίας αρχείων και συγκρίνετε τα αποτελέσματα.",
-        "duration": "{{seconds}}δ",
-        "jobId": "Αναγνωριστικό Εργασίας",
-        "markdown": {
-          "description": "Επιλέξτε ένα έγγραφο και εκτελέστε όλους τους επεξεργαστές μετατροπής εγγράφων σε markdown.",
-          "fileFilterName": "Έγγραφα",
-          "noFile": "Δεν έχει επιλεγεί κανένα έγγραφο",
-          "select": "Επιλέξτε έγγραφο",
-          "start": "Test markdown",
-          "title": "Markdown"
-        },
-        "noProcessors": "Κανένας επεξεργαστής δεν υποστηρίζει αυτή τη λειτουργία.",
-        "ocr": {
-          "description": "Επιλέξτε μια εικόνα και εκτελέστε όλους τους επεξεργαστές OCR.",
-          "fileFilterName": "Εικόνες",
-          "noFile": "Δεν έχει επιλεγεί εικόνα",
-          "select": "Επιλέξτε εικόνα",
-          "start": "Δοκιμή OCR",
-          "title": "OCR"
-        },
-        "processorCount": "{{count}} επεξεργαστές",
-        "status": {
-          "cancelled": "Ακυρώθηκε",
-          "completed": "Ολοκληρώθηκε",
-          "delayed": "Καθυστερημένη",
-          "failed": "Απέτυχε",
-          "idle": "Αδρανής",
-          "pending": "Εκκρεμεί",
-          "processing": "Επεξεργασία",
-          "running": "Τρέξιμο",
-          "starting": "Έναρξη"
-        },
-        "title": "Ανάλυση Εγγράφων"
-      },
-      "label": "Εργαστήριο Συστατικών",
-      "modelSelector": {
-        "behaviorConfig": "Ρύθμιση Συμπεριφοράς και Εμφάνισης",
-        "callbackEmpty": "Δεν έχει ληφθεί ακόμη κλήση συστατικού",
-        "clearSelection": "Καθαρισμός Επιλογής",
-        "configDescription": "Εναλλάξτε τα βασικά props του ModelSelector παραπάνω και επιθεωρήστε την τιμή εισόδου καθώς και τα payloads των callbacks παρακάτω.",
-        "configTitle": "Παιχνίδι με Αξεσουάρ",
-        "controlMultiSelectMode": "Ελεγχόμενη λειτουργία πολλαπλής επιλογής",
-        "currentProps": "Τρέχοντα Props",
-        "defaultMultiSelectMode": "προεπιλεγμένηΛειτουργίαΠολλαπλήςΕπιλογής",
-        "description": "Αυτή η σελίδα τοποθετεί απευθείας το τρέχον επιχειρησιακό στοιχείο ModelSelector, ώστε να μπορούμε να επαληθεύσουμε τη συμπεριφορά επιλογής, φιλτραρίσματος, αναζήτησης και καρφιτσώματος.",
-        "empty": "Δεν είναι διαθέσιμα μοντέλα αυτή τη στιγμή, επομένως ο επιλογέας δεν μπορεί ακόμα να εμφανιστεί.",
-        "lastModeChangeReturn": "Τελευταία επιστροφή onMultiSelectModeChange",
-        "lastSelectReturn": "Τελευταίο onSelect Return",
-        "loading": "Φόρτωση μοντέλων...",
-        "modelId": "Αναγνωριστικό μοντέλου",
-        "multiSelectMode": "πολλαπλήΛειτουργίαΕπιλογής",
-        "multiple": "πολλαπλές",
-        "normalizedIds": "Κανονικοποιημένα Επιλεγμένα Αναγνωριστικά",
-        "outputEmpty": "Δεν υπάρχουν ακόμα δεδομένα για εμφάνιση",
-        "provider": "Πάροχος",
-        "resetOutputs": "Επαναφορά Εξόδων",
-        "resultsDescription": "Αυτό δείχνει την τρέχουσα πρόταση αξίας, τα κανονικοποιημένα επιλεγμένα αναγνωριστικά και το τελευταίο αποτέλεσμα callback από το στοιχείο.",
-        "resultsTitle": "Έξοδοι & Κατάσταση",
-        "selected": "Τρέχουσα Επιλογή",
-        "selectedEmpty": "Δεν έχει επιλεγεί ακόμα μοντέλο",
-        "selectionConfig": "Διαμόρφωση τιμής επιλογής",
-        "selectionType": "τύπος επιλογής",
-        "selectionTypeId": "Επιστροφή Αναγνωριστικών Μοντέλου",
-        "selectionTypeModel": "Επιστροφή Αντικειμένων Μοντέλου",
-        "showPinnedModels": "εμφάνιση καρφιτσωμένων μοντέλων",
-        "showTagFilter": "showTagFilter",
-        "title": "Επιλογέας Μοντέλου",
-        "triggerPlaceholder": "Επιλέξτε ένα μοντέλο",
-        "triggerSelectedCount": "{{count}} μοντέλα επιλέχθηκαν",
-        "valueProp": "Τρέχουσα Πρόταση Αξίας"
-      },
-      "title": "Εργαστήριο Ανάπτυξης Συστατικών"
-    },
     "data": {
       "app_data": {
         "copy_data_option": "Αντιγραφή δεδομένων, θα γίνει αυτόματα επανεκκίνηση και τα δεδομένα από τον αρχικό κατάλογο θα αντιγραφούν στο νέο κατάλογο",
@@ -4977,96 +4873,6 @@
       },
       "data": {
         "title": "Φάκελος δεδομένων"
-      },
-      "data_sync": {
-        "auto_sync": "[to be translated]:Auto Sync",
-        "current_device": "[to be translated]:Current Device",
-        "diagnose": "[to be translated]:Diagnose",
-        "diagnosis": {
-          "checked_at": "[to be translated]:Checked at: {{time}}",
-          "device": "[to be translated]:Device: {{deviceId}}",
-          "title": "[to be translated]:WebDAV Diagnosis",
-          "write_path": "[to be translated]:Write path: {{path}}",
-          "write_success": "[to be translated]:WebDAV connection and write access are available."
-        },
-        "effective_path": "[to be translated]:Effective Sync Path",
-        "effective_path_help": "[to be translated]:This is the final WebDAV directory Cherry Studio Pi will read and write.",
-        "help": "[to be translated]:Sync local settings, providers, assistants, agents, conversations, knowledge data, notes, and runtime metadata through WebDAV.",
-        "interval": {
-          "day_one": "[to be translated]:Every day",
-          "hour_one": "[to be translated]:Every hour",
-          "hour_other": "[to be translated]:Every {{count}} hours",
-          "minute_one": "[to be translated]:Every minute",
-          "minute_other": "[to be translated]:Every {{count}} minutes",
-          "off": "[to be translated]:Off"
-        },
-        "last_result": "[to be translated]:Latest Result",
-        "method": "[to be translated]:Sync Method",
-        "method_value": "[to be translated]:WebDAV",
-        "password": "[to be translated]:Password",
-        "password_placeholder": "[to be translated]:WebDAV password",
-        "refresh_status": "[to be translated]:Refresh Status",
-        "remote_browser": {
-          "current_path": "[to be translated]:Current path: {{path}}",
-          "empty": "[to be translated]:No folders found",
-          "error_title": "[to be translated]:Unable to load remote directory",
-          "path_hint": "[to be translated]:You can continue using the configured path: {{path}}",
-          "path_hint_title": "[to be translated]:Directory path",
-          "refresh": "[to be translated]:Refresh",
-          "select": "[to be translated]:Select",
-          "select_current": "[to be translated]:Select Current",
-          "title": "[to be translated]:Browse WebDAV Directory",
-          "use_current_path": "[to be translated]:Use configured path",
-          "use_root": "[to be translated]:Use root"
-        },
-        "remote_path": "[to be translated]:Sync Directory",
-        "remote_path_browse": "[to be translated]:Browse",
-        "remote_path_help": "[to be translated]:Choose a dedicated WebDAV directory. Use the same directory on every device that should sync together.",
-        "restore_confirm_content": "[to be translated]:Restore the latest remote safety snapshot to this device? Current local data may be overwritten.",
-        "restore_confirm_title": "[to be translated]:Restore Latest Snapshot",
-        "restore_latest": "[to be translated]:Restore Latest",
-        "snapshot": {
-          "join_safety": "[to be translated]:Local safety snapshot: {{file}} ({{size}})",
-          "open_local": "[to be translated]:Show local snapshot",
-          "uploaded": "[to be translated]:Remote safety snapshot: {{file}} ({{size}})"
-        },
-        "storage": {
-          "blobs": "[to be translated]:Files: uploaded {{uploaded}}, downloaded {{downloaded}}",
-          "conflicts": "[to be translated]:Storage conflicts: {{count}}",
-          "records": "[to be translated]:Storage records: uploaded {{uploaded}}, downloaded {{downloaded}}",
-          "resolved_conflicts": "[to be translated]:Resolved storage conflicts: {{count}}"
-        },
-        "summary": {
-          "conflicts": "[to be translated]:Conflicts: {{count}}",
-          "deleted": "[to be translated]:Deleted: {{count}}",
-          "downloaded": "[to be translated]:Downloaded: {{count}}",
-          "error": "[to be translated]:Error: {{message}}",
-          "remote_path": "[to be translated]:Remote path: {{path}}",
-          "resolved_conflicts": "[to be translated]:Resolved conflicts: {{count}}",
-          "status_failed": "[to be translated]:Failed",
-          "status_success": "[to be translated]:Success",
-          "uploaded": "[to be translated]:Uploaded: {{count}}"
-        },
-        "sync": "[to be translated]:Sync",
-        "sync_now": "[to be translated]:Manual Sync",
-        "title": "[to be translated]:Data Sync",
-        "toast": {
-          "diagnose_failed": "[to be translated]:Diagnosis failed: {{message}}",
-          "diagnose_success": "[to be translated]:Diagnosis passed",
-          "open_snapshot_failed": "[to be translated]:Failed to open local safety snapshot: {{message}}",
-          "remote_path_selected": "[to be translated]:Selected WebDAV directory: {{path}}",
-          "restore_failed": "[to be translated]:Restore failed: {{message}}",
-          "restore_success": "[to be translated]:Restore completed",
-          "sync_failed": "[to be translated]:Data sync failed: {{message}}",
-          "sync_running": "[to be translated]:Data sync is still running.",
-          "sync_success": "[to be translated]:Data sync completed.",
-          "webdav_required": "[to be translated]:Please configure the WebDAV host, username, and password first."
-        },
-        "uninitialized": "[to be translated]:Not initialized",
-        "unresolved_conflicts": "[to be translated]:Unresolved Conflicts",
-        "username": "[to be translated]:Username",
-        "username_placeholder": "[to be translated]:WebDAV username",
-        "webdav_host": "[to be translated]:WebDAV Host"
       },
       "divider": {
         "basic": "Ρυθμίσεις βασικών δεδομένων",
@@ -5632,6 +5438,96 @@
         "title": "Ρύθμιση Yusi",
         "token": "Token του Yusi",
         "token_placeholder": "Παρακαλούμε εισάγετε το Token του Yusi"
+      },
+      "data_sync": {
+        "auto_sync": "[to be translated]:Auto Sync",
+        "current_device": "[to be translated]:Current Device",
+        "diagnose": "[to be translated]:Diagnose",
+        "diagnosis": {
+          "checked_at": "[to be translated]:Checked at: {{time}}",
+          "device": "[to be translated]:Device: {{deviceId}}",
+          "title": "[to be translated]:WebDAV Diagnosis",
+          "write_path": "[to be translated]:Write path: {{path}}",
+          "write_success": "[to be translated]:WebDAV connection and write access are available."
+        },
+        "effective_path": "[to be translated]:Effective Sync Path",
+        "effective_path_help": "[to be translated]:This is the final WebDAV directory Cherry Studio Pi will read and write.",
+        "help": "[to be translated]:Sync local settings, providers, assistants, agents, conversations, knowledge data, notes, and runtime metadata through WebDAV.",
+        "interval": {
+          "day_one": "[to be translated]:Every day",
+          "hour_one": "[to be translated]:Every hour",
+          "hour_other": "[to be translated]:Every {{count}} hours",
+          "minute_one": "[to be translated]:Every minute",
+          "minute_other": "[to be translated]:Every {{count}} minutes",
+          "off": "[to be translated]:Off"
+        },
+        "last_result": "[to be translated]:Latest Result",
+        "method": "[to be translated]:Sync Method",
+        "method_value": "[to be translated]:WebDAV",
+        "password": "[to be translated]:Password",
+        "password_placeholder": "[to be translated]:WebDAV password",
+        "refresh_status": "[to be translated]:Refresh Status",
+        "remote_browser": {
+          "current_path": "[to be translated]:Current path: {{path}}",
+          "empty": "[to be translated]:No folders found",
+          "error_title": "[to be translated]:Unable to load remote directory",
+          "path_hint": "[to be translated]:You can continue using the configured path: {{path}}",
+          "path_hint_title": "[to be translated]:Directory path",
+          "refresh": "[to be translated]:Refresh",
+          "select": "[to be translated]:Select",
+          "select_current": "[to be translated]:Select Current",
+          "title": "[to be translated]:Browse WebDAV Directory",
+          "use_current_path": "[to be translated]:Use configured path",
+          "use_root": "[to be translated]:Use root"
+        },
+        "remote_path": "[to be translated]:Sync Directory",
+        "remote_path_browse": "[to be translated]:Browse",
+        "remote_path_help": "[to be translated]:Choose a dedicated WebDAV directory. Use the same directory on every device that should sync together.",
+        "restore_confirm_content": "[to be translated]:Restore the latest remote safety snapshot to this device? Current local data may be overwritten.",
+        "restore_confirm_title": "[to be translated]:Restore Latest Snapshot",
+        "restore_latest": "[to be translated]:Restore Latest",
+        "snapshot": {
+          "join_safety": "[to be translated]:Local safety snapshot: {{file}} ({{size}})",
+          "open_local": "[to be translated]:Show local snapshot",
+          "uploaded": "[to be translated]:Remote safety snapshot: {{file}} ({{size}})"
+        },
+        "storage": {
+          "blobs": "[to be translated]:Files: uploaded {{uploaded}}, downloaded {{downloaded}}",
+          "conflicts": "[to be translated]:Storage conflicts: {{count}}",
+          "records": "[to be translated]:Storage records: uploaded {{uploaded}}, downloaded {{downloaded}}",
+          "resolved_conflicts": "[to be translated]:Resolved storage conflicts: {{count}}"
+        },
+        "summary": {
+          "conflicts": "[to be translated]:Conflicts: {{count}}",
+          "deleted": "[to be translated]:Deleted: {{count}}",
+          "downloaded": "[to be translated]:Downloaded: {{count}}",
+          "error": "[to be translated]:Error: {{message}}",
+          "remote_path": "[to be translated]:Remote path: {{path}}",
+          "resolved_conflicts": "[to be translated]:Resolved conflicts: {{count}}",
+          "status_failed": "[to be translated]:Failed",
+          "status_success": "[to be translated]:Success",
+          "uploaded": "[to be translated]:Uploaded: {{count}}"
+        },
+        "sync": "[to be translated]:Sync",
+        "sync_now": "[to be translated]:Manual Sync",
+        "title": "[to be translated]:Data Sync",
+        "toast": {
+          "diagnose_failed": "[to be translated]:Diagnosis failed: {{message}}",
+          "diagnose_success": "[to be translated]:Diagnosis passed",
+          "open_snapshot_failed": "[to be translated]:Failed to open local safety snapshot: {{message}}",
+          "remote_path_selected": "[to be translated]:Selected WebDAV directory: {{path}}",
+          "restore_failed": "[to be translated]:Restore failed: {{message}}",
+          "restore_success": "[to be translated]:Restore completed",
+          "sync_failed": "[to be translated]:Data sync failed: {{message}}",
+          "sync_running": "[to be translated]:Data sync is still running.",
+          "sync_success": "[to be translated]:Data sync completed.",
+          "webdav_required": "[to be translated]:Please configure the WebDAV host, username, and password first."
+        },
+        "uninitialized": "[to be translated]:Not initialized",
+        "unresolved_conflicts": "[to be translated]:Unresolved Conflicts",
+        "username": "[to be translated]:Username",
+        "username_placeholder": "[to be translated]:WebDAV username",
+        "webdav_host": "[to be translated]:WebDAV Host"
       }
     },
     "developer": {
@@ -6012,11 +5908,11 @@
         "selectProvider": "Επιλέξτε Πάροχο:",
         "setToken": "Εισαγάγετε το τοκεν σας",
         "success": "Ο συγχρονισμός MCP διακομιστή ολοκληρώθηκε επιτυχώς",
-        "timeout": "[to be translated]:Sync timed out after {{seconds}}s. Please check your network connection and try again.",
         "title": "Συγχρονισμός Διακομιστή",
         "tokenPlaceholder": "Εισάγετε το API τοκεν εδώ",
         "tokenRequired": "Απαιτείται API Τοκεν",
-        "unauthorized": "Δεν εξουσιοδοτήθηκε ο συγχρονισμός"
+        "unauthorized": "Δεν εξουσιοδοτήθηκε ο συγχρονισμός",
+        "timeout": "[to be translated]:Sync timed out after {{seconds}}s. Please check your network connection and try again."
       },
       "system": "Σύστημα",
       "tabs": {
@@ -6206,6 +6102,7 @@
       "disabled": "Κρυμμένα Μίνι Εφαρμογές",
       "display_title": "Ρυθμίσεις Εμφάνισης Mini App",
       "empty": "Κάντε κλικ στο εικονίδιο απόκρυψης σε μια εφαρμογή στα αριστερά και θα μετακινηθεί εδώ",
+      "hide_app": "Απόκρυψη {{name}}",
       "open_link_external": {
         "title": "Άνοιγμα συνδέσμων νέου παραθύρου στον περιηγητή"
       },
@@ -6217,6 +6114,7 @@
         "title": "Φίλτρο Mini Program"
       },
       "reset_tooltip": "Επαναφορά στις προεπιλογές",
+      "show_app": "Εμφάνιση {{name}}",
       "sidebar_description": "Εμφάνιση ενεργών μίνι εφαρμογών στην πλαϊνή στήλη",
       "sidebar_title": "Εμφάνιση Ενεργών Mini Εφαρμογών στην Πλαϊνή Στήλη",
       "title": "Ρυθμίσεις Mini Apps",
@@ -6264,11 +6162,11 @@
           "placeholder": "Για παράδειγμα GPT-3.5",
           "tooltip": "Για παράδειγμα GPT-4"
         },
-        "provider_enable_failed": "[to be translated]:The model was added, but the provider could not be enabled. Enable this provider first, otherwise these models will not appear in Chat or Agent model selectors.",
         "supported_text_delta": {
           "label": "αυξητική έξοδος κειμένου",
           "tooltip": "Όταν το μοντέλο δεν υποστηρίζεται, απενεργοποιήστε αυτό το κουμπί"
-        }
+        },
+        "provider_enable_failed": "[to be translated]:The model was added, but the provider could not be enabled. Enable this provider first, otherwise these models will not appear in Chat or Agent model selectors."
       },
       "api_key": "Κλειδί API",
       "base_url": "Βασικό URL",
@@ -6519,7 +6417,8 @@
       "add": {
         "name": {
           "label": "Όνομα παρόχου",
-          "placeholder": "π.χ. OpenAI"
+          "placeholder": "π.χ. OpenAI",
+          "required": "Παρακαλώ εισάγετε το όνομα του παρόχου"
         },
         "title": "Προσθήκη παρόχου",
         "type": "Τύπος παρόχου"
@@ -6630,7 +6529,8 @@
       "balance": "Υπόλοιπο",
       "base_url": {
         "label": "Βασικό URL",
-        "placeholder": "https://api.example.com"
+        "placeholder": "https://api.example.com",
+        "required": "Παρακαλώ εισάγετε το Base URL"
       },
       "basic_auth": {
         "label": "Πιστοποίηση HTTP",
@@ -6707,7 +6607,6 @@
         "content": "Είστε σίγουροι ότι θέλετε να διαγράψετε αυτόν τον παροχό;",
         "title": "Διαγραφή παρόχου"
       },
-      "delete_failed": "[to be translated]:Failed to delete provider",
       "dmxapi": {
         "platform_enterprise": "ssvip.DMXAPI.com (Enterprise)",
         "platform_international": "www.DMXAPI.com (Διεθνές)",
@@ -6827,7 +6726,8 @@
           "toggle_private_key_visibility": "[to be translated]:Toggle private key visibility",
           "toggle_project_id_visibility": "[to be translated]:Toggle project ID visibility"
         }
-      }
+      },
+      "delete_failed": "[to be translated]:Failed to delete provider"
     },
     "proxy": {
       "address": "Διεύθυνση διαμεσολάβησης",
@@ -6998,10 +6898,12 @@
         },
         "features": {
           "document_to_markdown": {
-            "title": "Επεξεργασία Εγγράφων"
+            "title": "Επεξεργασία Εγγράφων",
+            "tooltip": "Για ανάλυση εγγράφων στις βάσεις γνώσης"
           },
           "image_to_text": {
-            "title": "OCR"
+            "title": "OCR",
+            "tooltip": "Για αναγνώριση κειμένου σε εικόνες στη λειτουργία μετάφρασης"
           }
         },
         "fields": {
@@ -7213,6 +7115,117 @@
     "zoom": {
       "reset": "Επαναφορά",
       "title": "Κλίμακα"
+    },
+    "componentLab": {
+      "agentSelector": {
+        "clearSelection": "Καθαρό",
+        "configDescription": "Εναλλαγή ιδιοτήτων για προεπισκόπηση της συμπεριφοράς του στοιχείου",
+        "configTitle": "Διαμόρφωση",
+        "currentProps": "Τρέχοντα props",
+        "description": "Το AgentSelector διαβάζει πλέον πραγματικά δεδομένα από το /agents του DataApi για να επαληθεύει τη συμπεριφορά επιλογής id/item, καρφιτσώματος, ταξινόμησης και αναζήτησης.",
+        "emptyShellNotice": "Αυτή η προεπισκόπηση χρησιμοποιει την πραγματική λίστα πρακτόρων που επιστρέφεται από το /agents DataApi.",
+        "lastOnChange": "Τελευταίο onChange",
+        "previewDescription": "Κάντε κλικ στον διακόπτη για να ανοίξετε τον επιλογέα",
+        "previewTitle": "Προεπισκόπηση",
+        "title": "Επιλογέας Πράκτορα",
+        "triggerPlaceholder": "Επιλέξτε έναν πράκτορα",
+        "valueProp": "Τρέχουσα τιμή"
+      },
+      "agentTodoList": {
+        "title": "Λίστα Εργασιών Πράκτορα"
+      },
+      "assistantSelector": {
+        "clearSelection": "Καθαρό",
+        "configDescription": "Εναλλαγή ιδιοτήτων για προεπισκόπηση της συμπεριφοράς του στοιχείου",
+        "configTitle": "Διαμόρφωση",
+        "currentProps": "Τρέχοντα props",
+        "description": "Τοποθετεί το επιχειρησιακό στοιχείο AssistantSelector απευθείας για να επαληθεύσει τη συμπεριφορά πολλαπλού/μονού, αναγνωριστικού/αντικειμένου, καρφίτσας, ταξινόμησης και αναζήτησης.",
+        "lastOnChange": "Τελευταίο onChange",
+        "previewDescription": "Κάντε κλικ στον διακόπτη για να ανοίξετε τον επιλογέα",
+        "previewTitle": "Προεπισκόπηση",
+        "title": "Επιλογέας Βοηθού",
+        "triggerPlaceholder": "Επιλέξτε βοηθό",
+        "triggerSelectedCount": "{{count}} βοηθοί επιλέχθηκαν",
+        "valueProp": "Τρέχουσα τιμή"
+      },
+      "description": "Ορατό μόνο κατά την ανάπτυξη για τη δοκιμή του νέου επιλογέα μοντέλου απευθείας μέσα στην εφαρμογή.",
+      "fileProcessing": {
+        "artifact": {
+          "file": "Αρχείο Markdown",
+          "text": "Αποτέλεσμα κειμένου"
+        },
+        "description": "Εκτελέστε κάθε διαμορφωμένο επεξεργαστή αρχείων μέσω του πραγματικού IPC επεξεργασίας αρχείων και συγκρίνετε τα αποτελέσματα.",
+        "duration": "{{seconds}}δ",
+        "jobId": "Αναγνωριστικό Εργασίας",
+        "markdown": {
+          "description": "Επιλέξτε ένα έγγραφο και εκτελέστε όλους τους επεξεργαστές μετατροπής εγγράφων σε markdown.",
+          "fileFilterName": "Έγγραφα",
+          "noFile": "Δεν έχει επιλεγεί κανένα έγγραφο",
+          "select": "Επιλέξτε έγγραφο",
+          "start": "Test markdown",
+          "title": "Markdown"
+        },
+        "noProcessors": "Κανένας επεξεργαστής δεν υποστηρίζει αυτή τη λειτουργία.",
+        "ocr": {
+          "description": "Επιλέξτε μια εικόνα και εκτελέστε όλους τους επεξεργαστές OCR.",
+          "fileFilterName": "Εικόνες",
+          "noFile": "Δεν έχει επιλεγεί εικόνα",
+          "select": "Επιλέξτε εικόνα",
+          "start": "Δοκιμή OCR",
+          "title": "OCR"
+        },
+        "processorCount": "{{count}} επεξεργαστές",
+        "status": {
+          "cancelled": "Ακυρώθηκε",
+          "completed": "Ολοκληρώθηκε",
+          "delayed": "Καθυστερημένη",
+          "failed": "Απέτυχε",
+          "idle": "Αδρανής",
+          "pending": "Εκκρεμεί",
+          "processing": "Επεξεργασία",
+          "running": "Τρέξιμο",
+          "starting": "Έναρξη"
+        },
+        "title": "Ανάλυση Εγγράφων"
+      },
+      "label": "Εργαστήριο Συστατικών",
+      "modelSelector": {
+        "behaviorConfig": "Ρύθμιση Συμπεριφοράς και Εμφάνισης",
+        "callbackEmpty": "Δεν έχει ληφθεί ακόμη κλήση συστατικού",
+        "clearSelection": "Καθαρισμός Επιλογής",
+        "configDescription": "Εναλλάξτε τα βασικά props του ModelSelector παραπάνω και επιθεωρήστε την τιμή εισόδου καθώς και τα payloads των callbacks παρακάτω.",
+        "configTitle": "Παιχνίδι με Αξεσουάρ",
+        "controlMultiSelectMode": "Ελεγχόμενη λειτουργία πολλαπλής επιλογής",
+        "currentProps": "Τρέχοντα Props",
+        "defaultMultiSelectMode": "προεπιλεγμένηΛειτουργίαΠολλαπλήςΕπιλογής",
+        "description": "Αυτή η σελίδα τοποθετεί απευθείας το τρέχον επιχειρησιακό στοιχείο ModelSelector, ώστε να μπορούμε να επαληθεύσουμε τη συμπεριφορά επιλογής, φιλτραρίσματος, αναζήτησης και καρφιτσώματος.",
+        "empty": "Δεν είναι διαθέσιμα μοντέλα αυτή τη στιγμή, επομένως ο επιλογέας δεν μπορεί ακόμα να εμφανιστεί.",
+        "lastModeChangeReturn": "Τελευταία επιστροφή onMultiSelectModeChange",
+        "lastSelectReturn": "Τελευταίο onSelect Return",
+        "loading": "Φόρτωση μοντέλων...",
+        "modelId": "Αναγνωριστικό μοντέλου",
+        "multiSelectMode": "πολλαπλήΛειτουργίαΕπιλογής",
+        "multiple": "πολλαπλές",
+        "normalizedIds": "Κανονικοποιημένα Επιλεγμένα Αναγνωριστικά",
+        "outputEmpty": "Δεν υπάρχουν ακόμα δεδομένα για εμφάνιση",
+        "provider": "Πάροχος",
+        "resetOutputs": "Επαναφορά Εξόδων",
+        "resultsDescription": "Αυτό δείχνει την τρέχουσα πρόταση αξίας, τα κανονικοποιημένα επιλεγμένα αναγνωριστικά και το τελευταίο αποτέλεσμα callback από το στοιχείο.",
+        "resultsTitle": "Έξοδοι & Κατάσταση",
+        "selected": "Τρέχουσα Επιλογή",
+        "selectedEmpty": "Δεν έχει επιλεγεί ακόμα μοντέλο",
+        "selectionConfig": "Διαμόρφωση τιμής επιλογής",
+        "selectionType": "τύπος επιλογής",
+        "selectionTypeId": "Επιστροφή Αναγνωριστικών Μοντέλου",
+        "selectionTypeModel": "Επιστροφή Αντικειμένων Μοντέλου",
+        "showPinnedModels": "εμφάνιση καρφιτσωμένων μοντέλων",
+        "showTagFilter": "showTagFilter",
+        "title": "Επιλογέας Μοντέλου",
+        "triggerPlaceholder": "Επιλέξτε ένα μοντέλο",
+        "triggerSelectedCount": "{{count}} μοντέλα επιλέχθηκαν",
+        "valueProp": "Τρέχουσα Πρόταση Αξίας"
+      },
+      "title": "Εργαστήριο Ανάπτυξης Συστατικών"
     }
   },
   "tab": {
@@ -7449,5 +7462,13 @@
     "quit": "Έξοδος",
     "show_window": "Εμφάνιση Παραθύρου",
     "visualization": "προβολή"
+  },
+  "privacy_policy": {
+    "title": "Πολιτική απορρήτου"
+  },
+  "privacy_policy_update": {
+    "description_before_link": "Ενημερώσαμε την πολιτική απορρήτου. Παρακαλούμε διαβάστε την πιο πρόσφατη ",
+    "policy": "Πολιτική απορρήτου",
+    "title": "Η πολιτική απορρήτου ενημερώθηκε"
   }
 }

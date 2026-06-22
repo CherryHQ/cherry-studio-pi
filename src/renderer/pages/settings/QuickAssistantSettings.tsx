@@ -17,18 +17,16 @@ import {
 import { usePreference } from '@data/hooks/usePreference'
 import ModelAvatar from '@renderer/components/Avatar/ModelAvatar'
 import { useTheme } from '@renderer/context/ThemeProvider'
-import { resolveDefaultAssistantOption, useAssistants, useDefaultAssistant } from '@renderer/hooks/useAssistant'
+import { useAssistants } from '@renderer/hooks/useAssistant'
 import { useDefaultModel } from '@renderer/hooks/useModel'
 import type { Assistant } from '@renderer/types'
-import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { cn } from '@renderer/utils/style'
 import HomeWindow from '@renderer/windows/quickAssistant/home/HomeWindow'
-import { DEFAULT_ASSISTANT_ID } from '@shared/data/types/assistant'
 import type { Model } from '@shared/data/types/model'
 import { Check, ChevronDown, Info } from 'lucide-react'
 import type React from 'react'
 import type { FC } from 'react'
-import { useCallback, useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingRow, SettingRowTitle, SettingsContentColumn, SettingTitle } from '.'
@@ -47,73 +45,42 @@ const QuickAssistantSettings: FC = () => {
   const { t } = useTranslation()
   const { theme } = useTheme()
   const { assistants } = useAssistants()
-  const { assistant: _defaultAssistant } = useDefaultAssistant()
   const { defaultModel } = useDefaultModel()
   const [assistantSelectOpen, setAssistantSelectOpen] = useState(false)
 
-  const showSaveFailed = useCallback(
-    (error: unknown) => {
-      window.toast?.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
-    },
-    [t]
-  )
-
-  // Take the "default assistant" from the assistant list first.
-  const defaultAssistant = useMemo(
-    () => resolveDefaultAssistantOption(assistants, _defaultAssistant),
-    [assistants, _defaultAssistant]
-  )
-  const assistantOptions = useMemo(
-    () => [defaultAssistant, ...assistants.filter((assistant) => assistant.id !== defaultAssistant.id)],
-    [assistants, defaultAssistant]
-  )
-  const selectedAssistantId = quickAssistantId === DEFAULT_ASSISTANT_ID ? defaultAssistant.id : quickAssistantId
-  const selectedAssistant =
-    assistantOptions.find((assistant) => assistant.id === selectedAssistantId) || defaultAssistant
+  const assistantOptions = assistants
+  const firstAssistantId = assistantOptions[0]?.id
+  const selectedAssistant = assistantOptions.find((assistant) => assistant.id === quickAssistantId)
   const handleAssistantSelect = (assistantId: string) => {
-    void setQuickAssistantId(assistantId).catch(showSaveFailed)
+    void setQuickAssistantId(assistantId)
   }
 
   const handleEnableQuickAssistant = async (enable: boolean) => {
-    try {
-      await setEnableQuickAssistant(enable)
+    await setEnableQuickAssistant(enable)
 
-      if (!enable) {
-        await window.api.quickAssistant.close()
-      }
+    void (!enable && window.api.quickAssistant.close())
 
-      if (enable && !clickTrayToShowQuickAssistant) {
-        window.toast?.info({
-          title: t('settings.quickAssistant.use_shortcut_to_show'),
-          timeout: 4000,
-          icon: <Info size={16} />
-        })
-      }
+    if (enable && !clickTrayToShowQuickAssistant) {
+      window.toast.info({
+        title: t('settings.quickAssistant.use_shortcut_to_show'),
+        timeout: 4000,
+        icon: <Info size={16} />
+      })
+    }
 
-      if (enable && clickTrayToShowQuickAssistant) {
-        await setTray(true)
-      }
-    } catch (error) {
-      showSaveFailed(error)
+    if (enable && clickTrayToShowQuickAssistant) {
+      void setTray(true)
     }
   }
 
   const handleClickTrayToShowQuickAssistant = async (checked: boolean) => {
-    try {
-      await setClickTrayToShowQuickAssistant(checked)
-      if (checked) await setTray(true)
-    } catch (error) {
-      showSaveFailed(error)
-    }
+    await setClickTrayToShowQuickAssistant(checked)
+    if (checked) void setTray(true)
   }
 
   const handleClickReadClipboardAtStartup = async (checked: boolean) => {
-    try {
-      await setReadClipboardAtStartup(checked)
-      await window.api.quickAssistant.close()
-    } catch (error) {
-      showSaveFailed(error)
-    }
+    await setReadClipboardAtStartup(checked)
+    void window.api.quickAssistant.close()
   }
 
   return (
@@ -153,18 +120,17 @@ const QuickAssistantSettings: FC = () => {
       </SettingGroup>
       {enableQuickAssistant && (
         <SettingGroup theme={theme}>
-          <RowFlex className="items-center justify-between">
-            <RowFlex className="items-center gap-2.5">
+          <SettingRow className="min-h-8.5 flex-nowrap gap-3">
+            <SettingRowTitle className="gap-2.5">
               {t('settings.models.quick_assistant_model')}
               <InfoTooltip
                 content={t('selection.settings.user_modal.model.tooltip')}
                 showArrow
                 iconProps={{ className: 'cursor-pointer' }}
               />
-              <Spacer />
-            </RowFlex>
+            </SettingRowTitle>
             <RowFlex className="items-center gap-2.5">
-              {!quickAssistantId ? null : (
+              {!quickAssistantId || !selectedAssistant ? null : (
                 <RowFlex className="items-center">
                   <Popover open={assistantSelectOpen} onOpenChange={setAssistantSelectOpen}>
                     <PopoverTrigger asChild>
@@ -174,7 +140,7 @@ const QuickAssistantSettings: FC = () => {
                         aria-expanded={assistantSelectOpen}>
                         <AssistantOption
                           assistant={selectedAssistant}
-                          defaultAssistantId={defaultAssistant.id}
+                          firstAssistantId={firstAssistantId}
                           defaultModel={defaultModel}
                         />
                         <ChevronDown size={16} className="shrink-0 opacity-50" />
@@ -202,10 +168,10 @@ const QuickAssistantSettings: FC = () => {
                                 }}>
                                 <AssistantOption
                                   assistant={assistant}
-                                  defaultAssistantId={defaultAssistant.id}
+                                  firstAssistantId={firstAssistantId}
                                   defaultModel={defaultModel}
                                 />
-                                {assistant.id === selectedAssistantId && (
+                                {assistant.id === quickAssistantId && (
                                   <Check size={14} className="ml-auto text-primary" />
                                 )}
                               </CommandItem>
@@ -220,21 +186,22 @@ const QuickAssistantSettings: FC = () => {
               <ButtonGroup>
                 <Button
                   className="min-w-20"
-                  variant={quickAssistantId ? 'default' : 'outline'}
+                  variant={quickAssistantId && selectedAssistant ? 'default' : 'outline'}
+                  disabled={assistantOptions.length === 0}
                   onClick={() => {
-                    void setQuickAssistantId(defaultAssistant.id).catch(showSaveFailed)
+                    void setQuickAssistantId(firstAssistantId ?? '')
                   }}>
                   {t('settings.models.use_assistant')}
                 </Button>
                 <Button
                   className="min-w-20"
                   variant={!quickAssistantId ? 'default' : 'outline'}
-                  onClick={() => void setQuickAssistantId('').catch(showSaveFailed)}>
+                  onClick={() => void setQuickAssistantId('')}>
                   {t('settings.models.use_model')}
                 </Button>
               </ButtonGroup>
             </RowFlex>
-          </RowFlex>
+          </SettingRow>
         </SettingGroup>
       )}
       {enableQuickAssistant && (
@@ -248,15 +215,15 @@ const QuickAssistantSettings: FC = () => {
 
 const AssistantOption = ({
   assistant,
-  defaultAssistantId,
+  firstAssistantId,
   defaultModel
 }: {
   assistant: Assistant
-  defaultAssistantId: string
+  firstAssistantId?: string
   defaultModel: Model | undefined
 }) => {
   const { t } = useTranslation()
-  const isDefault = assistant.id === defaultAssistantId
+  const isDefault = !!firstAssistantId && assistant.id === firstAssistantId
 
   return (
     <AssistantItem>

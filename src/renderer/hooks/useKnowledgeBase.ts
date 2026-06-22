@@ -1,16 +1,15 @@
 import { useInvalidateCache, useMutation, useQuery } from '@data/hooks/useDataApi'
 import { loggerService } from '@logger'
-import { getErrorMessage } from '@renderer/utils/error'
-import type { KnowledgeBaseListItem, UpdateKnowledgeBaseDto } from '@shared/data/api/schemas/knowledges'
+import { ipcApi } from '@renderer/ipc'
+import type { UpdateKnowledgeBaseDto } from '@shared/data/api/schemas/knowledges'
 import { KNOWLEDGE_BASES_MAX_LIMIT } from '@shared/data/api/schemas/knowledges'
 import type { CreateKnowledgeBaseDto, RestoreKnowledgeBaseDto } from '@shared/data/types/knowledge'
-import { type MutableRefObject, useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 
 const KNOWLEDGE_V2_BASES_QUERY = {
   page: 1,
   limit: KNOWLEDGE_BASES_MAX_LIMIT
 } as const
-const EMPTY_KNOWLEDGE_BASES: KnowledgeBaseListItem[] = []
 
 const logger = loggerService.withContext('useKnowledgeBases')
 
@@ -19,28 +18,8 @@ const normalizeError = (error: unknown): Error => {
     return error
   }
 
-  return new Error(getErrorMessage(error), { cause: error })
+  return new Error(String(error))
 }
-
-type MutationSequenceRef = MutableRefObject<number>
-type MountedRef = MutableRefObject<boolean>
-
-const useMountedRef = () => {
-  const mountedRef = useRef(true)
-
-  useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
-
-  return mountedRef
-}
-
-const isCurrentMutation = (mountedRef: MountedRef, mutationSeqRef: MutationSequenceRef, mutationSeq: number) =>
-  mountedRef.current && mutationSeqRef.current === mutationSeq
 
 export type CreateKnowledgeBaseInput = Pick<
   CreateKnowledgeBaseDto,
@@ -56,7 +35,7 @@ export const useKnowledgeBases = () => {
     query: KNOWLEDGE_V2_BASES_QUERY
   })
 
-  const bases = data?.items ?? EMPTY_KNOWLEDGE_BASES
+  const bases = useMemo(() => data?.items ?? [], [data])
 
   return {
     bases,
@@ -70,14 +49,10 @@ export const useCreateKnowledgeBase = () => {
   const [isCreating, setIsCreating] = useState(false)
   const [createError, setCreateError] = useState<Error | undefined>()
   const invalidateCache = useInvalidateCache()
-  const mountedRef = useMountedRef()
-  const mutationSeqRef = useRef(0)
 
   const createBase = useCallback(
     async (input: CreateKnowledgeBaseInput) => {
-      if (mountedRef.current) {
-        setCreateError(undefined)
-      }
+      setCreateError(undefined)
 
       const name = input.name.trim()
       const groupId = input.groupId?.trim()
@@ -111,13 +86,10 @@ export const useCreateKnowledgeBase = () => {
         body.groupId = groupId
       }
 
-      const mutationSeq = ++mutationSeqRef.current
-      if (mountedRef.current) {
-        setIsCreating(true)
-      }
+      setIsCreating(true)
 
       try {
-        const createdBase = await window.api.knowledge.createBase(body)
+        const createdBase = await ipcApi.request('knowledge.create_base', { base: body })
 
         try {
           await invalidateCache('/knowledge-bases')
@@ -127,9 +99,7 @@ export const useCreateKnowledgeBase = () => {
           })
         }
 
-        if (isCurrentMutation(mountedRef, mutationSeqRef, mutationSeq)) {
-          setIsCreating(false)
-        }
+        setIsCreating(false)
         return createdBase
       } catch (error) {
         const normalizedError = normalizeError(error)
@@ -138,14 +108,12 @@ export const useCreateKnowledgeBase = () => {
           groupId,
           embeddingModelId
         })
-        if (isCurrentMutation(mountedRef, mutationSeqRef, mutationSeq)) {
-          setCreateError(normalizedError)
-          setIsCreating(false)
-        }
+        setCreateError(normalizedError)
+        setIsCreating(false)
         throw normalizedError
       }
     },
-    [invalidateCache, mountedRef]
+    [invalidateCache]
   )
 
   return {
@@ -159,14 +127,10 @@ export const useRestoreKnowledgeBase = () => {
   const [isRestoring, setIsRestoring] = useState(false)
   const [restoreError, setRestoreError] = useState<Error | undefined>()
   const invalidateCache = useInvalidateCache()
-  const mountedRef = useMountedRef()
-  const mutationSeqRef = useRef(0)
 
   const restoreBase = useCallback(
     async (input: RestoreKnowledgeBaseInput) => {
-      if (mountedRef.current) {
-        setRestoreError(undefined)
-      }
+      setRestoreError(undefined)
 
       const sourceBaseId = input.sourceBaseId.trim()
       const name = input.name?.trim()
@@ -189,13 +153,10 @@ export const useRestoreKnowledgeBase = () => {
         throw new Error(`Knowledge base dimensions must be a positive integer, received "${input.dimensions}"`)
       }
 
-      const mutationSeq = ++mutationSeqRef.current
-      if (mountedRef.current) {
-        setIsRestoring(true)
-      }
+      setIsRestoring(true)
 
       try {
-        const restoredBase = await window.api.knowledge.restoreBase({
+        const restoredBase = await ipcApi.request('knowledge.restore_base', {
           sourceBaseId,
           name,
           embeddingModelId,
@@ -211,9 +172,7 @@ export const useRestoreKnowledgeBase = () => {
           })
         }
 
-        if (isCurrentMutation(mountedRef, mutationSeqRef, mutationSeq)) {
-          setIsRestoring(false)
-        }
+        setIsRestoring(false)
         return restoredBase
       } catch (error) {
         const normalizedError = normalizeError(error)
@@ -222,14 +181,12 @@ export const useRestoreKnowledgeBase = () => {
           name,
           embeddingModelId
         })
-        if (isCurrentMutation(mountedRef, mutationSeqRef, mutationSeq)) {
-          setRestoreError(normalizedError)
-          setIsRestoring(false)
-        }
+        setRestoreError(normalizedError)
+        setIsRestoring(false)
         throw normalizedError
       }
     },
-    [invalidateCache, mountedRef]
+    [invalidateCache]
   )
 
   return {
@@ -278,48 +235,39 @@ export const useDeleteKnowledgeBase = () => {
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<Error | undefined>()
   const invalidateCache = useInvalidateCache()
-  const mountedRef = useMountedRef()
-  const mutationSeqRef = useRef(0)
 
   const deleteBase = useCallback(
     async (baseId: string) => {
-      const mutationSeq = ++mutationSeqRef.current
-      if (mountedRef.current) {
-        setDeleteError(undefined)
-        setIsDeleting(true)
-      }
+      setDeleteError(undefined)
+      setIsDeleting(true)
       let mutationError: Error | undefined
 
       try {
-        await window.api.knowledge.deleteBase(baseId)
+        await ipcApi.request('knowledge.delete_base', { baseId })
       } catch (error) {
         const normalizedError = normalizeError(error)
         logger.error('Failed to delete knowledge base', normalizedError, {
           baseId
         })
-        if (isCurrentMutation(mountedRef, mutationSeqRef, mutationSeq)) {
-          setDeleteError(normalizedError)
-        }
+        setDeleteError(normalizedError)
         mutationError = normalizedError
       }
 
       try {
-        await invalidateCache([`/knowledge-bases/${baseId}/items`, '/knowledge-bases'])
+        await invalidateCache('/knowledge-bases')
       } catch (invalidateError) {
-        logger.error('Failed to refresh knowledge base caches after delete', normalizeError(invalidateError), {
+        logger.error('Failed to refresh knowledge base list after delete', normalizeError(invalidateError), {
           baseId
         })
       }
 
-      if (isCurrentMutation(mountedRef, mutationSeqRef, mutationSeq)) {
-        setIsDeleting(false)
-      }
+      setIsDeleting(false)
 
       if (mutationError) {
         throw mutationError
       }
     },
-    [invalidateCache, mountedRef]
+    [invalidateCache]
   )
 
   return {

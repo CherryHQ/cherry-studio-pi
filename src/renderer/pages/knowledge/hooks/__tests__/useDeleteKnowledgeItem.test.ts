@@ -6,26 +6,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockUseInvalidateCache = vi.fn()
 const mockInvalidateCache = vi.fn()
-const mockDeleteItems = vi.fn()
+const mockIpcRequest = vi.fn()
 let loggerErrorSpy: ReturnType<typeof vi.spyOn>
 
 vi.mock('@data/hooks/useDataApi', () => ({
   useInvalidateCache: () => mockUseInvalidateCache()
 }))
 
-type Deferred<T> = {
-  promise: Promise<T>
-  resolve: (value: T) => void
-}
-
-function deferred<T>(): Deferred<T> {
-  let resolve: (value: T) => void = () => {}
-  const promise = new Promise<T>((promiseResolve) => {
-    resolve = promiseResolve
-  })
-
-  return { promise, resolve }
-}
+vi.mock('@renderer/ipc', () => ({
+  ipcApi: {
+    request: (...args: unknown[]) => mockIpcRequest(...args)
+  }
+}))
 
 describe('useDeleteKnowledgeItem', () => {
   beforeEach(() => {
@@ -33,12 +25,7 @@ describe('useDeleteKnowledgeItem', () => {
     loggerErrorSpy = vi.spyOn(mockRendererLoggerService, 'error').mockImplementation(() => {})
     mockUseInvalidateCache.mockReturnValue(mockInvalidateCache)
     mockInvalidateCache.mockResolvedValue(undefined)
-    mockDeleteItems.mockResolvedValue({ itemIds: ['note-1'] })
-    ;(window as any).api = {
-      knowledge: {
-        deleteItems: mockDeleteItems
-      }
-    }
+    mockIpcRequest.mockResolvedValue(undefined)
   })
 
   it('deletes one knowledge item through runtime IPC and refreshes the list', async () => {
@@ -49,9 +36,9 @@ describe('useDeleteKnowledgeItem', () => {
       await expect(result.current.deleteItem(item)).resolves.toBeUndefined()
     })
 
-    expect(mockDeleteItems).toHaveBeenCalledWith('base-1', ['note-1'])
+    expect(mockIpcRequest).toHaveBeenCalledWith('knowledge.delete_items', { baseId: 'base-1', itemIds: ['note-1'] })
     expect(mockInvalidateCache).toHaveBeenCalledWith(['/knowledge-bases/base-1/items', '/knowledge-bases'])
-    expect(mockDeleteItems.mock.invocationCallOrder[0]).toBeLessThan(mockInvalidateCache.mock.invocationCallOrder[0])
+    expect(mockIpcRequest.mock.invocationCallOrder[0]).toBeLessThan(mockInvalidateCache.mock.invocationCallOrder[0])
     expect(result.current.error).toBeUndefined()
     expect(result.current.isDeleting).toBe(false)
   })
@@ -59,7 +46,7 @@ describe('useDeleteKnowledgeItem', () => {
   it('keeps delete rejected, refreshes items, and exposes inline error when runtime IPC rejects', async () => {
     const deleteError = new Error('delete failed')
     const item = createNoteItem({ id: 'note-1', content: '会议纪要' })
-    mockDeleteItems.mockRejectedValueOnce(deleteError)
+    mockIpcRequest.mockRejectedValueOnce(deleteError)
     const { result } = renderHook(() => useDeleteKnowledgeItem('base-1'))
 
     await act(async () => {
@@ -67,45 +54,12 @@ describe('useDeleteKnowledgeItem', () => {
     })
 
     expect(mockInvalidateCache).toHaveBeenCalledWith(['/knowledge-bases/base-1/items', '/knowledge-bases'])
-    expect(mockDeleteItems.mock.invocationCallOrder[0]).toBeLessThan(mockInvalidateCache.mock.invocationCallOrder[0])
+    expect(mockIpcRequest.mock.invocationCallOrder[0]).toBeLessThan(mockInvalidateCache.mock.invocationCallOrder[0])
     expect(result.current.error).toBe(deleteError)
     expect(result.current.isDeleting).toBe(false)
     expect(loggerErrorSpy).toHaveBeenCalledWith('Failed to delete knowledge source', deleteError, {
       baseId: 'base-1',
       itemId: 'note-1'
     })
-  })
-
-  it('keeps deleting until the latest overlapping delete completes', async () => {
-    const firstDelete = deferred<void>()
-    const secondDelete = deferred<void>()
-    const item = createNoteItem({ id: 'note-1', content: '会议纪要' })
-    mockDeleteItems.mockReturnValueOnce(firstDelete.promise).mockReturnValueOnce(secondDelete.promise)
-
-    const { result } = renderHook(() => useDeleteKnowledgeItem('base-1'))
-
-    let firstDeletePromise!: Promise<void>
-    let secondDeletePromise!: Promise<void>
-    await act(async () => {
-      firstDeletePromise = result.current.deleteItem(item)
-      secondDeletePromise = result.current.deleteItem(item)
-      await Promise.resolve()
-    })
-
-    expect(result.current.isDeleting).toBe(true)
-
-    await act(async () => {
-      firstDelete.resolve(undefined)
-      await firstDeletePromise
-    })
-
-    expect(result.current.isDeleting).toBe(true)
-
-    await act(async () => {
-      secondDelete.resolve(undefined)
-      await secondDeletePromise
-    })
-
-    expect(result.current.isDeleting).toBe(false)
   })
 })

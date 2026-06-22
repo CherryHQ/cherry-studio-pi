@@ -580,43 +580,21 @@ export const commandSuggestion: Omit<SuggestionOptions<Command, MentionNodeAttrs
   },
 
   render: () => {
-    let component: ReactRenderer<any, any> | null = null
+    let component: ReactRenderer<any, any>
     let cleanup: (() => void) | undefined
-    let updateTimer: ReturnType<typeof setTimeout> | null = null
-
-    const closePopover = () => {
-      if (updateTimer) {
-        clearTimeout(updateTimer)
-        updateTimer = null
-      }
-
-      cleanup?.()
-      cleanup = undefined
-
-      const currentComponent = component
-      component = null
-
-      if (!currentComponent) return
-
-      const element = currentComponent.element as HTMLElement | undefined
-      element?.remove()
-      currentComponent.destroy()
-    }
 
     return {
       onStart: (props) => {
         if (!props?.items || !props?.clientRect) {
-          closePopover()
           logger.warn('Invalid props in command suggestion onStart')
           return
         }
 
-        closePopover()
         component = new ReactRenderer(CommandListPopover, {
           props,
           editor: props.editor
         })
-        const element = component.element as HTMLElement
+        const element = component.element
         // element.style.position = 'absolute'
         element.style.zIndex = '1001'
 
@@ -638,29 +616,18 @@ export const commandSuggestion: Omit<SuggestionOptions<Command, MentionNodeAttrs
 
       onUpdate: (props) => {
         if (!props?.items || !props.clientRect) return
-        if (!component) return
 
         component.updateProps(props)
 
         // Update position when items change (might affect size)
-        const element = component.element as HTMLElement | undefined
-        if (element) {
-          if (updateTimer) {
-            clearTimeout(updateTimer)
-          }
-
-          updateTimer = setTimeout(() => {
-            updateTimer = null
-            if (component?.element === element) {
-              updatePosition(props.editor, element)
-            }
+        if (component.element) {
+          setTimeout(() => {
+            updatePosition(props.editor, component.element)
           }, 0)
         }
       },
 
       onKeyDown: (props) => {
-        if (!component) return false
-
         // Let CommandListPopover handle events first
         const popoverHandled = component.ref?.onKeyDown?.(props.event)
         if (popoverHandled) {
@@ -671,7 +638,8 @@ export const commandSuggestion: Omit<SuggestionOptions<Command, MentionNodeAttrs
         if (props.event.key === 'Enter' && props.event.shiftKey) {
           props.event.preventDefault()
           // Close the suggestion menu
-          closePopover()
+          if (cleanup) cleanup()
+          component.destroy()
           // Use the view from SuggestionKeyDownProps to insert newline
           const { view } = props
           const { state, dispatch } = view
@@ -682,7 +650,8 @@ export const commandSuggestion: Omit<SuggestionOptions<Command, MentionNodeAttrs
         }
 
         if (props.event.key === 'Escape') {
-          closePopover()
+          if (cleanup) cleanup()
+          component.destroy()
           return true
         }
 
@@ -690,7 +659,10 @@ export const commandSuggestion: Omit<SuggestionOptions<Command, MentionNodeAttrs
       },
 
       onExit: () => {
-        closePopover()
+        if (cleanup) cleanup()
+        const element = component.element
+        element.remove()
+        component.destroy()
       }
     }
   }

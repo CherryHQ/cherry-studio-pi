@@ -9,7 +9,7 @@ import mcpService from '@main/services/MCPService'
 import { getDataPath } from '@main/utils'
 import type { Tool } from '@shared/ai/tool'
 import type { AgentSessionEntity, AgentSessionMessageEntity } from '@shared/data/api/schemas/agentSessions'
-import { parseDataUrl } from '@shared/utils'
+import { parseDataUrl } from '@shared/utils/dataUrl'
 import type { UIMessageChunk } from 'ai'
 
 import { ensureAgentSessionWorkspaceDirectory } from '../agentSessionWorkspace'
