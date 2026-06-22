@@ -1,5 +1,6 @@
 import { usePreference } from '@data/hooks/usePreference'
 import { loggerService } from '@logger'
+import { getErrorMessage } from '@renderer/utils/error'
 import type { DidNavigateInPageEvent, WebviewTag } from 'electron'
 import { memo, useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -155,7 +156,7 @@ const WebviewContainer = memo(
           }
         } catch (error) {
           logger.error(`Failed to handle shortcut for webview ${appid}:`, error as Error)
-          window.toast?.error?.(t('miniApp.shortcut.failed', { message: (error as Error).message }))
+          window.toast?.error?.(t('miniApp.shortcut.failed', { message: getErrorMessage(error) }))
         }
       })
 

@@ -1,5 +1,7 @@
 import { loggerService } from '@logger'
 
+import { getErrorMessage } from './error'
+
 const logger = loggerService.withContext('WebviewStateManager')
 
 // Global WebView loaded states - shared between popup and tab modes
@@ -17,7 +19,7 @@ const emitState = (appId: string, loaded: boolean) => {
         cb(loaded)
       } catch (e) {
         // Swallow listener errors to avoid breaking others
-        logger.debug(`Listener error for ${appId}: ${(e as Error).message}`)
+        logger.debug(`Listener error for ${appId}: ${getErrorMessage(e)}`)
       }
     })
   }

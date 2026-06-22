@@ -1,6 +1,7 @@
 import { loggerService } from '@logger'
 import type { NotesSortType, NotesTreeNode } from '@renderer/types/note'
 import { getFileDirectory } from '@renderer/utils'
+import { getErrorMessage } from '@renderer/utils/error'
 import type { TreeDirRoot, TreeNode } from '@shared/file/types'
 
 const logger = loggerService.withContext('NotesService')
@@ -166,7 +167,7 @@ export async function resolveNotesPath(parentPath: string): Promise<ResolvedNote
   } catch (error) {
     logger.warn('Failed to validate notes directory, fallback to default', {
       basePath,
-      error: (error as Error).message
+      error: getErrorMessage(error)
     })
 
     return {

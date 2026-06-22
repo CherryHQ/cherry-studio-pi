@@ -7,7 +7,7 @@ import store, { handleSaveData } from '@renderer/store'
 import { setLocalBackupSyncState, setS3SyncState, setWebDAVSyncState } from '@renderer/store/backup'
 import type { S3Config, WebDavConfig } from '@renderer/types'
 import { uuid } from '@renderer/utils'
-import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
+import { formatErrorMessageWithPrefix, getErrorMessage } from '@renderer/utils/error'
 import type { UnifiedPreferenceKeyType, UnifiedPreferenceType } from '@shared/data/preference/preferenceTypes'
 import dayjs from 'dayjs'
 
@@ -304,7 +304,7 @@ export async function restore() {
     logger.error('restore: Error restoring backup file:', error as Error)
     window.modal.error({
       title: i18n.t('error.backup.file_format'),
-      content: (error as Error).message,
+      content: getErrorMessage(error),
       centered: true
     })
   }

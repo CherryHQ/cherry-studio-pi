@@ -40,6 +40,7 @@ import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import type { Topic } from '@renderer/types'
 import { classNames, removeSpecialCharactersForFileName } from '@renderer/utils'
 import { copyTopicAsMarkdown, copyTopicAsPlainText } from '@renderer/utils/copy'
+import { getErrorMessage } from '@renderer/utils/error'
 import {
   exportMarkdownToJoplin,
   exportMarkdownToSiyuan,
@@ -354,7 +355,7 @@ export const Topics: React.FC<Props> = ({ activeTopic, setActiveTopic, position 
         }
       } catch (error) {
         logger.error('auto-rename failed', error as Error)
-        window.toast?.error(`${t('message.error.fetchTopicName')}: ${(error as Error).message ?? ''}`)
+        window.toast?.error(`${t('message.error.fetchTopicName')}: ${getErrorMessage(error)}`)
       } finally {
         finishTopicRenaming(topic.id)
       }
