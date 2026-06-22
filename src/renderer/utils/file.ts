@@ -36,9 +36,10 @@ export function getFileExtension(filePath: string): string {
  * @returns {string} 移除扩展名后的文件路径
  */
 export function removeFileExtension(filePath: string): string {
-  const parts = filePath.split('.')
-  if (parts.length > 1) {
-    return parts.slice(0, -1).join('.')
+  const separatorIndex = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'))
+  const dotIndex = filePath.lastIndexOf('.')
+  if (dotIndex > separatorIndex) {
+    return filePath.slice(0, dotIndex)
   }
   return filePath
 }

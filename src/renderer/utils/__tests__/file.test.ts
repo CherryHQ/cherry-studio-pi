@@ -7,6 +7,7 @@ import {
   getFileDirectory,
   getFileExtension,
   isSupportedFile,
+  removeFileExtension,
   removeSpecialCharactersForFileName
 } from '../file'
 
@@ -128,6 +129,20 @@ describe('file', () => {
       const size = 0
       const result = formatFileSize(size)
       expect(result).toBe('0.00 KB')
+    })
+  })
+
+  describe('removeFileExtension', () => {
+    it('should remove an extension from the basename only', () => {
+      expect(removeFileExtension('/tmp/cherry.workspace/file.txt')).toBe('/tmp/cherry.workspace/file')
+    })
+
+    it('should preserve paths without basename extensions even when parent directories contain dots', () => {
+      expect(removeFileExtension('/tmp/cherry.workspace/noextension')).toBe('/tmp/cherry.workspace/noextension')
+    })
+
+    it('should handle Windows paths correctly', () => {
+      expect(removeFileExtension('C:\\Users\\Cherry.Workspace\\image.PNG')).toBe('C:\\Users\\Cherry.Workspace\\image')
     })
   })
 
