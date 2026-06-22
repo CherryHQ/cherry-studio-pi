@@ -7,6 +7,7 @@ import type { Client, InValue } from '@libsql/client'
 import { loggerService } from '@logger'
 import { writeWebDavJsonAtomically } from '@main/services/WebDavAtomic'
 import { runWebDavOperation, WebDavOperationError } from '@main/services/WebDavRetry'
+import { getErrorMessage as getMainErrorMessage } from '@main/utils/errorMessage'
 import type { WebDAVClient } from 'webdav'
 
 import { storageV2DataRootService } from './DataRootService'
@@ -261,51 +262,8 @@ class RemoteSyncSizeLimitError extends Error {
   }
 }
 
-function extractErrorMessage(error: unknown, seen = new WeakSet<object>()): string | null {
-  if (error instanceof Error) {
-    return error.message || extractErrorMessage(error.cause, seen)
-  }
-
-  if (typeof error === 'string') {
-    return error.trim() || null
-  }
-
-  if (typeof error === 'number' || typeof error === 'boolean' || typeof error === 'bigint') {
-    return String(error)
-  }
-
-  if (!error || typeof error !== 'object') {
-    return null
-  }
-
-  if (seen.has(error)) {
-    return null
-  }
-  seen.add(error)
-
-  const record = error as Record<string, unknown>
-  for (const key of ['message', 'error', 'cause', 'reason'] as const) {
-    const message = extractErrorMessage(record[key], seen)
-    if (message) return message
-  }
-
-  const status = record.status ?? record.statusCode
-  const code = record.code
-  if (typeof status === 'number' && typeof code === 'string' && code.trim()) {
-    return `${code.trim()} (${status})`
-  }
-  if (typeof code === 'string' && code.trim()) {
-    return code.trim()
-  }
-  if (typeof status === 'number') {
-    return `HTTP ${status}`
-  }
-
-  return null
-}
-
 function errorMessage(error: unknown) {
-  return extractErrorMessage(error) ?? '未知 Storage v2 同步错误'
+  return getMainErrorMessage(error, '未知 Storage v2 同步错误')
 }
 
 function parseJsonCell(value: unknown): unknown {

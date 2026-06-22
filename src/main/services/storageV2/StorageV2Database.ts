@@ -4,6 +4,7 @@ import path from 'node:path'
 
 import { type Client, createClient } from '@libsql/client'
 import { loggerService } from '@logger'
+import { getErrorMessage as getMainErrorMessage } from '@main/utils/errorMessage'
 
 import { storageV2DataRootService } from './DataRootService'
 import { scanStorageV2SecretReferences } from './SecretRefIntegrity'
@@ -48,40 +49,8 @@ function timestampForFilename() {
   return new Date().toISOString().replace(/[:.]/g, '-')
 }
 
-function extractErrorMessage(error: unknown, seen = new WeakSet<object>()): string | null {
-  if (error instanceof Error) {
-    return error.message || extractErrorMessage(error.cause, seen)
-  }
-
-  if (typeof error === 'string') {
-    const message = error.trim()
-    return message || null
-  }
-
-  if (typeof error === 'number' || typeof error === 'boolean' || typeof error === 'bigint') {
-    return String(error)
-  }
-
-  if (!error || typeof error !== 'object') {
-    return null
-  }
-
-  if (seen.has(error)) {
-    return null
-  }
-  seen.add(error)
-
-  const record = error as Record<string, unknown>
-  for (const key of ['message', 'error', 'cause', 'reason'] as const) {
-    const message = extractErrorMessage(record[key], seen)
-    if (message) return message
-  }
-
-  return null
-}
-
 function getErrorMessage(error: unknown) {
-  return extractErrorMessage(error) ?? 'Unknown Storage v2 database error'
+  return getMainErrorMessage(error, 'Unknown Storage v2 database error')
 }
 
 function getErrorCode(error: unknown): string | undefined {

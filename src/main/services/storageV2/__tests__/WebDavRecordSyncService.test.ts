@@ -4328,10 +4328,10 @@ describe('StorageV2WebDavRecordSyncService', () => {
 
     mocks.secretVault.exportPlaintextSecrets.mockResolvedValueOnce({})
     mocks.secretVault.importPlaintextSecrets.mockRejectedValueOnce({
-      error: {
-        message: 'secure storage refused import'
-      },
-      statusCode: 503
+      response: {
+        status: 503,
+        statusText: 'Service Unavailable'
+      }
     })
     vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(deviceB.client as any)
 
@@ -4339,7 +4339,7 @@ describe('StorageV2WebDavRecordSyncService', () => {
       service.sync(mocks.webdav as any, '/remote-root/sync/v1', firstResult.manifest, {
         secretKeyMaterial: 'dav-user:dav-password'
       })
-    ).rejects.toThrow('secure storage refused import')
+    ).rejects.toThrow('503 Service Unavailable')
     expect(deviceB.state.credentials).toEqual([])
   })
 
