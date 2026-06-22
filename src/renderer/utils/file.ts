@@ -21,7 +21,7 @@ export function getFileDirectory(filePath: string): string {
  * @returns {string} 文件名
  */
 export function getFileName(filePath: string): string {
-  return filePath.split(/[/\\]/).pop() ?? ''
+  return filePath.split(/[/\\]/).filter(Boolean).pop() ?? ''
 }
 
 /**

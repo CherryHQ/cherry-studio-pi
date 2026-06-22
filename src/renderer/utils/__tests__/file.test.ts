@@ -118,6 +118,11 @@ describe('file', () => {
       expect(getFileName('C:\\Users\\Cherry\\import.json')).toBe('import.json')
     })
 
+    it('should ignore trailing path separators', () => {
+      expect(getFileName('/Users/Cherry/Documents/')).toBe('Documents')
+      expect(getFileName('C:\\Users\\Cherry\\Documents\\')).toBe('Documents')
+    })
+
     it('should return empty string for empty input', () => {
       expect(getFileName('')).toBe('')
     })
