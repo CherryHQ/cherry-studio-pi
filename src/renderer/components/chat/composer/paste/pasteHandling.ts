@@ -4,22 +4,48 @@ import { getFileExtension, isSupportedFile } from '@renderer/utils'
 import { type ComposerAttachment, toComposerAttachment } from '@renderer/utils/messageUtils/composerAttachment'
 
 const logger = loggerService.withContext('pasteHandling')
+const COMPOSER_PASTE_STATE_KEY = '__CHERRY_STUDIO_PI_COMPOSER_PASTE_STATE__'
 
 // Track last focused component
 type ComponentType = 'inputbar' | 'messageEditor' | 'TranslatePage' | null
-let lastFocusedComponent: ComponentType = 'inputbar' // Default to inputbar
 
 // 处理函数类型
 type PasteHandler = (event: ClipboardEvent) => Promise<boolean>
+type PasteHandlers = Partial<Record<Exclude<ComponentType, null>, PasteHandler>>
+
+type ComposerPasteState = {
+  handlers: PasteHandlers
+  initialized: boolean
+  lastFocusedComponent: ComponentType
+  pasteListener?: EventListener
+}
+
+type ComposerPasteGlobal = typeof globalThis & {
+  [COMPOSER_PASTE_STATE_KEY]?: ComposerPasteState
+}
+
+function getComposerPasteState() {
+  const globalState = globalThis as ComposerPasteGlobal
+  globalState[COMPOSER_PASTE_STATE_KEY] ??= {
+    handlers: {},
+    initialized: false,
+    lastFocusedComponent: 'inputbar'
+  }
+  return globalState[COMPOSER_PASTE_STATE_KEY]
+}
+
+const composerPasteState = getComposerPasteState()
 
 // 处理函数存储
-const handlers: {
-  inputbar?: PasteHandler
-  messageEditor?: PasteHandler
-} = {}
+const handlers = composerPasteState.handlers
 
-// 初始化标志
-let isInitialized = false
+function isEditablePasteTarget(target: EventTarget | Element | null | undefined) {
+  if (!(target instanceof Element)) return false
+  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return true
+  if (target instanceof HTMLElement && target.isContentEditable) return true
+
+  return Boolean(target.closest('input, textarea, [contenteditable="true"], [contenteditable="plaintext-only"]'))
+}
 
 /**
  * 处理粘贴事件的通用服务
@@ -125,14 +151,14 @@ export const handlePaste = async (
  * 设置最后聚焦的组件
  */
 export const setLastFocusedComponent = (component: ComponentType) => {
-  lastFocusedComponent = component
+  composerPasteState.lastFocusedComponent = component
 }
 
 /**
  * 获取最后聚焦的组件
  */
 export const getLastFocusedComponent = (): ComponentType => {
-  return lastFocusedComponent
+  return composerPasteState.lastFocusedComponent
 }
 
 /**
@@ -140,15 +166,30 @@ export const getLastFocusedComponent = (): ComponentType => {
  * 应用启动时只调用一次
  */
 export const init = () => {
-  if (isInitialized) return
+  if (composerPasteState.initialized) return
+
+  const pasteListener: EventListener = (event) => {
+    void handleGlobalPaste(event as ClipboardEvent)
+  }
 
   // 添加全局粘贴事件监听
-  document.addEventListener('paste', async (event) => {
-    await handleGlobalPaste(event)
-  })
+  document.addEventListener('paste', pasteListener)
 
-  isInitialized = true
+  composerPasteState.pasteListener = pasteListener
+  composerPasteState.initialized = true
   logger.verbose('Global paste handler initialized')
+}
+
+/**
+ * 注销全局粘贴事件监听
+ */
+export const unregisterGlobalPasteListener = () => {
+  if (composerPasteState.pasteListener) {
+    document.removeEventListener('paste', composerPasteState.pasteListener)
+  }
+
+  delete composerPasteState.pasteListener
+  composerPasteState.initialized = false
 }
 
 /**
@@ -177,19 +218,13 @@ export const unregisterHandler = (component: ComponentType) => {
  */
 const handleGlobalPaste = async (event: ClipboardEvent): Promise<boolean> => {
   // 如果当前有活动元素且是输入区域，不执行全局处理
-  const activeElement = document.activeElement
-  if (
-    activeElement &&
-    (activeElement.tagName === 'INPUT' ||
-      activeElement.tagName === 'TEXTAREA' ||
-      activeElement.getAttribute('contenteditable') === 'true')
-  ) {
+  if (isEditablePasteTarget(event.target) || isEditablePasteTarget(document.activeElement)) {
     return false
   }
 
   // 根据最后聚焦的组件调用相应处理程序
-  if (lastFocusedComponent && handlers[lastFocusedComponent]) {
-    const handler = handlers[lastFocusedComponent]
+  if (composerPasteState.lastFocusedComponent && handlers[composerPasteState.lastFocusedComponent]) {
+    const handler = handlers[composerPasteState.lastFocusedComponent]
     if (handler) {
       return await handler(event)
     }
@@ -211,6 +246,13 @@ export default {
   setLastFocusedComponent,
   getLastFocusedComponent,
   init,
+  unregisterGlobalPasteListener,
   registerHandler,
   unregisterHandler
+}
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    unregisterGlobalPasteListener()
+  })
 }
