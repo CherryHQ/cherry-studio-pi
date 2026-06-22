@@ -80,6 +80,7 @@ export class LanTransferService extends BaseService {
   private dataHandler?: ReturnType<typeof createDataHandler>
   private responseManager = new ResponseManager()
   private isConnecting = false
+  private isSendingFile = false
   private activeTransfer?: ActiveFileTransfer
   private lastConnectOptions?: LanTransferConnectPayload
   private consecutiveJsonErrors = 0
@@ -106,6 +107,7 @@ export class LanTransferService extends BaseService {
     }
     this.dataHandler?.resetBuffer()
     this.isConnecting = false
+    this.isSendingFile = false
 
     // Clean up discovery resources
     this.stopDiscovery()
@@ -452,57 +454,63 @@ export class LanTransferService extends BaseService {
   public async sendFile(filePath: string): Promise<LanFileCompleteMessage> {
     await this.ensureConnection()
 
-    if (this.activeTransfer) {
+    if (this.isSendingFile || this.activeTransfer) {
       throw new Error('A file transfer is already in progress')
     }
 
-    // Validate file
-    const { stats, fileName } = await validateFile(filePath)
-
-    // Calculate checksum
-    logger.info('Calculating file checksum...')
-    const checksum = await calculateFileChecksum(filePath)
-    logger.info(`File checksum: ${checksum.substring(0, 16)}...`)
-
-    // Connection can drop while validating/checking file; ensure it is still ready before starting transfer.
-    await this.ensureConnection()
-
-    // Initialize transfer state
-    const transferId = crypto.randomUUID()
-    this.activeTransfer = createTransferState(transferId, fileName, stats.size, checksum)
-
-    logger.info(
-      `Starting file transfer: ${fileName} (${formatFileSize(stats.size)}, ${this.activeTransfer.totalChunks} chunks)`
-    )
-
-    // Global timeout
-    const globalTimeoutError = new Error('Transfer timed out (global timeout exceeded)')
-    const globalTimeoutHandle = setTimeout(() => {
-      logger.warn('Global transfer timeout exceeded, aborting transfer', { transferId, fileName })
-      abortTransfer(this.activeTransfer, globalTimeoutError)
-    }, LAN_TRANSFER_GLOBAL_TIMEOUT_MS)
+    this.isSendingFile = true
 
     try {
-      const result = await this.performFileTransfer(filePath, transferId, fileName)
-      return result
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      logger.error(`File transfer failed: ${message}`)
+      // Validate file
+      const { stats, fileName } = await validateFile(filePath)
 
-      this.broadcastClientEvent({
-        type: 'file_transfer_complete',
-        transferId,
-        fileName,
-        success: false,
-        error: message,
-        timestamp: Date.now()
-      })
+      // Calculate checksum
+      logger.info('Calculating file checksum...')
+      const checksum = await calculateFileChecksum(filePath)
+      logger.info(`File checksum: ${checksum.substring(0, 16)}...`)
 
-      throw error
+      // Connection can drop while validating/checking file; ensure it is still ready before starting transfer.
+      await this.ensureConnection()
+
+      // Initialize transfer state
+      const transferId = crypto.randomUUID()
+      this.activeTransfer = createTransferState(transferId, fileName, stats.size, checksum)
+
+      logger.info(
+        `Starting file transfer: ${fileName} (${formatFileSize(stats.size)}, ${this.activeTransfer.totalChunks} chunks)`
+      )
+
+      // Global timeout
+      const globalTimeoutError = new Error('Transfer timed out (global timeout exceeded)')
+      const globalTimeoutHandle = setTimeout(() => {
+        logger.warn('Global transfer timeout exceeded, aborting transfer', { transferId, fileName })
+        abortTransfer(this.activeTransfer, globalTimeoutError)
+      }, LAN_TRANSFER_GLOBAL_TIMEOUT_MS)
+
+      try {
+        const result = await this.performFileTransfer(filePath, transferId, fileName)
+        return result
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        logger.error(`File transfer failed: ${message}`)
+
+        this.broadcastClientEvent({
+          type: 'file_transfer_complete',
+          transferId,
+          fileName,
+          success: false,
+          error: message,
+          timestamp: Date.now()
+        })
+
+        throw error
+      } finally {
+        clearTimeout(globalTimeoutHandle)
+        cleanupTransfer(this.activeTransfer)
+        this.activeTransfer = undefined
+      }
     } finally {
-      clearTimeout(globalTimeoutHandle)
-      cleanupTransfer(this.activeTransfer)
-      this.activeTransfer = undefined
+      this.isSendingFile = false
     }
   }
 

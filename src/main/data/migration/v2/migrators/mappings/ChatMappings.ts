@@ -41,6 +41,7 @@
 
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 import { fileEntryTable } from '@data/db/schemas/file'
 import type { DbType } from '@data/db/types'
@@ -72,6 +73,10 @@ import { v7 as uuidv7 } from 'uuid'
 import { legacyModelToUniqueId } from '../transformers/ModelTransformers'
 
 const logger = loggerService.withContext('ChatMappings')
+
+function toFileUrl(filePath: string | null | undefined): string {
+  return filePath ? pathToFileURL(filePath).href : ''
+}
 
 /**
  * Optional dependencies threaded through the mapper. Currently only used by
@@ -820,7 +825,7 @@ async function transformSingleBlockToPart(
       const basePart: FileUIPart = {
         type: 'file',
         mediaType: inferMediaType(block.file.ext, 'application/octet-stream'),
-        url: block.file.path ? `file://${block.file.path}` : '',
+        url: toFileUrl(block.file.path),
         ...(block.file.origin_name ? { filename: block.file.origin_name } : {})
       }
       const part = block.file.id ? withCherryMeta(basePart, { fileEntryId: block.file.id }) : basePart
@@ -968,7 +973,7 @@ async function promoteBase64ToFileEntry(
     const basePart: FileUIPart = {
       type: 'file',
       mediaType: mimeType,
-      url: `file://${physicalPath}`,
+      url: toFileUrl(physicalPath),
       filename: ext ? `${MIGRATED_IMAGE_NAME}.${ext}` : MIGRATED_IMAGE_NAME
     }
     return withCherryMeta(basePart, { fileEntryId: id })
@@ -1015,7 +1020,7 @@ async function collectImageFileParts(block: OldImageBlock, deps?: ChatMappingDep
     const basePart: FileUIPart = {
       type: 'file',
       mediaType: inferMediaType(block.file.ext, 'image/png'),
-      url: block.file.path ? `file://${block.file.path}` : '',
+      url: toFileUrl(block.file.path),
       ...(block.file.origin_name ? { filename: block.file.origin_name } : {})
     }
     parts.push(block.file.id ? withCherryMeta(basePart, { fileEntryId: block.file.id }) : basePart)

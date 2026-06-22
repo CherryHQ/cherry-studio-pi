@@ -52,6 +52,7 @@ vi.mock('@application', async () => {
 })
 
 vi.mock('../proxy/nodeProxy', () => ({
+  getEffectiveProxyBypassRules: vi.fn((rules?: string) => (rules ? rules.split(',') : [])),
   NodeProxyController: vi.fn(() => ({ configure: nodeProxyConfigureMock }))
 }))
 

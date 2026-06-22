@@ -44,6 +44,19 @@ vi.mock('@shared/config/constant', () => ({
   HOME_CHERRY_DIR: '.cherrystudio'
 }))
 
+vi.mock('@application', () => ({
+  application: {
+    getPath: vi.fn((key: string, filename?: string) => {
+      const roots: Record<string, string> = {
+        'feature.ovms.ovms': '/mock/home/.cherrystudio/ovms/ovms',
+        'feature.ovms.patch': '/mock/home/.cherrystudio/ovms/patch'
+      }
+      const base = roots[key] ?? `/mock/${key}`
+      return filename ? `${base}/${filename}` : base
+    })
+  }
+}))
+
 async function loadOvmsManager() {
   vi.resetModules()
   const { OvmsManager } = await import('../OvmsManager')

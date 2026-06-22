@@ -54,6 +54,7 @@ export function resolveProxyConfig({
 export class ProxyManager extends BaseService {
   private systemProxyInterval: Disposable | null = null
   private appliedKey: string | null = null
+  private desiredDirectProxyConfig: ProxyConfig | null = null
   private nodeProxyController = new NodeProxyController(logger)
 
   // Latest-wins reconciler: rapid proxy-preference toggles (or system-proxy changes) collapse
@@ -64,6 +65,12 @@ export class ProxyManager extends BaseService {
     getSnapshot: () => this.snapshotProxyConfig(),
     isSettled: (config) => proxyConfigKey(config) === this.appliedKey,
     apply: (config) => this.applyProxyConfig(config)
+  })
+  private readonly directProxyReconciler = createLatestReconciler<ProxyConfig | null>({
+    name: 'proxy.direct',
+    getSnapshot: () => this.desiredDirectProxyConfig,
+    isSettled: (config) => !config || proxyConfigKey(config) === this.appliedKey,
+    apply: (config) => (config ? this.applyProxyConfig(config) : undefined)
   })
 
   /**
@@ -117,6 +124,14 @@ export class ProxyManager extends BaseService {
 
     await this.setGlobalProxy(config)
     this.appliedKey = proxyConfigKey(config)
+  }
+
+  async configureProxy(config: ProxyConfig): Promise<void> {
+    this.desiredDirectProxyConfig = config
+    this.directProxyReconciler.request()
+    await this.directProxyReconciler.flush()
+    const error = this.directProxyReconciler.getLastError()
+    if (error) throw error
   }
 
   private ensureSystemProxyMonitor(): void {

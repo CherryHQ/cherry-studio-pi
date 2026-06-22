@@ -368,11 +368,11 @@ describe('agent app capabilities', () => {
     await capability('agents.create').execute(
       {
         name: ' Agent One ',
-        model: ' model-1 ',
+        model: ' provider-1::model-1 ',
         type: ' claude-code ',
         sessionName: ' First task ',
-        plan_model: ' planner-1 ',
-        smallModel: ' small-1 ',
+        plan_model: ' provider-1::planner-1 ',
+        smallModel: ' provider-1::small-1 ',
         accessible_paths: [' /tmp/work ', ''],
         mcps: [' docs ', 'docs'],
         disabledTools: [' Bash ', 'Bash'],
@@ -383,12 +383,12 @@ describe('agent app capabilities', () => {
 
     expect(mocks.createAgentWithStorageV2Recovery).toHaveBeenCalledWith({
       name: 'Agent One',
-      model: 'model-1',
+      model: 'provider-1::model-1',
       type: 'claude-code',
       description: undefined,
       instructions: undefined,
-      planModel: 'planner-1',
-      smallModel: 'small-1',
+      planModel: 'provider-1::planner-1',
+      smallModel: 'provider-1::small-1',
       mcps: ['docs'],
       disabledTools: ['Bash'],
       configuration: { max_turns: 5 }
@@ -409,7 +409,7 @@ describe('agent app capabilities', () => {
       capability('agents.create').execute(
         {
           name: 'Agent One',
-          model: 'model-1',
+          model: 'provider-1::model-1',
           workspacePath: '/tmp/work'
         },
         { source: 'agent', signal: controller.signal }
@@ -432,7 +432,7 @@ describe('agent app capabilities', () => {
       capability('agents.create').execute(
         {
           name: 'Agent One',
-          model: 'model-1',
+          model: 'provider-1::model-1',
           workspacePath: '/tmp/work'
         },
         { source: 'agent', signal: controller.signal }
@@ -454,7 +454,7 @@ describe('agent app capabilities', () => {
       capability('agents.create').execute(
         {
           name: 'Agent One',
-          model: 'model-1'
+          model: 'provider-1::model-1'
         },
         { source: 'agent', signal: controller.signal }
       )
@@ -467,7 +467,7 @@ describe('agent app capabilities', () => {
     await capability('agents.create').execute(
       {
         name: 'Agent One',
-        model: 'model-1',
+        model: 'provider-1::model-1',
         workspacePath: ' /Users/me/project '
       },
       { source: 'agent' }
@@ -485,7 +485,7 @@ describe('agent app capabilities', () => {
     await capability('agents.create').execute(
       {
         name: 'Agent One',
-        model: 'model-1',
+        model: 'provider-1::model-1',
         workspacePath: ' /Users/me/primary ',
         accessible_paths: [' /Users/me/legacy ']
       },
@@ -496,7 +496,10 @@ describe('agent app capabilities', () => {
   })
 
   it('defaults app-created agents to the Pi runtime', async () => {
-    await capability('agents.create').execute({ name: ' Agent One ', model: ' model-1 ' }, { source: 'agent' })
+    await capability('agents.create').execute(
+      { name: ' Agent One ', model: ' provider-1::model-1 ' },
+      { source: 'agent' }
+    )
 
     expect(mocks.createAgentWithStorageV2Recovery).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -509,7 +512,7 @@ describe('agent app capabilities', () => {
     mocks.agentSessionService.createSession.mockRejectedValueOnce(new Error('workspace unavailable'))
 
     const result = await capability('agents.create').execute(
-      { name: 'Agent One', model: 'model-1' },
+      { name: 'Agent One', model: 'provider-1::model-1' },
       { source: 'agent' }
     )
 
@@ -524,7 +527,7 @@ describe('agent app capabilities', () => {
 
   it('rejects empty required agent inputs before calling services', async () => {
     await expect(
-      capability('agents.create').execute({ name: '   ', model: 'model-1' }, { source: 'agent' })
+      capability('agents.create').execute({ name: '   ', model: 'provider-1::model-1' }, { source: 'agent' })
     ).rejects.toThrow('智能体名称不能为空。')
     await expect(
       capability('agents.create').execute({ name: 'Agent One', model: '   ' }, { source: 'agent' })
@@ -563,28 +566,31 @@ describe('agent app capabilities', () => {
   it('rejects invalid optional agent creation fields before writing', async () => {
     await expect(
       capability('agents.create').execute(
-        { name: 'Agent One', model: 'model-1', accessible_paths: '/tmp/work' },
+        { name: 'Agent One', model: 'provider-1::model-1', accessible_paths: '/tmp/work' },
         { source: 'agent' }
       )
     ).rejects.toThrow('可访问路径列表必须是数组。')
     await expect(
-      capability('agents.create').execute({ name: 'Agent One', model: 'model-1', mcps: 'docs' }, { source: 'agent' })
+      capability('agents.create').execute(
+        { name: 'Agent One', model: 'provider-1::model-1', mcps: 'docs' },
+        { source: 'agent' }
+      )
     ).rejects.toThrow('MCP 服务 ID 列表必须是数组。')
     await expect(
       capability('agents.create').execute(
-        { name: 'Agent One', model: 'model-1', disabledTools: 'Bash' },
+        { name: 'Agent One', model: 'provider-1::model-1', disabledTools: 'Bash' },
         { source: 'agent' }
       )
     ).rejects.toThrow('禁用工具列表必须是数组。')
     await expect(
       capability('agents.create').execute(
-        { name: 'Agent One', model: 'model-1', configuration: [] },
+        { name: 'Agent One', model: 'provider-1::model-1', configuration: [] },
         { source: 'agent' }
       )
     ).rejects.toThrow('智能体配置必须是对象。')
     await expect(
       capability('agents.create').execute(
-        { name: 'Agent One', model: 'model-1', type: 'unsupported' },
+        { name: 'Agent One', model: 'provider-1::model-1', type: 'unsupported' },
         { source: 'agent' }
       )
     ).rejects.toThrow('不支持的智能体类型：unsupported')
@@ -617,35 +623,38 @@ describe('agent app capabilities', () => {
       capability('agents.task.create').execute({ agentId: false, task: { title: 'Check sync' } }, { source: 'agent' })
     ).rejects.toThrow('智能体 ID 必须是字符串。')
     await expect(
-      capability('agents.create').execute({ name: 123, model: 'model-1' }, { source: 'agent' })
+      capability('agents.create').execute({ name: 123, model: 'provider-1::model-1' }, { source: 'agent' })
     ).rejects.toThrow('智能体名称必须是字符串。')
     await expect(
       capability('agents.create').execute({ name: 'Agent One', model: 123 }, { source: 'agent' })
     ).rejects.toThrow('智能体模型必须是字符串。')
     await expect(
       capability('agents.create').execute(
-        { name: 'Agent One', model: 'model-1', type: 123, accessible_paths: ['/tmp/work'] },
+        { name: 'Agent One', model: 'provider-1::model-1', type: 123, accessible_paths: ['/tmp/work'] },
         { source: 'agent' }
       )
     ).rejects.toThrow('智能体类型必须是字符串。')
     await expect(
       capability('agents.create').execute(
-        { name: 'Agent One', model: 'model-1', accessible_paths: [123] },
+        { name: 'Agent One', model: 'provider-1::model-1', accessible_paths: [123] },
         { source: 'agent' }
       )
     ).rejects.toThrow('可访问路径必须是字符串。')
     await expect(
       capability('agents.create').execute(
-        { name: 'Agent One', model: 'model-1', workspacePath: { path: '/tmp/work' } },
+        { name: 'Agent One', model: 'provider-1::model-1', workspacePath: { path: '/tmp/work' } },
         { source: 'agent' }
       )
     ).rejects.toThrow('智能体工作目录必须是字符串。')
     await expect(
-      capability('agents.create').execute({ name: 'Agent One', model: 'model-1', mcps: [false] }, { source: 'agent' })
+      capability('agents.create').execute(
+        { name: 'Agent One', model: 'provider-1::model-1', mcps: [false] },
+        { source: 'agent' }
+      )
     ).rejects.toThrow('MCP 服务 ID 必须是字符串。')
     await expect(
       capability('agents.create').execute(
-        { name: 'Agent One', model: 'model-1', disabledTools: [{ name: 'Bash' }] },
+        { name: 'Agent One', model: 'provider-1::model-1', disabledTools: [{ name: 'Bash' }] },
         { source: 'agent' }
       )
     ).rejects.toThrow('禁用工具必须是字符串。')

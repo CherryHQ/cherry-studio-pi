@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('node:child_process', () => ({
+  exec: mocks.exec,
   execFile: mocks.exec
 }))
 
@@ -55,6 +56,19 @@ vi.mock('@main/utils/system', () => ({
 
 vi.mock('@shared/config/constant', () => ({
   HOME_CHERRY_DIR: '.cherrystudio'
+}))
+
+vi.mock('@application', () => ({
+  application: {
+    getPath: vi.fn((key: string, filename?: string) => {
+      const roots: Record<string, string> = {
+        'feature.ovms.ovms': '/mock/home/.cherrystudio/ovms/ovms',
+        'feature.ovms.patch': '/mock/home/.cherrystudio/ovms/patch'
+      }
+      const base = roots[key] ?? `/mock/${key}`
+      return filename ? `${base}/${filename}` : base
+    })
+  }
 }))
 
 vi.mock('../storageV2/StorageV2Repositories', () => ({

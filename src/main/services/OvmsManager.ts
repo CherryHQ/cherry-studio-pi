@@ -1,4 +1,4 @@
-import { exec } from 'node:child_process'
+import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 
 import { application } from '@application'
@@ -16,9 +16,13 @@ import { IpcChannel } from '@shared/IpcChannel'
 import * as fs from 'fs-extra'
 import * as path from 'path'
 
+import { storageV2SettingsRepository } from './storageV2/StorageV2Repositories'
+
 const logger = loggerService.withContext('OvmsManager')
 
-const execAsync = promisify(exec)
+const execFileAsync = promisify(execFile)
+const STORAGE_V2_OVMS_MODEL_CONFIG_KEY = 'ovms.model_config'
+const STORAGE_V2_OVMS_SCOPE = 'ovms'
 
 interface OvmsProcess {
   pid: number
@@ -33,6 +37,14 @@ interface ModelConfig {
 
 interface OvmsConfig {
   mediapipe_config_list: ModelConfig[]
+  model_config_list?: unknown[]
+  [key: string]: unknown
+}
+
+type OvmsModelConfigSnapshot = {
+  config: OvmsConfig
+  sourcePath?: string
+  updatedAt?: string
 }
 
 @Injectable('OvmsManager')
@@ -40,6 +52,94 @@ interface OvmsConfig {
 @Conditional(onPlatform('win32'), onCpuVendor('intel'))
 export class OvmsManager extends BaseService {
   private ovms: OvmsProcess | null = null
+
+  private async runPowerShell(command: string): Promise<{ stdout: string; stderr: string }> {
+    return this.normalizeExecFileResult(await execFileAsync('powershell', ['-Command', command], {}))
+  }
+
+  private normalizeExecFileResult(result: unknown): { stdout: string; stderr: string } {
+    if (typeof result === 'string') {
+      return { stdout: result, stderr: '' }
+    }
+    if (result && typeof result === 'object') {
+      const { stdout, stderr } = result as { stdout?: unknown; stderr?: unknown }
+      return {
+        stdout: typeof stdout === 'string' ? stdout : stdout == null ? '' : String(stdout),
+        stderr: typeof stderr === 'string' ? stderr : stderr == null ? '' : String(stderr)
+      }
+    }
+    return { stdout: '', stderr: '' }
+  }
+
+  private getConfigPath(): string {
+    return path.join(application.getPath('feature.ovms.ovms'), 'models', 'config.json')
+  }
+
+  private emptyConfig(): OvmsConfig {
+    return { mediapipe_config_list: [], model_config_list: [] }
+  }
+
+  private normalizeModelConfig(config: unknown): OvmsConfig {
+    if (!config || typeof config !== 'object' || Array.isArray(config)) {
+      return this.emptyConfig()
+    }
+
+    const rawConfig = config as Record<string, unknown>
+    const rawModels = Array.isArray(rawConfig.mediapipe_config_list) ? rawConfig.mediapipe_config_list : []
+    const mediapipe_config_list = rawModels
+      .map((item) => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) return null
+        const model = item as Record<string, unknown>
+        return typeof model.name === 'string' && typeof model.base_path === 'string'
+          ? { name: model.name, base_path: model.base_path }
+          : null
+      })
+      .filter((item): item is ModelConfig => Boolean(item))
+
+    return {
+      ...rawConfig,
+      mediapipe_config_list,
+      model_config_list: Array.isArray(rawConfig.model_config_list) ? rawConfig.model_config_list : []
+    }
+  }
+
+  private getConfigFromSnapshot(snapshot: unknown): OvmsConfig | null {
+    if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return null
+    const config = (snapshot as OvmsModelConfigSnapshot).config
+    if (!config || typeof config !== 'object' || Array.isArray(config)) return null
+    return this.normalizeModelConfig(config)
+  }
+
+  private async saveConfigSnapshotToStorageV2(config: OvmsConfig, configPath: string): Promise<void> {
+    await storageV2SettingsRepository.set(
+      STORAGE_V2_OVMS_MODEL_CONFIG_KEY,
+      {
+        config,
+        sourcePath: configPath,
+        updatedAt: new Date().toISOString()
+      } satisfies OvmsModelConfigSnapshot,
+      STORAGE_V2_OVMS_SCOPE
+    )
+  }
+
+  private async readModelConfig(
+    configPath: string,
+    options?: { restoreRuntimeProjection?: boolean }
+  ): Promise<OvmsConfig> {
+    await fs.ensureDir(path.dirname(configPath))
+    if (await fs.pathExists(configPath)) {
+      return this.normalizeModelConfig(await fs.readJson(configPath))
+    }
+
+    const storageConfig = this.getConfigFromSnapshot(
+      await storageV2SettingsRepository.get(STORAGE_V2_OVMS_MODEL_CONFIG_KEY)
+    )
+    if (storageConfig && options?.restoreRuntimeProjection) {
+      await fs.writeJson(configPath, storageConfig, { spaces: 2 })
+      logger.info(`Restored OVMS config projection from Storage v2: ${configPath}`)
+    }
+    return storageConfig ?? this.emptyConfig()
+  }
 
   protected async onInit() {
     this.registerIpcHandlers()
@@ -72,7 +172,7 @@ export class OvmsManager extends BaseService {
     try {
       // Check if the process is running
       const processCheckCommand = `Get-Process -Id ${pid} -ErrorAction SilentlyContinue | Select-Object Id | ConvertTo-Json`
-      const { stdout: processStdout } = await execAsync(`powershell -Command "${processCheckCommand}"`)
+      const { stdout: processStdout } = await this.runPowerShell(processCheckCommand)
 
       if (!processStdout.trim()) {
         logger.info(`Process with PID ${pid} is not running`)
@@ -81,7 +181,7 @@ export class OvmsManager extends BaseService {
 
       // Find child processes
       const childProcessCommand = `Get-WmiObject -Class Win32_Process | Where-Object { $_.ParentProcessId -eq ${pid} } | Select-Object ProcessId | ConvertTo-Json`
-      const { stdout: childStdout } = await execAsync(`powershell -Command "${childProcessCommand}"`)
+      const { stdout: childStdout } = await this.runPowerShell(childProcessCommand)
 
       // If there are child processes, terminate them first
       if (childStdout.trim()) {
@@ -102,7 +202,7 @@ export class OvmsManager extends BaseService {
 
       // Finally, terminate the parent process
       const killCommand = `Stop-Process -Id ${pid} -Force -ErrorAction SilentlyContinue`
-      await execAsync(`powershell -Command "${killCommand}"`)
+      await this.runPowerShell(killCommand)
       logger.info(`Terminated process with PID: ${pid}`)
 
       // Wait for the process to disappear with 5-second timeout
@@ -111,7 +211,7 @@ export class OvmsManager extends BaseService {
 
       while (Date.now() - startTime < timeout) {
         const checkCommand = `Get-Process -Id ${pid} -ErrorAction SilentlyContinue | Select-Object Id | ConvertTo-Json`
-        const { stdout: checkStdout } = await execAsync(`powershell -Command "${checkCommand}"`)
+        const { stdout: checkStdout } = await this.runPowerShell(checkCommand)
 
         if (!checkStdout.trim()) {
           logger.info(`Process with PID ${pid} has disappeared`)
@@ -137,8 +237,8 @@ export class OvmsManager extends BaseService {
   public async stopOvms(): Promise<{ success: boolean; message?: string }> {
     try {
       // close the OVMS process
-      await execAsync(
-        `powershell -Command "Get-WmiObject Win32_Process | Where-Object { $_.CommandLine -like 'ovms.exe*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"`
+      await this.runPowerShell(
+        "Get-WmiObject Win32_Process | Where-Object { $_.CommandLine -like 'ovms.exe*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"
       )
 
       // Reset the ovms instance
@@ -158,7 +258,7 @@ export class OvmsManager extends BaseService {
    */
   public async runOvms(): Promise<{ success: boolean; message?: string }> {
     const ovmsDir = application.getPath('feature.ovms.ovms')
-    const configPath = path.join(ovmsDir, 'models', 'config.json')
+    const configPath = this.getConfigPath()
     const runBatPath = path.join(ovmsDir, 'run.bat')
 
     try {
@@ -187,7 +287,7 @@ export class OvmsManager extends BaseService {
 
       // Run run.bat without waiting for it to complete
       logger.info(`Starting OVMS with run.bat: ${runBatPath}`)
-      exec(`"${runBatPath}"`, { cwd: ovmsDir }, (error) => {
+      execFile('cmd.exe', ['/d', '/s', '/c', `"${runBatPath}"`], { cwd: ovmsDir }, (error) => {
         if (error) {
           logger.error(`Error running run.bat: ${error}`)
         }
@@ -217,7 +317,7 @@ export class OvmsManager extends BaseService {
 
       // Check if OVMS process is running
       const psCommand = `Get-Process -Name "ovms" -ErrorAction SilentlyContinue | Select-Object Id, Path | ConvertTo-Json`
-      const { stdout } = await execAsync(`powershell -Command "${psCommand}"`)
+      const { stdout } = await this.runPowerShell(psCommand)
 
       if (!stdout.trim()) {
         logger.info('OVMS process not running')
@@ -246,7 +346,7 @@ export class OvmsManager extends BaseService {
   public async initializeOvms(): Promise<boolean> {
     // Use PowerShell to find ovms.exe processes with their paths
     const psCommand = `Get-Process -Name "ovms" -ErrorAction SilentlyContinue | Select-Object Id, Path | ConvertTo-Json`
-    const { stdout } = await execAsync(`powershell -Command "${psCommand}"`)
+    const { stdout } = await this.runPowerShell(psCommand)
 
     if (!stdout.trim()) {
       logger.error('Command to find OVMS process returned no output')
@@ -254,15 +354,24 @@ export class OvmsManager extends BaseService {
     }
     logger.debug(`OVMS process output: ${stdout}`)
 
-    const processes = JSON.parse(stdout)
+    let processes: unknown
+    try {
+      processes = JSON.parse(stdout)
+    } catch (error) {
+      logger.error('Failed to parse OVMS process discovery output', error as Error)
+      return false
+    }
     const processList = Array.isArray(processes) ? processes : [processes]
 
     // Find the first process with a valid path
     for (const process of processList) {
+      if (!process || typeof process !== 'object') continue
+      const item = process as { Id?: unknown; Path?: unknown }
+      if (typeof item.Id !== 'number' || typeof item.Path !== 'string') continue
       this.ovms = {
-        pid: process.Id,
-        path: process.Path,
-        workingDirectory: path.dirname(process.Path)
+        pid: item.Id,
+        path: item.Path,
+        workingDirectory: path.dirname(item.Path)
       }
       return true
     }
@@ -281,14 +390,9 @@ export class OvmsManager extends BaseService {
       return false
     }
 
-    const configPath = path.join(application.getPath('feature.ovms.ovms'), 'models', 'config.json')
+    const configPath = this.getConfigPath()
     try {
-      if (!(await fs.pathExists(configPath))) {
-        logger.warn(`Config file does not exist: ${configPath}`)
-        return false
-      }
-
-      const config: OvmsConfig = await fs.readJson(configPath)
+      const config = await this.readModelConfig(configPath, { restoreRuntimeProjection: true })
       if (!config.mediapipe_config_list) {
         logger.warn(`No mediapipe_config_list found in config: ${configPath}`)
         return false
@@ -362,12 +466,23 @@ export class OvmsManager extends BaseService {
     logger.info(`Adding model: ${modelName} with ID: ${modelId}, Source: ${modelSource}, Task: ${task}`)
 
     const ovdndDir = application.getPath('feature.ovms.ovms')
-    const pathModel = path.join(ovdndDir, 'models', modelId)
+    const normalizedModelId = modelId.trim()
+    const modelsDir = path.join(ovdndDir, 'models')
+    const pathModel = path.resolve(modelsDir, normalizedModelId)
 
     try {
+      if (
+        !normalizedModelId ||
+        path.relative(modelsDir, pathModel).startsWith('..') ||
+        path.isAbsolute(path.relative(modelsDir, pathModel))
+      ) {
+        logger.error(`Invalid OVMS model id path: ${modelId}`)
+        return { success: false, message: 'Invalid model id path' }
+      }
+
       // check the ovdnDir+'models'+modelId exist or not
       if (await fs.pathExists(pathModel)) {
-        logger.error(`Model with ID ${modelId} already exists`)
+        logger.error(`Model with ID ${normalizedModelId} already exists`)
         return { success: false, message: 'Model ID already exists!' }
       }
 
@@ -379,14 +494,20 @@ export class OvmsManager extends BaseService {
 
       // Use ovdnd.exe for downloading instead of ovms.exe
       const ovdndPath = path.join(ovdndDir, 'ovdnd.exe')
-      const command =
-        `"${ovdndPath}" --pull ` +
-        `--model_repository_path "${ovdndDir}/models" ` +
-        `--source_model "${modelId}" ` +
-        `--model_name "${modelName}" ` +
-        `--target_device GPU ` +
-        `--task ${task} ` +
-        `--overwrite_models`
+      const args = [
+        '--pull',
+        '--model_repository_path',
+        modelsDir,
+        '--source_model',
+        normalizedModelId,
+        '--model_name',
+        modelName,
+        '--target_device',
+        'GPU',
+        '--task',
+        task,
+        '--overwrite_models'
+      ]
 
       const env: Record<string, string | undefined> = {
         ...process.env,
@@ -399,8 +520,8 @@ export class OvmsManager extends BaseService {
         env.HF_ENDPOINT = modelSource
       }
 
-      logger.info(`Running command: ${command} from ${modelSource}`)
-      const { stdout } = await execAsync(command, { env: env, cwd: ovdndDir })
+      logger.info(`Running OVMS downloader for model ${normalizedModelId} from ${modelSource}`)
+      const { stdout } = this.normalizeExecFileResult(await execFileAsync(ovdndPath, args, { env: env, cwd: ovdndDir }))
 
       logger.info('Model download completed')
       logger.debug(`Command output: ${stdout}`)
@@ -413,12 +534,12 @@ export class OvmsManager extends BaseService {
       logger.error(`Failed to add model: ${error}`)
       return {
         success: false,
-        message: `Download model ${modelId} failed, please check following items and try it again:<p>- the model id</p><p>- network connection and proxy</p>`
+        message: `Download model ${normalizedModelId} failed, please check following items and try it again:<p>- the model id</p><p>- network connection and proxy</p>`
       }
     }
 
     // Update config file
-    if (!(await this.updateModelConfig(modelName, modelId))) {
+    if (!(await this.updateModelConfig(modelName, normalizedModelId))) {
       logger.error('Failed to update model config')
       return { success: false, message: 'Failed to update model config' }
     }
@@ -428,7 +549,7 @@ export class OvmsManager extends BaseService {
       return { success: false, message: 'Failed to apply model patchs' }
     }
 
-    logger.info(`Model ${modelName} added successfully with ID ${modelId}`)
+    logger.info(`Model ${modelName} added successfully with ID ${normalizedModelId}`)
     return { success: true }
   }
 
@@ -440,7 +561,7 @@ export class OvmsManager extends BaseService {
     try {
       // Check if ovdnd.exe process is running
       const psCommand = `Get-Process -Name "ovdnd" -ErrorAction SilentlyContinue | Select-Object Id, Path | ConvertTo-Json`
-      const { stdout } = await execAsync(`powershell -Command "${psCommand}"`)
+      const { stdout } = await this.runPowerShell(psCommand)
 
       if (!stdout.trim()) {
         logger.info('ovdnd process is not running')
@@ -455,9 +576,11 @@ export class OvmsManager extends BaseService {
         return { success: true, message: 'Model download process is not running' }
       }
 
-      // Terminate all ovdnd processes
       for (const process of processList) {
-        void this.terminalProcess(process.Id)
+        const result = await this.terminalProcess(process.Id)
+        if (!result.success) {
+          return result
+        }
       }
 
       logger.info('Model download process stopped successfully')
@@ -473,16 +596,10 @@ export class OvmsManager extends BaseService {
    * @param modelId ID of the model to check
    */
   public async checkModelExists(modelId: string): Promise<boolean> {
-    const ovmsDir = application.getPath('feature.ovms.ovms')
-    const configPath = path.join(ovmsDir, 'models', 'config.json')
+    const configPath = this.getConfigPath()
 
     try {
-      if (!(await fs.pathExists(configPath))) {
-        logger.warn(`Config file does not exist: ${configPath}`)
-        return false
-      }
-
-      const config: OvmsConfig = await fs.readJson(configPath)
+      const config = await this.readModelConfig(configPath, { restoreRuntimeProjection: true })
       if (!config.mediapipe_config_list) {
         logger.warn('No mediapipe_config_list found in config')
         return false
@@ -499,20 +616,10 @@ export class OvmsManager extends BaseService {
    * Update the model configuration file
    */
   public async updateModelConfig(modelName: string, modelId: string): Promise<boolean> {
-    const ovmsDir = application.getPath('feature.ovms.ovms')
-    const configPath = path.join(ovmsDir, 'models', 'config.json')
+    const configPath = this.getConfigPath()
 
     try {
-      // Ensure the models directory exists
-      await fs.ensureDir(path.dirname(configPath))
-      let config: OvmsConfig
-
-      // Read existing config or create new one
-      if (await fs.pathExists(configPath)) {
-        config = await fs.readJson(configPath)
-      } else {
-        config = { mediapipe_config_list: [] }
-      }
+      const config = await this.readModelConfig(configPath, { restoreRuntimeProjection: false })
 
       // Ensure mediapipe_config_list exists
       if (!config.mediapipe_config_list) {
@@ -536,6 +643,8 @@ export class OvmsManager extends BaseService {
         logger.info(`Added new model config: ${modelName}`)
       }
 
+      await this.saveConfigSnapshotToStorageV2(config, configPath)
+
       // Write config back to file
       await fs.writeJson(configPath, config, { spaces: 2 })
       logger.info(`Config file updated: ${configPath}`)
@@ -551,16 +660,10 @@ export class OvmsManager extends BaseService {
    * @returns Array of model configurations
    */
   public async getModels(): Promise<ModelConfig[]> {
-    const ovmsDir = application.getPath('feature.ovms.ovms')
-    const configPath = path.join(ovmsDir, 'models', 'config.json')
+    const configPath = this.getConfigPath()
 
     try {
-      if (!(await fs.pathExists(configPath))) {
-        logger.warn(`Config file does not exist: ${configPath}`)
-        return []
-      }
-
-      const config: OvmsConfig = await fs.readJson(configPath)
+      const config = await this.readModelConfig(configPath, { restoreRuntimeProjection: true })
       if (!config.mediapipe_config_list) {
         logger.warn('No mediapipe_config_list found in config')
         return []
