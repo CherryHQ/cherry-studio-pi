@@ -151,24 +151,24 @@ artifactBuildCompleted: scripts/artifact-build-completed.js
 releaseInfo:
   releaseNotes: |
     <!--LANG:en-->
-    Cherry Studio Pi 1.9.63 - Reliability Fixes
+    Cherry Studio Pi 1.9.67 - Cross-Platform File Display Fixes
 
     🐛 Bug Fixes
-    - [Models] Fixed model and MCP settings saves so concurrent updates do not overwrite each other or lose model visibility/status settings
-    - [Chat] Fixed branched conversations showing an extra hidden root message in some history views
-    - [Downloads] Fixed trusted local/private API downloads while keeping unsafe remote URL protection enabled
+    - [Files] Fixed Windows file names showing as full paths in file pickers, tool results, and agent resource suggestions
+    - [Chat] Fixed citation titles from Windows paths so attached local files are easier to recognize
+    - [Files] Fixed folder-style paths with trailing separators so they display the final folder name correctly
 
-    💄 Improvements
-    - [CLI] Improved built-in code CLI launch reliability and reduced unnecessary network checks when auto update is disabled
+    🔒 Security
+    - [Links] Improved external-link handling to block unsafe credentialed URLs while keeping normal web links available
 
     <!--LANG:zh-CN-->
-    Cherry Studio Pi 1.9.63 - 可靠性修复
+    Cherry Studio Pi 1.9.67 - 跨平台文件显示修复
 
     🐛 问题修复
-    - [模型] 修复模型和 MCP 设置保存的可靠性问题，避免并发更新互相覆盖或丢失模型显示/状态设置
-    - [对话] 修复分支对话在部分历史视图中显示额外隐藏根消息的问题
-    - [下载] 修复受信任本地/内网 API 的文件下载，同时保留不安全远程 URL 防护
+    - [文件] 修复 Windows 文件名在文件选择器、工具结果和 Agent 资源建议中显示为完整路径的问题
+    - [对话] 修复 Windows 路径来源的引用标题显示，让本地附件更容易识别
+    - [文件] 修复带结尾分隔符的文件夹路径显示，确保正确展示最后一级文件夹名称
 
-    💄 改进
-    - [CLI] 提升内置代码 CLI 启动可靠性，并在关闭自动更新时减少不必要的网络检查
+    🔒 安全
+    - [链接] 优化外部链接打开逻辑，拦截带账号信息的不安全 URL，同时保留正常网页链接打开能力
     <!--LANG:END-->
