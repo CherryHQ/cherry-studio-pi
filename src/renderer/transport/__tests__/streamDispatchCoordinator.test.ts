@@ -87,6 +87,19 @@ describe('streamDispatchCoordinator', () => {
     off()
   })
 
+  it('preserves nested rejected dispatch details', async () => {
+    streamOpen.mockRejectedValue({ error: { message: 'stream bridge failed' } })
+    const seen: Array<{ ok: boolean; error?: Error }> = []
+    const off = streamDispatchCoordinator.subscribe(TOPIC, (r) => seen.push(r))
+
+    streamDispatchCoordinator.dispatch(TOPIC, req)
+    await flush()
+
+    expect(seen[0]).toMatchObject({ ok: false, topicId: TOPIC })
+    expect(seen[0].error?.message).toBe('stream bridge failed')
+    off()
+  })
+
   it('shows workspace dispatch failures as toast', async () => {
     streamOpen.mockResolvedValue({
       mode: 'blocked',

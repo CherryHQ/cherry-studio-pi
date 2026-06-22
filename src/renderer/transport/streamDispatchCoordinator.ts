@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { getErrorMessage } from '@renderer/utils/error'
 import type { AiStreamOpenRequest, AiStreamOpenResponse } from '@shared/ai/transport'
 
 const logger = loggerService.withContext('streamDispatchCoordinator')
@@ -34,7 +35,7 @@ export const streamDispatchCoordinator = {
         notify({ ok: true, topicId, ack })
       })
       .catch((error: unknown) => {
-        const err = error instanceof Error ? error : new Error(String(error))
+        const err = error instanceof Error ? error : new Error(getErrorMessage(error), { cause: error })
         logger.error('streamOpen IPC failed', err)
         notify({ ok: false, topicId, error: err })
       })
