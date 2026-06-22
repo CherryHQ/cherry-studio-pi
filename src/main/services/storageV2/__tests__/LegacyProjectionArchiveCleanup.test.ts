@@ -81,4 +81,48 @@ describe('pruneManagedLegacyProjectionArchives', () => {
 
     expect(report.failed).toEqual([{ path: oldArchive, error: '423 Locked' }])
   })
+
+  it('preserves non-missing stat failures in the cleanup report', async () => {
+    const unreadableArchive = await createLegacyDir('agent-projection-2026-01-01', 1000)
+    const newerArchive = await createLegacyDir('agent-projection-2026-01-02', 2000)
+    const originalStat = fsp.stat.bind(fsp)
+    const statSpy = vi.spyOn(fsp, 'stat').mockImplementation(async (...args: Parameters<typeof fsp.stat>) => {
+      if (String(args[0]) === unreadableArchive) {
+        throw Object.assign(new Error('EACCES: permission denied, stat archive'), { code: 'EACCES' })
+      }
+      return originalStat(...args)
+    })
+
+    const report = await pruneManagedLegacyProjectionArchives(tempRoot, {
+      prefixes: ['agent-projection-'],
+      keepLatest: 1
+    })
+
+    expect(report.failed).toEqual([{ path: unreadableArchive, error: 'EACCES: permission denied, stat archive' }])
+    expect(report.removed).toEqual([])
+    statSpy.mockRestore()
+    await expect(exists(unreadableArchive)).resolves.toBe(true)
+    await expect(exists(newerArchive)).resolves.toBe(true)
+  })
+
+  it('skips archives that disappear between directory scan and stat', async () => {
+    const disappearingArchive = await createLegacyDir('agent-projection-2026-01-01', 1000)
+    const newerArchive = await createLegacyDir('agent-projection-2026-01-02', 2000)
+    const originalStat = fsp.stat.bind(fsp)
+    vi.spyOn(fsp, 'stat').mockImplementation(async (...args: Parameters<typeof fsp.stat>) => {
+      if (String(args[0]) === disappearingArchive) {
+        throw Object.assign(new Error('ENOENT: no such file or directory, stat archive'), { code: 'ENOENT' })
+      }
+      return originalStat(...args)
+    })
+
+    const report = await pruneManagedLegacyProjectionArchives(tempRoot, {
+      prefixes: ['agent-projection-'],
+      keepLatest: 1
+    })
+
+    expect(report.failed).toEqual([])
+    expect(report.removed).toEqual([])
+    await expect(exists(newerArchive)).resolves.toBe(true)
+  })
 })

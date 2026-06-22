@@ -24,6 +24,11 @@ function normalizeKeepLatest(value: number | undefined) {
   return Math.max(0, Math.floor(value))
 }
 
+function isMissingPathError(error: unknown) {
+  const code = (error as NodeJS.ErrnoException | undefined)?.code
+  return code === 'ENOENT' || code === 'ENOTDIR'
+}
+
 export async function pruneManagedLegacyProjectionArchives(
   dataRoot: string,
   options: LegacyProjectionArchiveCleanupOptions
@@ -54,21 +59,29 @@ export async function pruneManagedLegacyProjectionArchives(
   }
 
   for (const prefix of prefixes) {
-    const candidates = (
-      await Promise.all(
-        entries
-          .filter((entry) => entry.isDirectory() && entry.name.startsWith(prefix))
-          .map(async (entry) => {
-            const archivePath = path.resolve(legacyRoot, entry.name)
-            const stat = await fsp.stat(archivePath).catch(() => null)
-            if (!stat?.isDirectory()) return null
-            return {
-              path: archivePath,
-              mtimeMs: stat.mtimeMs
-            }
-          })
-      )
-    ).filter((item): item is { path: string; mtimeMs: number } => Boolean(item))
+    const candidates: Array<{ path: string; mtimeMs: number }> = []
+    const matchingEntries = entries.filter((entry) => entry.isDirectory() && entry.name.startsWith(prefix))
+
+    for (const entry of matchingEntries) {
+      const archivePath = path.resolve(legacyRoot, entry.name)
+      let stat
+      try {
+        stat = await fsp.stat(archivePath)
+      } catch (error) {
+        if (isMissingPathError(error)) continue
+        report.failed.push({
+          path: archivePath,
+          error: getErrorMessage(error, 'Unknown legacy archive stat error')
+        })
+        continue
+      }
+
+      if (!stat.isDirectory()) continue
+      candidates.push({
+        path: archivePath,
+        mtimeMs: stat.mtimeMs
+      })
+    }
 
     candidates.sort((left, right) => right.mtimeMs - left.mtimeMs || right.path.localeCompare(left.path))
 
