@@ -10,6 +10,7 @@ vi.mock('@cherrystudio/ui', async (importOriginal) => {
   return actual
 })
 
+import { RESOURCE_SELECTOR_FORCE_CLOSE_EVENT } from '@renderer/components/ResourceSelector/resourceSelectorEvents'
 import { DEFAULT_SELECTOR_CONTENT_HEIGHT } from '@renderer/components/Selector/shell/SelectorShell'
 
 import {
@@ -320,6 +321,60 @@ describe('ResourceSelectorShell', () => {
   })
 
   describe('value adapter', () => {
+    it('hides a controlled-open selector after a shared force-close event', async () => {
+      const onOpenChange = vi.fn()
+
+      render(
+        <ResourceSelectorShell
+          trigger={<button type="button">Open</button>}
+          open
+          onOpenChange={onOpenChange}
+          items={ITEMS}
+          pinnedIds={[]}
+          onTogglePin={vi.fn()}
+          labels={LABELS}
+          value={null}
+          onChange={vi.fn()}
+        />
+      )
+
+      expect(screen.getByPlaceholderText('Search')).toBeInTheDocument()
+
+      act(() => {
+        window.dispatchEvent(new CustomEvent(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT))
+      })
+
+      await waitFor(() => expect(screen.queryByPlaceholderText('Search')).not.toBeInTheDocument())
+      expect(onOpenChange).toHaveBeenCalledWith(false)
+    })
+
+    it('closes the popover before running the create action callback', () => {
+      let popoverAtCallback: HTMLElement | null = null
+      const onCreateNew = vi.fn(() => {
+        popoverAtCallback = screen.queryByPlaceholderText('Search')
+      })
+
+      render(
+        <ResourceSelectorShell
+          trigger={<button type="button">Open</button>}
+          items={ITEMS}
+          pinnedIds={[]}
+          onTogglePin={vi.fn()}
+          onCreateNew={onCreateNew}
+          labels={LABELS}
+          value={null}
+          onChange={vi.fn()}
+        />
+      )
+      openPopover()
+      expect(screen.getByPlaceholderText('Search')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByText('Create new'))
+
+      expect(onCreateNew).toHaveBeenCalledTimes(1)
+      expect(popoverAtCallback).toBeNull()
+    })
+
     it('single + id: onChange fires the plain id on row click', () => {
       const onChange = vi.fn()
       render(
@@ -670,8 +725,7 @@ describe('ResourceSelectorShell', () => {
       expect(screen.getAllByRole('button', { name: 'Edit' })).toHaveLength(ITEMS.length)
     })
 
-    it('closes and recreates the popover before running the edit action on requestAnimationFrame', async () => {
-      const animationFrameCallbacks: FrameRequestCallback[] = []
+    it('closes and recreates the popover before running the edit action', () => {
       let popoverAtCallback: HTMLElement | null = null
       const onChange = vi.fn()
       const onEditItem = vi.fn((item: Item) => {
@@ -693,25 +747,11 @@ describe('ResourceSelectorShell', () => {
       )
       openPopover()
 
-      const requestAnimationFrameSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
-        animationFrameCallbacks.push(callback)
-        return animationFrameCallbacks.length
-      })
-
       fireEvent.click(screen.getAllByRole('button', { name: 'Edit' })[0])
-      expect(onEditItem).not.toHaveBeenCalled()
-
-      await waitFor(() => expect(animationFrameCallbacks.length).toBeGreaterThan(0))
-      act(() => {
-        for (const callback of animationFrameCallbacks.splice(0)) {
-          callback(0)
-        }
-      })
 
       expect(onEditItem).toHaveBeenCalledTimes(1)
       expect(onChange).not.toHaveBeenCalled()
       expect(popoverAtCallback).toBeNull()
-      requestAnimationFrameSpy.mockRestore()
     })
 
     it('uses the model selector row styling', () => {

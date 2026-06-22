@@ -61,8 +61,8 @@ export function getActiveModalSurfaceElements(): Element[] {
   return getModalSurfaceElements().filter((element) => !isHiddenModalSurface(element))
 }
 
-export function closeTransientResourceSelectors() {
-  requestCloseResourceSelectors()
+export function closeTransientResourceSelectors(sourceId?: string) {
+  requestCloseResourceSelectors(sourceId)
 }
 
 function scheduleMicrotask(callback: () => void) {
@@ -84,23 +84,25 @@ function scheduleFrame(callback: FrameRequestCallback) {
   return () => window.clearTimeout(timer)
 }
 
-export function scheduleCloseTransientResourceSelectors() {
-  closeTransientResourceSelectors()
+export function scheduleCloseTransientResourceSelectors(sourceId?: string) {
+  const closeForSource = () => closeTransientResourceSelectors(sourceId)
+
+  closeForSource()
 
   if (typeof window === 'undefined') return undefined
 
-  scheduleMicrotask(closeTransientResourceSelectors)
+  scheduleMicrotask(closeForSource)
   let cancelNestedFrame: (() => void) | undefined
   const cancelFrames = [
-    scheduleFrame(closeTransientResourceSelectors),
+    scheduleFrame(closeForSource),
     scheduleFrame(() => {
-      cancelNestedFrame = scheduleFrame(closeTransientResourceSelectors)
+      cancelNestedFrame = scheduleFrame(closeForSource)
     })
   ]
   const timers = [
-    window.setTimeout(closeTransientResourceSelectors, 50),
-    window.setTimeout(closeTransientResourceSelectors, 150),
-    window.setTimeout(closeTransientResourceSelectors, 300)
+    window.setTimeout(closeForSource, 50),
+    window.setTimeout(closeForSource, 150),
+    window.setTimeout(closeForSource, 300)
   ]
 
   return () => {

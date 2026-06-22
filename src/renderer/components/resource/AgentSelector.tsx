@@ -21,6 +21,18 @@ const AgentEditDialog = lazy(() =>
   }))
 )
 
+function waitForDialogCloseFrame() {
+  if (typeof window === 'undefined') return Promise.resolve()
+
+  return new Promise<void>((resolve) => {
+    if (typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve()))
+      return
+    }
+    window.setTimeout(resolve, 0)
+  })
+}
+
 export type AgentSelectorItem = ResourceSelectorShellItem
 
 type SharedProps = {
@@ -168,6 +180,7 @@ export function AgentSelector(props: AgentSelectorProps) {
         handleSelectorOpenChange(false)
         return
       }
+      await waitForDialogCloseFrame()
       handleSelectorOpenChange(true)
     },
     [autoSelectOnCreate, createAgent, handleSelectorOpenChange, props, refetch, t]

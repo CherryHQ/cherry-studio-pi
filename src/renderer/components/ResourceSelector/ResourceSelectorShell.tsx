@@ -313,9 +313,9 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
       // Some create/edit actions immediately switch tabs/routes. Keep closing
       // across microtasks, frames, and short timers so a stale Radix portal
       // cannot remain anchored at the window origin if the surface commits late.
-      scheduleCloseTransientResourceSelectors()
+      scheduleCloseTransientResourceSelectors(selectorId)
     },
-    [closeAllSelectors]
+    [closeAllSelectors, selectorId]
   )
 
   const [searchValue, setSearchValue] = useState('')
