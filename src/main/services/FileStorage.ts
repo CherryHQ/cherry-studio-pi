@@ -107,9 +107,13 @@ function sanitizeTempFileName(fileName: string): string {
   return sanitized.slice(0, 180)
 }
 
+function getCrossPlatformBaseName(filePath: string): string {
+  return path.win32.basename(path.posix.basename(filePath))
+}
+
 function resolveStorageFilePath(storageDir: string, fileName: string): string {
   const rawName = String(fileName ?? '')
-  const baseName = path.win32.basename(path.posix.basename(rawName))
+  const baseName = getCrossPlatformBaseName(rawName)
 
   if (!baseName || baseName !== rawName || baseName === '.' || baseName === '..') {
     throw new Error(`Unsafe stored file name: ${fileName}`)
@@ -1031,7 +1035,7 @@ class FileStorage {
 
       if (!result.canceled && result.filePaths.length > 0) {
         const filePath = result.filePaths[0]
-        const fileName = filePath.split('/').pop() || ''
+        const fileName = getCrossPlatformBaseName(filePath)
         const stats = await fs.promises.stat(filePath)
 
         // If the file is less than 2GB, read the content
@@ -1288,7 +1292,7 @@ class FileStorage {
   private getFuzzyMatchScore(filePath: string, query: string): number {
     const pathLower = filePath.toLowerCase()
     const queryLower = query.toLowerCase()
-    const fileName = filePath.split('/').pop() || ''
+    const fileName = getCrossPlatformBaseName(filePath)
     const fileNameLower = fileName.toLowerCase()
 
     let score = 0
@@ -1406,7 +1410,7 @@ class FileStorage {
   private getGreedyMatchScore(filePath: string, query: string): number {
     const textLower = filePath.toLowerCase()
     const queryLower = query.toLowerCase()
-    const fileName = filePath.split('/').pop() || ''
+    const fileName = getCrossPlatformBaseName(filePath)
     const fileNameLower = fileName.toLowerCase()
 
     let queryIndex = 0

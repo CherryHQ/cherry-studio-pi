@@ -475,6 +475,25 @@ describe('FileStorage Storage v2 upload flow', () => {
     expect(file?.content?.toString()).toBe('{"ok":true}')
   })
 
+  it('uses the basename for selected files with Windows-style separators', async () => {
+    const filePath = path.join(mocks.dirs.root, 'C:\\Users\\me\\import.json')
+    fs.writeFileSync(filePath, '{"ok":true}')
+    mocks.showOpenDialog.mockResolvedValueOnce({
+      canceled: false,
+      filePaths: [filePath]
+    })
+
+    const { fileStorage } = await import('../FileStorage')
+    const file = await fileStorage.open(undefined as never, {})
+
+    expect(file).toMatchObject({
+      fileName: 'import.json',
+      filePath,
+      size: Buffer.byteLength('{"ok":true}')
+    })
+    expect(file?.content?.toString()).toBe('{"ok":true}')
+  })
+
   it('rejects file open failures instead of reporting an empty selection', async () => {
     mocks.showOpenDialog.mockRejectedValueOnce(new Error('dialog unavailable'))
 
