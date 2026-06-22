@@ -5,6 +5,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import path from 'node:path'
 import { pipeline } from 'node:stream/promises'
 
+import { application } from '@application'
 import { createClient, type InValue } from '@libsql/client'
 import { app } from 'electron'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -264,6 +265,23 @@ async function switchInstance(instance: TestInstance, homePath: string) {
       default:
         return path.join(homePath, key)
     }
+  })
+  vi.mocked(application.getPath).mockImplementation((key: string, filename?: string) => {
+    const base = (() => {
+      switch (key) {
+        case 'app.userdata':
+          return instance.userData
+        case 'app.userdata.data':
+          return instance.dataRoot
+        case 'feature.agents.workspaces':
+          return path.join(instance.dataRoot, 'AgentWorkspaces')
+        case 'temp':
+          return path.join(homePath, 'tmp')
+        default:
+          return path.join(instance.userData, key)
+      }
+    })()
+    return filename ? path.join(base, filename) : base
   })
 }
 
