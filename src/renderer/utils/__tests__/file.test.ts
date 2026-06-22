@@ -45,6 +45,12 @@ describe('file', () => {
       expect(result).toBe('/root/path/to')
     })
 
+    it('should handle Windows paths correctly', () => {
+      const filePath = 'C:\\Users\\Cherry\\file.txt'
+      const result = getFileDirectory(filePath)
+      expect(result).toBe('C:\\Users\\Cherry')
+    })
+
     it('should handle empty string input', () => {
       // 验证空字符串输入的边界情况
       const filePath = ''

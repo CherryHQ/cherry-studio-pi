@@ -11,8 +11,8 @@ import mime from 'mime-types'
  * @returns {string} 目录路径
  */
 export function getFileDirectory(filePath: string): string {
-  const parts = filePath.split('/')
-  return parts.slice(0, -1).join('/')
+  const separatorIndex = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'))
+  return separatorIndex >= 0 ? filePath.slice(0, separatorIndex) : ''
 }
 
 /**
