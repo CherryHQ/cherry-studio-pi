@@ -1,5 +1,6 @@
 import CodeViewer from '@renderer/components/CodeViewer'
 import { getLanguageByFilePath } from '@renderer/utils/codeLanguage'
+import { getFileName } from '@renderer/utils/file'
 import type { CollapseProps } from 'antd'
 
 import { ClickableFilePath } from './ClickableFilePath'
@@ -12,7 +13,7 @@ export function WriteTool({
   input?: WriteToolInput
   output?: WriteToolOutput
 }): NonNullable<CollapseProps['items']>[number] {
-  const filename = input?.file_path?.split('/').pop()
+  const filename = input?.file_path ? getFileName(input.file_path) : undefined
   const language = getLanguageByFilePath(input?.file_path ?? '')
 
   return {

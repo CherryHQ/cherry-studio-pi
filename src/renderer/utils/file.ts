@@ -16,12 +16,21 @@ export function getFileDirectory(filePath: string): string {
 }
 
 /**
+ * 从文件路径中提取文件名。
+ * @param {string} filePath 文件路径
+ * @returns {string} 文件名
+ */
+export function getFileName(filePath: string): string {
+  return filePath.split(/[/\\]/).pop() ?? ''
+}
+
+/**
  * 从文件路径中提取文件扩展名。
  * @param {string} filePath 文件路径
  * @returns {string} 文件扩展名（小写），如果没有则返回 '.'
  */
 export function getFileExtension(filePath: string): string {
-  const fileName = filePath.split(/[/\\]/).pop() ?? ''
+  const fileName = getFileName(filePath)
   const parts = fileName.split('.')
   if (parts.length > 1) {
     const extension = parts.slice(-1)[0].toLowerCase()

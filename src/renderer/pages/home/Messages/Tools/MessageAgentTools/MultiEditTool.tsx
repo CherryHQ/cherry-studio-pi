@@ -2,6 +2,7 @@ import type { FileDiffOptions } from '@pierre/diffs'
 import { parseDiffFromFile } from '@pierre/diffs'
 import { FileDiff } from '@pierre/diffs/react'
 import { useCodeStyle } from '@renderer/context/CodeStyleProvider'
+import { getFileName } from '@renderer/utils/file'
 import type { CollapseProps } from 'antd'
 import { useMemo } from 'react'
 
@@ -69,7 +70,7 @@ export function MultiEditTool({
   input?: MultiEditToolInput
   output?: MultiEditToolOutput
 }): NonNullable<CollapseProps['items']>[number] {
-  const filename = input?.file_path?.split('/').pop()
+  const filename = input?.file_path ? getFileName(input.file_path) : undefined
 
   return {
     key: AgentToolsType.MultiEdit,

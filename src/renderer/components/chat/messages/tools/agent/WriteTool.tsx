@@ -1,5 +1,6 @@
 import CodeViewer from '@renderer/components/CodeViewer'
 import { getLanguageByFilePath } from '@renderer/utils/codeLanguage'
+import { getFileName } from '@renderer/utils/file'
 
 import type { ToolDisclosureItem } from '../shared/ToolDisclosure'
 import { ClickableFilePath } from './ClickableFilePath'
@@ -7,7 +8,7 @@ import { SkeletonValue, ToolHeader } from './GenericTools'
 import { AgentToolsType, type WriteToolInput, type WriteToolOutput } from './types'
 
 export function WriteTool({ input }: { input?: WriteToolInput; output?: WriteToolOutput }): ToolDisclosureItem {
-  const filename = input?.file_path?.split('/').pop()
+  const filename = input?.file_path ? getFileName(input.file_path) : undefined
   const language = getLanguageByFilePath(input?.file_path ?? '')
 
   return {

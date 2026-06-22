@@ -12,6 +12,7 @@ import {
   type ToolActivityLocalizedText
 } from '@renderer/i18n/toolActivitySummary'
 import type { ToolMessageBlock } from '@renderer/types/newMessage'
+import { getFileName } from '@renderer/utils/file'
 
 const text = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined
@@ -76,8 +77,7 @@ const formatAction = (
 }
 
 const basename = (filePath: string) => {
-  const normalized = filePath.replace(/\\/g, '/')
-  return normalized.split('/').filter(Boolean).pop() || normalized
+  return getFileName(filePath) || filePath
 }
 
 const summarizeEnglishDescription = (description: string, language?: string): string | undefined => {

@@ -6,6 +6,7 @@ import {
   formatFileSize,
   getFileDirectory,
   getFileExtension,
+  getFileName,
   isSupportedFile,
   removeFileExtension,
   removeSpecialCharactersForFileName
@@ -105,6 +106,20 @@ describe('file', () => {
       const filePath = ''
       const result = getFileExtension(filePath)
       expect(result).toBe('.')
+    })
+  })
+
+  describe('getFileName', () => {
+    it('should return basename for POSIX paths', () => {
+      expect(getFileName('/Users/Cherry/import.json')).toBe('import.json')
+    })
+
+    it('should return basename for Windows paths', () => {
+      expect(getFileName('C:\\Users\\Cherry\\import.json')).toBe('import.json')
+    })
+
+    it('should return empty string for empty input', () => {
+      expect(getFileName('')).toBe('')
     })
   })
 

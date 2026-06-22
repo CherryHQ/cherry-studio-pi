@@ -35,6 +35,7 @@ const translations: Record<string, string> = {
   'message.tools.activity.syncing': 'Syncing',
   'message.tools.activity.taskId': 'Task {{id}}',
   'message.tools.activity.taskList': 'task list',
+  'message.tools.activity.view': 'View',
   'message.tools.activity.viewing': 'Viewing',
   'message.tools.labels.taskCreate': 'Create task',
   'message.tools.labels.taskGet': 'View task',
@@ -99,6 +100,29 @@ describe('getReadableToolActivity', () => {
     expect(getReadableToolActivity(AgentToolsType.Bash, { command: 'node --version' }, true, t)).toEqual({
       label: 'Running command',
       description: 'node command'
+    })
+  })
+
+  it('uses basenames for Windows paths in file activities', () => {
+    expect(
+      getReadableToolActivity(AgentToolsType.Read, { file_path: 'C:\\Users\\Cherry\\Documents\\plan.md' }, false, t)
+    ).toEqual({
+      label: 'View',
+      description: 'plan.md'
+    })
+  })
+
+  it('uses executable basenames for quoted Windows shell commands', () => {
+    expect(
+      getReadableToolActivity(
+        AgentToolsType.Bash,
+        { command: '"C:\\Program Files\\Cherry Studio Pi\\tool.exe" --version' },
+        true,
+        t
+      )
+    ).toEqual({
+      label: 'Running command',
+      description: 'tool.exe command'
     })
   })
 

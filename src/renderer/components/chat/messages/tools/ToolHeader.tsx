@@ -1,5 +1,6 @@
 import { Flex, Tooltip } from '@cherrystudio/ui'
 import type { McpTool, McpToolResponse, NormalToolResponse } from '@renderer/types'
+import { getFileName } from '@renderer/utils/file'
 import {
   Bot,
   DoorOpen,
@@ -108,9 +109,9 @@ function getTaskIdTarget(args: unknown, t: Translate): string | undefined {
   return taskId ? t('message.tools.activity.taskId', { id: taskId }) : undefined
 }
 
-function getFileName(filePath: string | undefined): string | undefined {
+function getReadableFileName(filePath: string | undefined): string | undefined {
   if (!filePath) return undefined
-  return filePath.split('/').filter(Boolean).pop() ?? filePath
+  return getFileName(filePath) || filePath
 }
 
 function getReadableUrlTarget(url: string | undefined, t: Translate): string | undefined {
@@ -152,7 +153,7 @@ function getReadableFileGroup(text: string | undefined, t: Translate): string | 
 }
 
 function getReadablePathTarget(filePath: string | undefined, t: Translate): string | undefined {
-  return getFileName(filePath) ?? getReadableFileGroup(filePath, t)
+  return getReadableFileName(filePath) ?? getReadableFileGroup(filePath, t)
 }
 
 const SEARCH_PATTERN_META_RE = /[\\^$.*+?()[\]{}|]/
@@ -167,9 +168,13 @@ function getReadableSearchTarget(value: string | undefined, t: Translate): strin
 }
 
 function getFirstShellWord(command: string | undefined): string | undefined {
-  const firstWord = command?.trim().match(/^[\w./-]+/)?.[0]
+  const firstWord = command
+    ?.trim()
+    .match(/^(?:"([^"]+)"|'([^']+)'|(\S+))/)
+    ?.slice(1)
+    .find(Boolean)
   if (!firstWord) return undefined
-  return firstWord.split('/').pop()
+  return getFileName(firstWord) || firstWord
 }
 
 function getShellWords(command: string | undefined): string[] {

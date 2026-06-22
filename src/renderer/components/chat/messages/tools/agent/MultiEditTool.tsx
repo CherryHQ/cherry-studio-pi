@@ -1,3 +1,5 @@
+import { getFileName } from '@renderer/utils/file'
+
 import type { ToolDisclosureItem } from '../shared/ToolDisclosure'
 import { AgentFileDiffView } from './AgentFileDiffView'
 import { ClickableFilePath } from './ClickableFilePath'
@@ -25,7 +27,7 @@ export function MultiEditTool({
   input?: MultiEditToolInput
   output?: MultiEditToolOutput
 }): ToolDisclosureItem {
-  const filename = input?.file_path?.split('/').pop()
+  const filename = input?.file_path ? getFileName(input.file_path) : undefined
 
   return {
     key: AgentToolsType.MultiEdit,
