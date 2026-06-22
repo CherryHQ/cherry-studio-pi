@@ -2,6 +2,7 @@ import { Tooltip } from '@cherrystudio/ui'
 import Favicon from '@renderer/components/Icons/FallbackFavicon'
 import MarqueeText from '@renderer/components/MarqueeText'
 import { fetchXOEmbed, isXPostUrl } from '@renderer/utils/fetch'
+import { openHttpExternalUrl } from '@renderer/utils/openExternal'
 import { getUrlHostnameOrFallback } from '@renderer/utils/url'
 import { useQuery } from '@tanstack/react-query'
 import React, { memo, useCallback, useMemo } from 'react'
@@ -45,14 +46,7 @@ const CitationTooltip: React.FC<CitationTooltipProps> = ({ children, citation })
   }, [citation.content, isXPost, oembedData])
 
   const handleClick = useCallback(() => {
-    try {
-      const url = new URL(citation.url)
-      if (url.protocol !== 'http:' && url.protocol !== 'https:') return
-    } catch {
-      return
-    }
-
-    window.open(citation.url, '_blank', 'noopener,noreferrer')
+    openHttpExternalUrl(citation.url)
   }, [citation.url])
 
   // 自定义悬浮卡片内容

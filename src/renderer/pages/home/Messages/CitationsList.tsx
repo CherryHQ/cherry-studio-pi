@@ -8,6 +8,7 @@ import type { Citation } from '@renderer/types'
 import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { fetchWebContent, fetchXOEmbed, isXPostUrl } from '@renderer/utils/fetch'
 import { cleanMarkdownContent } from '@renderer/utils/formats'
+import { openHttpExternalUrl } from '@renderer/utils/openExternal'
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { Popover, Skeleton } from 'antd'
 import { Check, Copy, FileSearch } from 'lucide-react'
@@ -141,7 +142,7 @@ const handleLinkClick = (
   try {
     const parsedUrl = new URL(url)
     if (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:') {
-      window.open(url, '_blank', 'noopener,noreferrer')
+      openHttpExternalUrl(url)
       return
     }
     return
