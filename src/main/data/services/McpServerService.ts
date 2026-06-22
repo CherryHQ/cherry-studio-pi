@@ -88,14 +88,16 @@ export class McpServerService {
 
     const { sortOrder, isActive, ...rest } = dto
 
-    const [row] = await this.db
-      .insert(mcpServerTable)
-      .values({
-        ...rest,
-        sortOrder: sortOrder ?? 0,
-        isActive: isActive ?? false
-      })
-      .returning()
+    const [row] = await application.get('DbService').withWriteTx((tx) =>
+      tx
+        .insert(mcpServerTable)
+        .values({
+          ...rest,
+          sortOrder: sortOrder ?? 0,
+          isActive: isActive ?? false
+        })
+        .returning()
+    )
 
     logger.info('Created MCP server', { id: row.id, name: row.name })
 
@@ -106,8 +108,6 @@ export class McpServerService {
    * Update an existing MCP server
    */
   async update(id: string, dto: UpdateMcpServerDto): Promise<McpServer> {
-    await this.getById(id)
-
     if (dto.name !== undefined) {
       this.validateName(dto.name)
     }
@@ -116,7 +116,15 @@ export class McpServerService {
       typeof mcpServerTable.$inferInsert
     >
 
-    const [row] = await this.db.update(mcpServerTable).set(updates).where(eq(mcpServerTable.id, id)).returning()
+    const row = await application.get('DbService').withWriteTx(async (tx) => {
+      const [existing] = await tx.select().from(mcpServerTable).where(eq(mcpServerTable.id, id)).limit(1)
+      if (!existing) {
+        throw DataApiErrorFactory.notFound('McpServer', id)
+      }
+
+      const [updated] = await tx.update(mcpServerTable).set(updates).where(eq(mcpServerTable.id, id)).returning()
+      return updated
+    })
 
     logger.info('Updated MCP server', { id, changes: Object.keys(dto) })
 
@@ -172,7 +180,12 @@ export class McpServerService {
    * Reorder MCP servers by updating sortOrder based on ordered IDs
    */
   async reorder(orderedIds: string[]): Promise<void> {
-    await this.db.transaction(async (tx) => {
+    if (orderedIds.length === 0) {
+      logger.info('Reordered MCP servers', { count: 0 })
+      return
+    }
+
+    await application.get('DbService').withWriteTx(async (tx) => {
       for (let i = 0; i < orderedIds.length; i++) {
         await tx.update(mcpServerTable).set({ sortOrder: i }).where(eq(mcpServerTable.id, orderedIds[i]))
       }
