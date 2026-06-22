@@ -443,6 +443,31 @@ describe('ModelSelector', () => {
     }
   })
 
+  it('continues broadcasting close requests after selecting a model for late surface commits', async () => {
+    mockUseModelSelectorData.mockReturnValue(makeData())
+    const onSelect = vi.fn()
+    const closeSelectors = vi.fn()
+    window.addEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeSelectors)
+
+    try {
+      render(<ModelSelector multiple={false} trigger={<button type="button">open</button>} onSelect={onSelect} />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'open' }))
+      expect(screen.getByTestId('model-selector-content')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('option', { name: /gpt-4/i }))
+
+      expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'openai::gpt-4' }))
+      const closeCountAfterSelect = closeSelectors.mock.calls.length
+
+      await new Promise((resolve) => setTimeout(resolve, 180))
+
+      expect(closeSelectors.mock.calls.length - closeCountAfterSelect).toBeGreaterThanOrEqual(3)
+    } finally {
+      window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeSelectors)
+    }
+  })
+
   it('uses listVisibleCount to size the visible model list', () => {
     const items = Array.from({ length: 10 }, (_, index) => makeModelItem(`openai::model-${index}` as UniqueModelId))
     mockUseModelSelectorData.mockReturnValue(

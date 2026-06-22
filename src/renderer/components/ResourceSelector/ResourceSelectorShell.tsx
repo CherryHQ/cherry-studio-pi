@@ -33,7 +33,8 @@ import {
   getActiveModalSurfaceElements,
   getResourceSelectorForceCloseSource,
   requestCloseResourceSelectors,
-  RESOURCE_SELECTOR_FORCE_CLOSE_EVENT
+  RESOURCE_SELECTOR_FORCE_CLOSE_EVENT,
+  scheduleCloseTransientResourceSelectors
 } from './resourceSelectorEvents'
 
 export type ResourceSelectorShellItem = {
@@ -309,11 +310,10 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
 
       action()
 
-      // Some create/edit actions immediately switch tabs/routes. Re-assert close
-      // after that navigation has had a chance to commit so a stale Radix portal
-      // cannot remain anchored at the window origin.
-      queueMicrotask(closeAllSelectors)
-      requestAnimationFrame(closeAllSelectors)
+      // Some create/edit actions immediately switch tabs/routes. Keep closing
+      // across microtasks, frames, and short timers so a stale Radix portal
+      // cannot remain anchored at the window origin if the surface commits late.
+      scheduleCloseTransientResourceSelectors()
     },
     [closeAllSelectors]
   )

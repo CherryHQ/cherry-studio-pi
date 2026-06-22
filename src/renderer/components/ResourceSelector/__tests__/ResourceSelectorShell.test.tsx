@@ -160,6 +160,50 @@ describe('ResourceSelectorShell', () => {
       expect(screen.queryByPlaceholderText('Search')).not.toBeInTheDocument()
     })
 
+    it('continues broadcasting close requests after create actions for late modal mounts', () => {
+      const onCreateNew = vi.fn()
+      const closeListener = vi.fn()
+      window.addEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeListener)
+
+      render(
+        <ResourceSelectorShell
+          trigger={<button type="button">Open</button>}
+          items={ITEMS}
+          pinnedIds={[]}
+          onTogglePin={vi.fn()}
+          onEditItem={vi.fn()}
+          onCreateNew={onCreateNew}
+          labels={LABELS}
+          value={null}
+          onChange={vi.fn()}
+        />
+      )
+
+      openPopover()
+      expect(screen.getByPlaceholderText('Search')).toBeInTheDocument()
+
+      vi.useFakeTimers()
+      try {
+        fireEvent.click(screen.getByRole('button', { name: 'Create new' }))
+
+        expect(onCreateNew).toHaveBeenCalledTimes(1)
+        const closeCountAfterAction = closeListener.mock.calls.length
+
+        act(() => {
+          vi.advanceTimersByTime(160)
+        })
+
+        expect(closeListener.mock.calls.length).toBeGreaterThan(closeCountAfterAction)
+
+        act(() => {
+          vi.advanceTimersByTime(200)
+        })
+      } finally {
+        vi.useRealTimers()
+        window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeListener)
+      }
+    })
+
     it('remounts the selector on ordinary popover close so stale portals cannot linger', async () => {
       render(
         <ResourceSelectorShell

@@ -17,7 +17,8 @@ import {
   getActiveModalSurfaceElements,
   getResourceSelectorForceCloseSource,
   requestCloseResourceSelectors,
-  RESOURCE_SELECTOR_FORCE_CLOSE_EVENT
+  RESOURCE_SELECTOR_FORCE_CLOSE_EVENT,
+  scheduleCloseTransientResourceSelectors
 } from '@renderer/components/ResourceSelector/resourceSelectorEvents'
 import { DynamicVirtualList, type DynamicVirtualListRef } from '@renderer/components/VirtualList'
 import { isDev } from '@renderer/config/constant'
@@ -387,8 +388,7 @@ export function ModelSelector(props: ModelSelectorProps) {
 
       action()
 
-      queueMicrotask(closeAllSelectors)
-      requestAnimationFrame(closeAllSelectors)
+      scheduleCloseTransientResourceSelectors()
     },
     [closeAllSelectors]
   )
