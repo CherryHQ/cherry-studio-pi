@@ -63,6 +63,27 @@ describe('StorageV2SecretVaultService', () => {
     await expect(secretVaultService.getSecret(secretRef)).resolves.toBeNull()
   })
 
+  it('rejects sync exports when a local secret cannot be decrypted', async () => {
+    await secretVaultService.setSecret('provider', 'provider-1', 'apiKey', 'token')
+    const vaultPath = path.join(dataRoot, 'secrets', 'vault.json')
+    const vault = JSON.parse(await fs.readFile(vaultPath, 'utf-8'))
+    vault.secrets['provider:provider-1:apiKey'].authTag = Buffer.alloc(16, 1).toString('base64')
+    await fs.writeFile(vaultPath, JSON.stringify(vault))
+
+    await expect(secretVaultService.exportPlaintextSecrets()).rejects.toThrow(
+      'Storage v2 secret vault entry provider:provider-1:apiKey is undecryptable'
+    )
+  })
+
+  it('rejects sync exports when the local secret vault is unreadable', async () => {
+    await fs.mkdir(path.join(dataRoot, 'secrets'), { recursive: true })
+    await fs.writeFile(path.join(dataRoot, 'secrets', 'vault.json'), '{broken')
+
+    await expect(secretVaultService.exportPlaintextSecrets()).rejects.toThrow(
+      'Storage v2 secret vault is unreadable or invalid'
+    )
+  })
+
   it('treats malformed secret references as unavailable instead of throwing', async () => {
     await expect(secretVaultService.getSecret('not-a-storage-v2-secret-ref')).resolves.toBeNull()
     await expect(secretVaultService.getSecret('storage-v2://secret/provider/%E0%A4%A/apiKey')).resolves.toBeNull()

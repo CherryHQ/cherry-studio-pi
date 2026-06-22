@@ -120,15 +120,18 @@ export class StorageV2SecretVaultService {
   async exportPlaintextSecrets(): Promise<Record<string, StorageV2PlaintextSecretVaultEntry>> {
     await this.waitForIdle()
 
-    const vault = await this.readVault().catch(() => null)
-    if (!vault) return {}
+    const vault = await this.readVault()
 
     const secrets: Record<string, StorageV2PlaintextSecretVaultEntry> = {}
     for (const [secretId, record] of Object.entries(vault.secrets)) {
       if (record.encoding !== LOCAL_VAULT_ENCODING) continue
 
-      const value = await this.decryptLocal(record).catch(() => null)
-      if (value == null) continue
+      const value = await this.decryptLocal(record).catch((error) => {
+        throw new Error(`Storage v2 secret vault entry ${secretId} is undecryptable`, { cause: error })
+      })
+      if (value == null) {
+        throw new Error(`Storage v2 secret vault entry ${secretId} is invalid`)
+      }
 
       secrets[secretId] = {
         value,
