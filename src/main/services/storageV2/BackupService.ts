@@ -170,8 +170,40 @@ function validationMessage(
   }
 }
 
+function extractErrorMessage(error: unknown, seen = new WeakSet<object>()): string | null {
+  if (error instanceof Error) {
+    return error.message || extractErrorMessage(error.cause, seen)
+  }
+
+  if (typeof error === 'string') {
+    const message = error.trim()
+    return message || null
+  }
+
+  if (typeof error === 'number' || typeof error === 'boolean' || typeof error === 'bigint') {
+    return String(error)
+  }
+
+  if (!error || typeof error !== 'object') {
+    return null
+  }
+
+  if (seen.has(error)) {
+    return null
+  }
+  seen.add(error)
+
+  const record = error as Record<string, unknown>
+  for (const key of ['message', 'error', 'cause', 'reason'] as const) {
+    const message = extractErrorMessage(record[key], seen)
+    if (message) return message
+  }
+
+  return null
+}
+
 function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error)
+  return extractErrorMessage(error) ?? 'Unknown Storage v2 backup error'
 }
 
 function createProjectionWarning(label: string, error: unknown) {
@@ -785,7 +817,7 @@ export class StorageV2BackupService {
 
         secretReferenceScan = await scanStorageV2SecretReferences(client)
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
+        const message = errorMessage(error)
         issues.push(validationMessage('db_open_failed', `Backup database cannot be opened: ${message}`, { message }))
       } finally {
         client.close()

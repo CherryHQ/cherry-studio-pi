@@ -1079,7 +1079,11 @@ describe('StorageV2BackupService.restoreBackup', () => {
       createdAt: '2026-01-01T00:00:00.000Z',
       copiedDirectories: []
     })
-    mocks.settingsRepository.set.mockRejectedValueOnce(new Error('readonly database'))
+    mocks.settingsRepository.set.mockRejectedValueOnce({
+      error: {
+        message: 'readonly database'
+      }
+    })
 
     const result = await service.restoreBackup(backupPath)
 
