@@ -96,21 +96,23 @@ export class StorageV2SecretVaultService {
     const secretId = safeDecodeSecretRef(secretRef)
     if (!secretId) return null
 
-    const vault = await this.readVault().catch(() => null)
-    if (!vault) return null
+    const vault = await this.readVault()
 
     const record = vault.secrets[secretId]
     if (!record) return null
 
-    try {
-      if (record.encoding !== LOCAL_VAULT_ENCODING) {
-        return null
-      }
-
-      return await this.decryptLocal(record)
-    } catch {
+    if (record.encoding !== LOCAL_VAULT_ENCODING) {
       return null
     }
+
+    const value = await this.decryptLocal(record).catch((error) => {
+      throw new Error(`Storage v2 secret vault entry ${secretId} is undecryptable`, { cause: error })
+    })
+    if (value == null) {
+      throw new Error(`Storage v2 secret vault entry ${secretId} is invalid`)
+    }
+
+    return value
   }
 
   async waitForIdle(): Promise<void> {

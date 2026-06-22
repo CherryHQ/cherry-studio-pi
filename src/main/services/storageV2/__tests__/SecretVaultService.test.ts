@@ -53,14 +53,16 @@ describe('StorageV2SecretVaultService', () => {
     await expect(fs.access(path.join(dataRoot, 'secrets', 'master.key'))).resolves.toBeUndefined()
   })
 
-  it('treats undecryptable secret values as unavailable instead of throwing', async () => {
+  it('rejects direct secret reads when a local secret cannot be decrypted', async () => {
     const secretRef = await secretVaultService.setSecret('provider', 'provider-1', 'apiKey', 'token')
     const vaultPath = path.join(dataRoot, 'secrets', 'vault.json')
     const vault = JSON.parse(await fs.readFile(vaultPath, 'utf-8'))
     vault.secrets['provider:provider-1:apiKey'].authTag = Buffer.alloc(16, 1).toString('base64')
     await fs.writeFile(vaultPath, JSON.stringify(vault))
 
-    await expect(secretVaultService.getSecret(secretRef)).resolves.toBeNull()
+    await expect(secretVaultService.getSecret(secretRef)).rejects.toThrow(
+      'Storage v2 secret vault entry provider:provider-1:apiKey is undecryptable'
+    )
   })
 
   it('rejects sync exports when a local secret cannot be decrypted', async () => {
@@ -80,6 +82,15 @@ describe('StorageV2SecretVaultService', () => {
     await fs.writeFile(path.join(dataRoot, 'secrets', 'vault.json'), '{broken')
 
     await expect(secretVaultService.exportPlaintextSecrets()).rejects.toThrow(
+      'Storage v2 secret vault is unreadable or invalid'
+    )
+  })
+
+  it('rejects direct secret reads when the local secret vault is unreadable', async () => {
+    await fs.mkdir(path.join(dataRoot, 'secrets'), { recursive: true })
+    await fs.writeFile(path.join(dataRoot, 'secrets', 'vault.json'), '{broken')
+
+    await expect(secretVaultService.getSecret('storage-v2://secret/provider/provider-1/apiKey')).rejects.toThrow(
       'Storage v2 secret vault is unreadable or invalid'
     )
   })
