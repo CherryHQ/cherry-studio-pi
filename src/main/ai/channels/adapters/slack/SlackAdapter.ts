@@ -318,6 +318,7 @@ class SlackAdapter extends ChannelAdapter {
           this.log.debug('Ignoring stale Slack WebSocket close', { code })
           return
         }
+        this.clearPingTimer()
         this.ws = null
         this.markDisconnected(`WebSocket closed: ${code}`)
         this.log.warn(`WebSocket closed (code=${code}, reason=${reason.toString()})`)
@@ -668,15 +669,19 @@ class SlackAdapter extends ChannelAdapter {
       clearTimeout(this.reconnectTimer)
       this.reconnectTimer = null
     }
-    if (this.pingTimer) {
-      clearInterval(this.pingTimer)
-      this.pingTimer = null
-    }
+    this.clearPingTimer()
     if (this.ws) {
       if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
         this.ws.close()
       }
       this.ws = null
+    }
+  }
+
+  private clearPingTimer(): void {
+    if (this.pingTimer) {
+      clearInterval(this.pingTimer)
+      this.pingTimer = null
     }
   }
 

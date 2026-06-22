@@ -233,6 +233,20 @@ describe('SlackAdapter', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
+  it('clears the ping timer immediately when the active WebSocket closes', async () => {
+    vi.useFakeTimers()
+    const adapter = createAdapter()
+
+    await adapter.startSocketMode()
+    const ws = mockWsInstance!
+    ws.emit('open')
+    expect(vi.getTimerCount()).toBe(1)
+
+    ws.emit('close', 1006, Buffer.from('network lost'))
+
+    expect(vi.getTimerCount()).toBe(1)
+  })
+
   // ─── Message Sending ──────────────────────────────────────
 
   it('sendMessage() calls chat.postMessage with correct params', async () => {
