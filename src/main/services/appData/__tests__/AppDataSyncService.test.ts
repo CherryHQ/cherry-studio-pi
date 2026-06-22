@@ -3348,6 +3348,75 @@ describe('AppDataSyncService', () => {
     expect(mocks.storageV2.upsertSyncState).toHaveBeenCalledWith(syncKey, `content:${remoteBundle.valueHash}`)
   })
 
+  it('stops instead of publishing an empty runtime directory when local directory checks fail', async () => {
+    const relativePath = 'sync-fixture/SKILL.md'
+    const runtimeRoot = path.join(mocks.runtimeDataRoot, 'Skills')
+    const remoteBundle = createRuntimeDirectoryBundle({
+      name: 'Skills',
+      relativePath,
+      content: '# Remote Protected Skill',
+      updatedAt: Date.parse('2026-06-01T12:00:00.000Z')
+    })
+    mocks.remoteFiles.set(
+      `/remote-root/sync/v1/runtime-directories/bundles/Skills/${remoteBundle.valueHash}.json.gz`,
+      remoteBundle.compressed
+    )
+    mocks.remoteFiles.set(
+      '/remote-root/sync/v1/manifest.json',
+      JSON.stringify({
+        version: 1,
+        generation: 10,
+        updatedAt: 1760000000000,
+        records: {},
+        runtimeDirectories: {
+          version: 1,
+          updatedAt: 1760000000000,
+          directories: {
+            Skills: {
+              version: 1,
+              name: 'Skills',
+              valueHash: remoteBundle.valueHash,
+              byteSize: remoteBundle.byteSize,
+              compressedByteSize: remoteBundle.compressed.byteLength,
+              fileCount: remoteBundle.fileCount,
+              updatedAt: Date.parse('2026-06-01T12:00:00.000Z'),
+              deviceId: 'remote-device',
+              path: `runtime-directories/bundles/Skills/${remoteBundle.valueHash}.json.gz`
+            }
+          }
+        }
+      })
+    )
+    const syncKey = runtimeDirectorySyncStateKey('local-device', 'Skills')
+    mocks.db.getSyncState.mockImplementation(async (id: string) =>
+      id === syncKey ? `content:${remoteBundle.valueHash}` : null
+    )
+    const originalStat = fsp.stat.bind(fsp)
+    const statSpy = vi.spyOn(fsp, 'stat').mockImplementation(async (filePath: any, options?: any) => {
+      if (String(filePath) === runtimeRoot) {
+        throw Object.assign(new Error('permission denied'), { code: 'EACCES' })
+      }
+      return originalStat(filePath, options)
+    })
+
+    try {
+      await expect(new AppDataSyncService().syncNow(config)).rejects.toThrow('读取本地 Skills 目录失败')
+    } finally {
+      statSpy.mockRestore()
+    }
+
+    expect(
+      mocks.webdav.putFileContents.mock.calls.some(([filePath]) =>
+        String(filePath).includes('/runtime-directories/bundles/Skills/')
+      )
+    ).toBe(false)
+    expect(
+      mocks.webdav.putFileContents.mock.calls.some(([filePath]) => String(filePath).endsWith('/manifest.json'))
+    ).toBe(false)
+    expect(mocks.storageV2.upsertSyncState).not.toHaveBeenCalledWith(syncKey, expect.stringContaining('empty'))
+    expect(mocks.storageV2.upsertSyncState).not.toHaveBeenCalledWith('last-sync-summary', expect.anything())
+  })
+
   it('projects previously synced Storage v2 remote records even when the current record sync only skips them', async () => {
     const existingStorageManifest = {
       version: 1,

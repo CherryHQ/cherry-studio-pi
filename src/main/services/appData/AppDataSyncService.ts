@@ -552,6 +552,11 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value))
 }
 
+function isMissingLocalPathError(error: unknown) {
+  if (!isPlainRecord(error) || typeof error.code !== 'string') return false
+  return error.code === 'ENOENT' || error.code === 'ENOTDIR'
+}
+
 function randomSyncSpaceKeyMaterial() {
   return randomBytes(32).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
 }
@@ -3625,8 +3630,16 @@ export class AppDataSyncService {
   }
 
   private async runtimeDirectoryExists(name: RuntimeDirectoryName) {
-    const stat = await fsp.stat(this.getRuntimeDirectoryRoot(name)).catch(() => null)
-    return Boolean(stat?.isDirectory())
+    const rootDir = this.getRuntimeDirectoryRoot(name)
+    try {
+      const stat = await fsp.stat(rootDir)
+      return stat.isDirectory()
+    } catch (error) {
+      if (isMissingLocalPathError(error)) return false
+      throw new Error(
+        `读取本地 ${name} 目录失败。为避免把本机目录误判为空并覆盖远端数据，本次同步已停止：${errorMessage(error)}`
+      )
+    }
   }
 
   private async pushRuntimeDirectoryBundle(
