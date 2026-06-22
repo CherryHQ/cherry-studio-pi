@@ -1014,7 +1014,7 @@ export class StorageV2DataApiAgentRuntimeMirrorService {
     `)) as Array<{ id: string }>
     if (existing?.id) return existing.id
 
-    await fs.mkdir(resolvedPath, { recursive: true }).catch(() => undefined)
+    await fs.mkdir(resolvedPath, { recursive: true })
     const id = randomUUID()
     const type = isPathInsideOrEqual(resolvedPath, systemRoot) ? 'system' : 'user'
     const [orderKey] = generateOrderKeySequence(1)

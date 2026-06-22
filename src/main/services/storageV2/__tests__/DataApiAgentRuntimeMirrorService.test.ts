@@ -1,3 +1,5 @@
+import fs from 'node:fs/promises'
+
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
@@ -442,5 +444,61 @@ describe('StorageV2DataApiAgentRuntimeMirrorService', () => {
     expect(workspaceInsertChunks).not.toContain('system')
     expect(mocks.secretVault.getSecret).toHaveBeenCalledWith('storage-v2://secret/channel/channel-1/bot_token')
     expect(mocks.tx.run).toHaveBeenCalledTimes(11)
+  })
+
+  it('stops Storage v2 projection when a session workspace directory cannot be created', async () => {
+    mocks.storageClient.execute
+      .mockResolvedValue({
+        rows: []
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'agent-1',
+            type: 'pi',
+            name: 'Agent',
+            description: 'desc',
+            instructions: 'be useful',
+            model_id: 'openai::gpt-4o',
+            plan_model_id: null,
+            small_model_id: null,
+            mcps_json: JSON.stringify(['filesystem']),
+            configuration_json: JSON.stringify({ permission_mode: 'bypassPermissions' }),
+            sort_order: 0,
+            created_at: '1970-01-01T00:00:01.000Z',
+            updated_at: '1970-01-01T00:00:02.000Z'
+          }
+        ]
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'session-1',
+            agent_id: 'agent-1',
+            name: 'Session',
+            inherited_config_json: JSON.stringify({}),
+            current_config_json: JSON.stringify({ description: 'session desc' }),
+            sort_order: 0,
+            created_at: '1970-01-01T00:00:01.000Z',
+            updated_at: '1970-01-01T00:00:02.000Z'
+          }
+        ]
+      })
+
+    mocks.db.all.mockResolvedValueOnce([{ id: 'openai::gpt-4o' }])
+    const mkdir = vi.spyOn(fs, 'mkdir').mockRejectedValueOnce(new Error('EACCES: cannot create workspace'))
+
+    try {
+      await expect(new StorageV2DataApiAgentRuntimeMirrorService().projectStorageToDataApiRuntime()).rejects.toThrow(
+        'EACCES: cannot create workspace'
+      )
+    } finally {
+      mkdir.mockRestore()
+    }
+
+    const workspaceInsertCall = mocks.tx.run.mock.calls.find(([query]) =>
+      sqlText(query as { queryChunks?: unknown[] }).includes('INSERT INTO agent_workspace')
+    )
+    expect(workspaceInsertCall).toBeUndefined()
   })
 })
