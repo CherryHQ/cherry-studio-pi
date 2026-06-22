@@ -1,9 +1,14 @@
 import { IpcChannel } from '@shared/IpcChannel'
 import { ipcMain } from 'electron'
 
+import { flushMainStorageV2RuntimeMirrors } from '../AppRuntimeSaveService'
 import { storageV2Service } from './StorageService'
 
 let registered = false
+
+async function prepareStorageV2IpcWriteOperation() {
+  await flushMainStorageV2RuntimeMirrors()
+}
 
 export function registerStorageV2IpcHandlers() {
   if (registered) return
@@ -12,17 +17,22 @@ export function registerStorageV2IpcHandlers() {
   ipcMain.handle(IpcChannel.StorageV2_GetDataRoot, () => storageV2Service.getDataRoot())
   ipcMain.handle(IpcChannel.StorageV2_HealthCheck, () => storageV2Service.healthCheck())
   ipcMain.handle(IpcChannel.StorageV2_GetHealthSummary, () => storageV2Service.getHealthSummary())
-  ipcMain.handle(IpcChannel.StorageV2_CreateSnapshot, (_event, reason?: string) =>
-    storageV2Service.createSnapshot(reason)
-  )
-  ipcMain.handle(IpcChannel.StorageV2_CreateBackup, (_event, reason?: string) => storageV2Service.createBackup(reason))
+  ipcMain.handle(IpcChannel.StorageV2_CreateSnapshot, async (_event, reason?: string) => {
+    await prepareStorageV2IpcWriteOperation()
+    return storageV2Service.createSnapshot(reason)
+  })
+  ipcMain.handle(IpcChannel.StorageV2_CreateBackup, async (_event, reason?: string) => {
+    await prepareStorageV2IpcWriteOperation()
+    return storageV2Service.createBackup(reason)
+  })
   ipcMain.handle(IpcChannel.StorageV2_GetBackupOverview, () => storageV2Service.getBackupOverview())
   ipcMain.handle(IpcChannel.StorageV2_ValidateBackup, (_event, backupPath: string) =>
     storageV2Service.validateBackup(backupPath)
   )
-  ipcMain.handle(IpcChannel.StorageV2_RestoreBackup, (_event, backupPath: string) =>
-    storageV2Service.restoreBackup(backupPath)
-  )
+  ipcMain.handle(IpcChannel.StorageV2_RestoreBackup, async (_event, backupPath: string) => {
+    await prepareStorageV2IpcWriteOperation()
+    return storageV2Service.restoreBackup(backupPath)
+  })
   ipcMain.handle(IpcChannel.StorageV2_GetMigrationAudit, () => storageV2Service.getMigrationAudit())
   ipcMain.handle(IpcChannel.StorageV2_GetLegacyRuntimePolicies, () => storageV2Service.getLegacyRuntimePolicies())
   ipcMain.handle(IpcChannel.StorageV2_GetSensitiveLegacyProjectionCleanupPlan, () =>
