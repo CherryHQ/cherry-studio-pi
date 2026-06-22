@@ -4,6 +4,7 @@ import CodeViewer from '@renderer/components/CodeViewer'
 import RichEditor from '@renderer/components/RichEditor'
 import { useSkillMutationsById } from '@renderer/pages/library/adapters/skillAdapter'
 import { ResourceEditorShell } from '@renderer/pages/library/editor/ConfigEditorShell'
+import { getErrorMessage } from '@renderer/utils/error'
 import type { InstalledSkill, SkillFileNode } from '@types'
 import type { TFunction } from 'i18next'
 import { Clock, FileText, Loader2, Trash2, Zap } from 'lucide-react'
@@ -105,7 +106,7 @@ const SkillDetailPage: FC<Props> = ({ skill, onBack, onUninstalled }) => {
         if (!cancelled) {
           logger.warn('Failed to load skill file tree', {
             skillId: skill.id,
-            error: error instanceof Error ? error.message : String(error)
+            error: getErrorMessage(error)
           })
           setFileTree([])
           setSelectedFile(null)
@@ -144,9 +145,9 @@ const SkillDetailPage: FC<Props> = ({ skill, onBack, onUninstalled }) => {
           logger.warn('Failed to load skill file content', {
             skillId: skill.id,
             selectedFile,
-            error: error instanceof Error ? error.message : String(error)
+            error: getErrorMessage(error)
           })
-          window.toast?.error(error instanceof Error ? error.message : t('common.error'))
+          window.toast?.error(getErrorMessage(error))
           setFileContent(null)
         }
       })
@@ -189,7 +190,7 @@ const SkillDetailPage: FC<Props> = ({ skill, onBack, onUninstalled }) => {
       onUninstalled?.()
     } catch (error) {
       window.toast?.error(t('library.uninstall_failed'))
-      logger.error('Failed to uninstall skill', error instanceof Error ? error : new Error(String(error)), {
+      logger.error('Failed to uninstall skill', error instanceof Error ? error : new Error(getErrorMessage(error)), {
         skillId: skill.id,
         name: skill.name
       })

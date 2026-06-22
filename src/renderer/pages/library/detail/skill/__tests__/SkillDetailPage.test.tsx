@@ -201,4 +201,12 @@ describe('SkillDetailPage', () => {
     await waitFor(() => expect(window.toast.error).toHaveBeenCalledWith('library.uninstall_failed'))
     expect(window.toast.error).not.toHaveBeenCalledWith('low-level failure')
   })
+
+  it('preserves nested file content load error details', async () => {
+    readSkillFileMock.mockRejectedValueOnce({ error: { message: 'skill file disappeared' } })
+
+    render(<SkillDetailPage skill={createSkill()} onBack={vi.fn()} />)
+
+    await waitFor(() => expect(window.toast.error).toHaveBeenCalledWith('skill file disappeared'))
+  })
 })
