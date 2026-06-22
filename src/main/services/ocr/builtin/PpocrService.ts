@@ -1,4 +1,5 @@
 import { loadOcrImage } from '@main/utils/ocr'
+import { readResponseTextWithinLimit } from '@main/utils/readResponseText'
 import type { ImageFileMetadata } from '@shared/data/types/file/legacyFileMetadata'
 import { isImageFileMetadata } from '@shared/data/types/file/legacyFileMetadata'
 import type { OcrPpocrConfig, OcrResult, SupportedOcrFile } from '@shared/types/ocr'
@@ -87,8 +88,12 @@ export class PpocrService extends OcrBaseService {
       })
 
       if (!response.ok) {
-        const text = await response.text()
-        throw new Error(`OCR service error: ${response.status} ${response.statusText} - ${text}`)
+        const { bytesRead, truncated } = await readResponseTextWithinLimit(response, 4096)
+        throw new Error(
+          `OCR service returned HTTP ${response.status} ${response.statusText} (body length: ${bytesRead}${
+            truncated ? '+' : ''
+          })`
+        )
       }
 
       const data = await response.json()

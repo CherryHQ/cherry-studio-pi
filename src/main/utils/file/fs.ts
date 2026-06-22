@@ -42,11 +42,13 @@ import path from 'node:path'
 import { Writable } from 'node:stream'
 
 import { loggerService } from '@logger'
+import { sanitizeRemoteUrl } from '@main/utils/remoteUrlSafety'
 import type { FilePath } from '@shared/types/file'
 import mime from 'mime'
 import xxhashLoader from 'xxhash-wasm'
 
 const logger = loggerService.withContext('utils/file/fs')
+const MAX_REMOTE_DOWNLOAD_BYTES = 100 * 1024 * 1024
 
 const notImplemented = (op: string): never => {
   throw new Error(`@main/utils/file/fs.${op}: not implemented (deferred to Phase 2)`)
@@ -519,12 +521,19 @@ export async function compressImage(_input: FilePath | Uint8Array, _output: File
  * dest file. Throws on non-2xx responses.
  */
 export async function download(url: string, dest: FilePath): Promise<void> {
-  const response = await fetch(url)
+  const safeUrl = sanitizeRemoteUrl(url)
+  const controller = new AbortController()
+  const response = await fetch(safeUrl, { signal: controller.signal })
   if (!response.ok) {
     throw new Error(`download(${url}): HTTP ${response.status} ${response.statusText}`)
   }
   if (!response.body) {
     throw new Error(`download(${url}): response has no body`)
+  }
+  const contentLength = Number(response.headers.get('content-length') ?? 0)
+  if (Number.isFinite(contentLength) && contentLength > MAX_REMOTE_DOWNLOAD_BYTES) {
+    controller.abort()
+    throw new Error(`download(${url}): remote file is too large (${contentLength} bytes)`)
   }
   const writer = createAtomicWriteStream(dest)
   const reader = response.body.getReader()
@@ -539,11 +548,18 @@ export async function download(url: string, dest: FilePath): Promise<void> {
     writer.on('finish', resolve)
     const pump = async () => {
       try {
+        let receivedBytes = 0
         for (;;) {
           const { value, done } = await reader.read()
           if (done) {
             writer.end()
             return
+          }
+          const chunkSize = typeof value?.byteLength === 'number' ? value.byteLength : 0
+          receivedBytes += chunkSize
+          if (receivedBytes > MAX_REMOTE_DOWNLOAD_BYTES) {
+            controller.abort()
+            throw new Error(`download(${url}): remote file is too large (${receivedBytes} bytes)`)
           }
           if (!writer.write(Buffer.from(value))) {
             await new Promise<void>((r) => writer.once('drain', r))

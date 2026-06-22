@@ -8,7 +8,7 @@ import { loggerService } from '@logger'
 import { isAgentSessionTopic } from '@main/ai/agentSession/topic'
 import { temporaryChatService } from '@main/data/services/TemporaryChatService'
 import { toContentRole } from '@shared/data/types/message'
-import { parseUniqueModelId, type UniqueModelId } from '@shared/data/types/model'
+import type { UniqueModelId } from '@shared/data/types/model'
 
 import type { AiStreamRequest } from '../../types/requests'
 import { PersistenceListener } from '../listeners/PersistenceListener'
@@ -17,6 +17,7 @@ import type { CherryUIMessage, StreamListener } from '../types'
 import type { ChatContextProvider, DispatchContext, PreparedDispatch } from './ChatContextProvider'
 import type { MainDispatchRequest } from './dispatch'
 import { resolveAssistantModelId, resolveModels } from './modelResolution'
+import { createModelSnapshot } from './modelSnapshot'
 
 const logger = loggerService.withContext('TemporaryChatContextProvider')
 
@@ -69,12 +70,7 @@ export class TemporaryChatContextProvider implements ChatContextProvider {
     }
     const models = await resolveModels(resolveWith, defaultModelId)
     const model = models[0]
-    const { modelId: rawModelId, providerId } = parseUniqueModelId(model.id)
-    const modelSnapshot = {
-      id: model.apiModelId ?? rawModelId,
-      name: model.name,
-      provider: providerId
-    }
+    const modelSnapshot = createModelSnapshot(model)
 
     // Append user first so `history` (listMessages) includes it. Service generates the id.
     await temporaryChatService.appendMessage(req.topicId, {

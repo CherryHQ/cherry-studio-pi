@@ -1,4 +1,5 @@
 import type { ImageModelV3File } from '@ai-sdk/provider'
+import { readResponseTextWithinLimit } from '@main/utils/readResponseText'
 import { parseDataUrl } from '@shared/utils/dataUrl'
 
 /**
@@ -49,10 +50,10 @@ export function waitWithSignal(delayMs: number, signal?: AbortSignal): Promise<v
   })
 }
 
-export async function readLimitedHttpErrorText(response: Response, maxBytes = 4096): Promise<string> {
+export async function readLimitedHttpErrorText(response: Response, maxBytes = 500): Promise<string> {
   try {
-    const text = await response.text()
-    return text.length > maxBytes ? `${text.slice(0, maxBytes)}...` : text
+    const { text } = await readResponseTextWithinLimit(response, maxBytes)
+    return text
   } catch {
     return ''
   }

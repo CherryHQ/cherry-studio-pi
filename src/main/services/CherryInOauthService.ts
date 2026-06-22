@@ -2,6 +2,7 @@ import { application } from '@application'
 import { providerService } from '@data/services/ProviderService'
 import { loggerService } from '@logger'
 import { type Activatable, BaseService, type Disposable, Injectable, Phase, ServicePhase } from '@main/core/lifecycle'
+import { readResponseTextWithinLimit } from '@main/utils/readResponseText'
 import type { AuthConfig } from '@shared/data/types/provider'
 import { IpcChannel } from '@shared/IpcChannel'
 import { createHash, randomBytes } from 'crypto'
@@ -387,10 +388,9 @@ export class CherryInOauthService extends BaseService implements Activatable {
       })
 
       if (!tokenResponse.ok) {
-        const errorText = await tokenResponse.text()
         logger.error('Token exchange failed', {
           status: tokenResponse.status,
-          body: this.redactDiagnosticValue(errorText)
+          body: await this.readResponseBodyForDiagnostics(tokenResponse)
         })
         throw new CherryInOauthServiceError(`Failed to exchange code for token: ${tokenResponse.status}`)
       }
@@ -413,10 +413,9 @@ export class CherryInOauthService extends BaseService implements Activatable {
       })
 
       if (!apiKeysResponse.ok) {
-        const errorText = await apiKeysResponse.text()
         logger.error('Failed to fetch API keys', {
           status: apiKeysResponse.status,
-          body: this.redactDiagnosticValue(errorText)
+          body: await this.readResponseBodyForDiagnostics(apiKeysResponse)
         })
         throw new CherryInOauthServiceError(`Failed to fetch API keys: ${apiKeysResponse.status}`)
       }
@@ -535,10 +534,9 @@ export class CherryInOauthService extends BaseService implements Activatable {
       })
 
       if (!response.ok) {
-        const errorText = await response.text()
         logger.error('Token refresh failed', {
           status: response.status,
-          body: this.redactDiagnosticValue(errorText)
+          body: await this.readResponseBodyForDiagnostics(response)
         })
         return { accessToken: null, attempted: true }
       }
@@ -601,20 +599,23 @@ export class CherryInOauthService extends BaseService implements Activatable {
   }
 
   private readResponseBodyForDiagnostics = async (response: Response): Promise<unknown> => {
-    if (typeof response.clone !== 'function') {
-      return null
-    }
-
     try {
-      const text = await response.clone().text()
+      const diagnosticResponse =
+        response.body && typeof response.body.getReader === 'function'
+          ? response
+          : typeof response.clone === 'function'
+            ? response.clone()
+            : response
+      const { text, truncated } = await readResponseTextWithinLimit(diagnosticResponse, 4096)
       if (!text) {
         return null
       }
+      const diagnosticText = truncated ? `${text}\n...[truncated]` : text
 
       try {
-        return this.redactDiagnosticValue(JSON.parse(text))
+        return truncated ? this.redactDiagnosticValue(diagnosticText) : this.redactDiagnosticValue(JSON.parse(text))
       } catch {
-        return this.redactDiagnosticValue(text)
+        return this.redactDiagnosticValue(diagnosticText)
       }
     } catch (error) {
       logger.warn('Failed to read CherryIN error response body for diagnostics:', error as Error)
