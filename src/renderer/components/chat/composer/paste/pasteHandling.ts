@@ -2,6 +2,7 @@ import { loggerService } from '@logger'
 import { COMPOSER_FILE_KIND, type PastedTextFileMetadata } from '@renderer/types'
 import { getFileExtension, isSupportedFile } from '@renderer/utils'
 import { type ComposerAttachment, toComposerAttachment } from '@renderer/utils/messageUtils/composerAttachment'
+import { allFilesExt } from '@shared/config/constant'
 
 const logger = loggerService.withContext('pasteHandling')
 const COMPOSER_PASTE_STATE_KEY = '__CHERRY_STUDIO_PI_COMPOSER_PASTE_STATE__'
@@ -93,6 +94,7 @@ export const handlePaste = async (
     if (event.clipboardData?.files && event.clipboardData.files.length > 0) {
       event.preventDefault()
       const extensionSet = new Set(supportExts)
+      const supportAllFiles = extensionSet.has(allFilesExt)
       try {
         for (const file of event.clipboardData.files) {
           // 使用新的API获取文件路径
@@ -101,7 +103,7 @@ export const handlePaste = async (
           // 如果没有路径，可能是剪贴板中的图像数据
           if (!filePath) {
             // 图像生成也支持图像编辑
-            if (file.type.startsWith('image/') && supportExts.includes(getFileExtension(file.name))) {
+            if (file.type.startsWith('image/') && (supportAllFiles || extensionSet.has(getFileExtension(file.name)))) {
               const tempFilePath = await window.api.file.createTempFile(file.name)
               const arrayBuffer = await file.arrayBuffer()
               const uint8Array = new Uint8Array(arrayBuffer)

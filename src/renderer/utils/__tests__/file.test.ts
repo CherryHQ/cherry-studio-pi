@@ -1,6 +1,25 @@
-import { describe, expect, it } from 'vitest'
+import { allFilesExt } from '@shared/config/constant'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { formatFileSize, getFileDirectory, getFileExtension, removeSpecialCharactersForFileName } from '../file'
+import {
+  filterSupportedFiles,
+  formatFileSize,
+  getFileDirectory,
+  getFileExtension,
+  isSupportedFile,
+  removeSpecialCharactersForFileName
+} from '../file'
+
+const originalApiDescriptor = Object.getOwnPropertyDescriptor(window, 'api')
+
+afterEach(() => {
+  vi.restoreAllMocks()
+  if (originalApiDescriptor) {
+    Object.defineProperty(window, 'api', originalApiDescriptor)
+  } else {
+    delete (window as unknown as { api?: unknown }).api
+  }
+})
 
 describe('file', () => {
   describe('getFileDirectory', () => {
@@ -97,6 +116,35 @@ describe('file', () => {
       const size = 0
       const result = formatFileSize(size)
       expect(result).toBe('0.00 KB')
+    })
+  })
+
+  describe('isSupportedFile', () => {
+    it('accepts any file when allFilesExt is present', async () => {
+      const isTextFile = vi.fn(async () => false)
+      Object.defineProperty(window, 'api', {
+        configurable: true,
+        value: { file: { isTextFile } }
+      })
+
+      await expect(isSupportedFile('/tmp/archive.unknown-binary', new Set([allFilesExt]))).resolves.toBe(true)
+
+      expect(isTextFile).not.toHaveBeenCalled()
+    })
+
+    it('keeps all files during filtering when allFilesExt is present', async () => {
+      const isTextFile = vi.fn(async () => false)
+      Object.defineProperty(window, 'api', {
+        configurable: true,
+        value: { file: { isTextFile } }
+      })
+      const files = [{ path: '/tmp/asset.bin' }, { path: '/tmp/no-extension' }] as unknown as Parameters<
+        typeof filterSupportedFiles
+      >[0]
+
+      await expect(filterSupportedFiles(files, [allFilesExt])).resolves.toEqual(files)
+
+      expect(isTextFile).not.toHaveBeenCalled()
     })
   })
 
