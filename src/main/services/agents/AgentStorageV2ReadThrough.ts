@@ -2,6 +2,7 @@ import { agentService } from '@data/services/AgentService'
 import { agentSessionMessageService } from '@data/services/AgentSessionMessageService'
 import { agentSessionService } from '@data/services/AgentSessionService'
 import { agentTaskService } from '@data/services/AgentTaskService'
+import { DataApiError, ErrorCode } from '@shared/data/api'
 import type { ListOptions } from '@shared/data/api/apiTypes'
 import type { CreateAgentDto, UpdateAgentDto } from '@shared/data/api/schemas/agents'
 import type { AgentSessionMessageEntity } from '@shared/data/api/schemas/agentSessions'
@@ -42,6 +43,10 @@ function normalizeUpdateAgentRequest(updates: UpdateAgentRequest): UpdateAgentDt
   return updates as UpdateAgentDto
 }
 
+function isDataApiNotFoundError(error: unknown) {
+  return error instanceof DataApiError && error.code === ErrorCode.NOT_FOUND
+}
+
 export async function listAgentsWithStorageV2Recovery(options: LegacyListOptions = {}) {
   return agentService.listAgents(normalizeListOptions(options))
 }
@@ -79,7 +84,12 @@ export async function listSessionsWithStorageV2Recovery(agentId: string, options
 }
 
 export async function getSessionWithStorageV2Recovery(_agentId: string, sessionId: string) {
-  return agentSessionService.getById(sessionId).catch(() => null)
+  try {
+    return await agentSessionService.getById(sessionId)
+  } catch (error) {
+    if (isDataApiNotFoundError(error)) return null
+    throw error
+  }
 }
 
 export async function createTaskWithStorageV2Recovery(agentId: string, task: CreateTaskRequest) {
