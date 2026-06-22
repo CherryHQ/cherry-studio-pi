@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { getErrorMessage } from '@main/utils/errorMessage'
 
 import { registerAppCapabilities } from './providers'
 import { AppCapabilityRegistry } from './registry'
@@ -38,20 +39,7 @@ function abortReasonError(signal: AbortSignal) {
 }
 
 function getCapabilityErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message
-  if (typeof error === 'string' && error.trim()) return error
-  if (!error || typeof error !== 'object') return UNKNOWN_CAPABILITY_ERROR
-
-  const nestedError = (error as { error?: unknown }).error
-  if (nestedError) {
-    const nestedMessage = getCapabilityErrorMessage(nestedError)
-    if (nestedMessage !== UNKNOWN_CAPABILITY_ERROR) return nestedMessage
-  }
-
-  const message = (error as { message?: unknown }).message
-  if (typeof message === 'string' && message.trim()) return message
-
-  return UNKNOWN_CAPABILITY_ERROR
+  return getErrorMessage(error, UNKNOWN_CAPABILITY_ERROR)
 }
 
 function createAbortWait(signal: AbortSignal) {

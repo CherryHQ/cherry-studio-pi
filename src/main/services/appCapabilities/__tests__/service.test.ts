@@ -299,6 +299,31 @@ describe('AppCapabilityService', () => {
     })
   })
 
+  it('preserves structured response details from thrown capability errors', async () => {
+    loggerWarn.mockClear()
+    executeCapability.mockReset()
+    executeCapability.mockRejectedValueOnce({
+      response: {
+        status: 503,
+        statusText: 'Service Unavailable'
+      }
+    })
+    const service = new AppCapabilityService()
+
+    const result = await service.call('settings.read', {}, { source: 'agent' })
+
+    expect(result).toEqual({
+      ok: false,
+      isError: true,
+      summary: 'settings.read 调用失败：503 Service Unavailable',
+      error: '503 Service Unavailable'
+    })
+    expect(loggerWarn).toHaveBeenCalledWith('App capability failed', {
+      id: 'settings.read',
+      error: '503 Service Unavailable'
+    })
+  })
+
   it('does not sanitize non-agent capability results', async () => {
     executeCapability.mockReset()
     executeCapability.mockResolvedValueOnce({
