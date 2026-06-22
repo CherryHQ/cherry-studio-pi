@@ -6,7 +6,8 @@ export function isHttpExternalUrl(value: unknown): value is string {
 
   try {
     const parsedUrl = new URL(trimmedValue)
-    return parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:'
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') return false
+    return parsedUrl.username === '' && parsedUrl.password === ''
   } catch {
     return false
   }

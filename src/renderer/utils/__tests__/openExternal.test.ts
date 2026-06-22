@@ -16,6 +16,8 @@ describe('isHttpExternalUrl', () => {
     expect(isHttpExternalUrl('javascript:alert(1)')).toBe(false)
     expect(isHttpExternalUrl('file:///etc/passwd')).toBe(false)
     expect(isHttpExternalUrl('vscode://file/Users/me/app.ts')).toBe(false)
+    expect(isHttpExternalUrl('https://user:secret@example.com/path')).toBe(false)
+    expect(isHttpExternalUrl('https://trusted.example.com@evil.example/path')).toBe(false)
   })
 })
 
@@ -36,6 +38,7 @@ describe('openHttpExternalUrl', () => {
 
     expect(openHttpExternalUrl('javascript:alert(1)')).toBe(false)
     expect(openHttpExternalUrl('file:///etc/passwd')).toBe(false)
+    expect(openHttpExternalUrl('https://user:secret@example.com/path')).toBe(false)
     expect(openSpy).not.toHaveBeenCalled()
   })
 })
