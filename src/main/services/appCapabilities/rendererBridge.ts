@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@main/utils/errorMessage'
 import { RENDERER_GET_STORE_VALUE_BRIDGE } from '@shared/storeBridge'
 import { BrowserWindow } from 'electron'
 
@@ -27,33 +28,8 @@ class RendererBridgeTimeoutError extends Error {
   }
 }
 
-function extractBridgeErrorMessage(error: unknown, seen = new WeakSet<object>()): string | null {
-  if (error instanceof Error && error.message) return error.message
-  if (typeof error === 'string' && error.trim()) return error
-  if (!error || typeof error !== 'object') return null
-  if (seen.has(error)) return null
-  seen.add(error)
-
-  const nestedError = (error as { error?: unknown }).error
-  if (nestedError) {
-    const nestedMessage = extractBridgeErrorMessage(nestedError, seen)
-    if (nestedMessage) return nestedMessage
-  }
-
-  const message = (error as { message?: unknown }).message
-  if (typeof message === 'string' && message.trim()) return message
-
-  const cause = (error as { cause?: unknown }).cause
-  if (cause) {
-    const causeMessage = extractBridgeErrorMessage(cause, seen)
-    if (causeMessage) return causeMessage
-  }
-
-  return null
-}
-
 export function getBridgeErrorMessage(error: unknown) {
-  return redactAgentText(extractBridgeErrorMessage(error) ?? UNKNOWN_RENDERER_BRIDGE_ERROR)
+  return redactAgentText(getErrorMessage(error, UNKNOWN_RENDERER_BRIDGE_ERROR))
 }
 
 function rendererBridgeAbortError(signal: AbortSignal) {

@@ -66,6 +66,17 @@ describe('app capability renderer bridge', () => {
     expect(message).toBe('Renderer failed with apiKey=[redacted]')
   })
 
+  it('extracts structured bridge response details', () => {
+    const message = getBridgeErrorMessage({
+      response: {
+        status: 503,
+        statusText: 'Service Unavailable'
+      }
+    })
+
+    expect(message).toBe('503 Service Unavailable')
+  })
+
   it('falls back safely for circular bridge error payloads', () => {
     const circular: { error?: unknown } = {}
     circular.error = circular
