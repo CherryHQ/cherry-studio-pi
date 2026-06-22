@@ -143,6 +143,29 @@ describe('WebDav', () => {
     expect(mocks.client.putFileContents).not.toHaveBeenCalled()
   })
 
+  it('surfaces parent directory recheck failures after concurrent create errors', async () => {
+    mocks.client.exists
+      .mockResolvedValueOnce(false)
+      .mockRejectedValueOnce(Object.assign(new Error('Unauthorized'), { status: 401 }))
+    mocks.client.createDirectory.mockRejectedValueOnce(Object.assign(new Error('Conflict'), { status: 409 }))
+
+    const webdav = new WebDav({
+      webdavHost: 'http://192.168.1.100:8080',
+      webdavUser: 'webdav',
+      webdavPass: 'test-webdav-password',
+      webdavPath: '/Cherry Studio Pi'
+    })
+
+    await expect(webdav.putFileContents('snapshots/2026/backup.zip', 'data')).rejects.toThrow('Unauthorized')
+
+    expect(mocks.client.exists).toHaveBeenNthCalledWith(1, '/Cherry Studio Pi/snapshots/2026')
+    expect(mocks.client.createDirectory).toHaveBeenCalledWith('/Cherry Studio Pi/snapshots/2026', {
+      recursive: true
+    })
+    expect(mocks.client.exists).toHaveBeenNthCalledWith(2, '/Cherry Studio Pi/snapshots/2026')
+    expect(mocks.client.putFileContents).not.toHaveBeenCalled()
+  })
+
   it('still creates the configured WebDAV directory before uploading root-level files', async () => {
     mocks.client.exists.mockResolvedValueOnce(false)
     mocks.client.createDirectory.mockResolvedValueOnce(true)
@@ -228,6 +251,26 @@ describe('WebDav', () => {
     expect(mocks.client.exists).toHaveBeenCalledWith('/Cherry Studio Pi')
     expect(mocks.client.exists).not.toHaveBeenCalledWith('/')
     expect(mocks.client.createDirectory).toHaveBeenCalledWith('/Cherry Studio Pi', { recursive: true })
+  })
+
+  it('surfaces root directory recheck failures after connection create errors', async () => {
+    mocks.client.exists
+      .mockResolvedValueOnce(false)
+      .mockRejectedValueOnce(Object.assign(new Error('Unauthorized'), { status: 401 }))
+    mocks.client.createDirectory.mockRejectedValueOnce(Object.assign(new Error('Precondition Failed'), { status: 412 }))
+
+    const webdav = new WebDav({
+      webdavHost: 'http://192.168.1.100:8080',
+      webdavUser: 'webdav',
+      webdavPass: 'test-webdav-password',
+      webdavPath: '/Cherry Studio Pi'
+    })
+
+    await expect(webdav.checkConnection()).rejects.toThrow('Unauthorized')
+
+    expect(mocks.client.exists).toHaveBeenNthCalledWith(1, '/Cherry Studio Pi')
+    expect(mocks.client.createDirectory).toHaveBeenCalledWith('/Cherry Studio Pi', { recursive: true })
+    expect(mocks.client.exists).toHaveBeenNthCalledWith(2, '/Cherry Studio Pi')
   })
 
   it('returns an empty listing when the configured WebDAV backup directory does not exist yet', async () => {

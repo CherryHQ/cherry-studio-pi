@@ -40,6 +40,23 @@ function mayBeConcurrentDirectoryCreateError(error: unknown) {
   return status !== null && REMOTE_DIRECTORY_ALREADY_EXISTS_STATUSES.has(status)
 }
 
+async function verifyDirectoryExistsAfterCreateFailure(
+  client: WebDAVClient,
+  dirPath: string,
+  createError: unknown,
+  context: string
+) {
+  try {
+    return await client.exists(dirPath)
+  } catch (error) {
+    logger.error(`Error checking WebDAV directory after ${context} failure:`, error as Error, {
+      dirPath,
+      createStatus: getWebDavErrorStatus(createError)
+    })
+    throw error
+  }
+}
+
 export default class WebDav {
   public instance: WebDAVClient | undefined
   private webdavPath: string
@@ -122,7 +139,12 @@ export default class WebDav {
       }
     } catch (error) {
       if (mayBeConcurrentDirectoryCreateError(error)) {
-        const existsAfterFailure = await this.instance.exists(dirPath).catch(() => false)
+        const existsAfterFailure = await verifyDirectoryExistsAfterCreateFailure(
+          this.instance,
+          dirPath,
+          error,
+          'parent directory create'
+        )
         if (existsAfterFailure) {
           logger.warn('WebDAV directory already exists after create failure; continuing', {
             dirPath,
@@ -207,7 +229,12 @@ export default class WebDav {
       return true
     } catch (error) {
       if (mayBeConcurrentDirectoryCreateError(error)) {
-        const existsAfterFailure = await this.instance.exists(this.webdavPath).catch(() => false)
+        const existsAfterFailure = await verifyDirectoryExistsAfterCreateFailure(
+          this.instance,
+          this.webdavPath,
+          error,
+          'root directory create'
+        )
         if (existsAfterFailure) {
           logger.warn('WebDAV root directory already exists after create failure; continuing', {
             path: this.webdavPath,
