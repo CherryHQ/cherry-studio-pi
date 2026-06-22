@@ -26,6 +26,32 @@ import { narrowKnowledgeJobInput } from './utils/jobInput'
 
 const logger = loggerService.withContext('Knowledge:ReindexSubtreeJobHandler')
 const REINDEX_RECOVERY_ACTIVE_STATUSES = new Set<KnowledgeItemStatus>(['preparing', 'processing'])
+const UNKNOWN_REINDEX_ERROR = 'Unknown reindex error'
+
+function getReindexErrorMessage(error: unknown, seen = new WeakSet<object>()): string {
+  if (error instanceof Error && error.message) return error.message
+  if (typeof error === 'string' && error.trim()) return error
+  if (!error || typeof error !== 'object') return UNKNOWN_REINDEX_ERROR
+  if (seen.has(error)) return UNKNOWN_REINDEX_ERROR
+  seen.add(error)
+
+  const nestedError = (error as { error?: unknown }).error
+  if (nestedError) {
+    const nestedMessage = getReindexErrorMessage(nestedError, seen)
+    if (nestedMessage !== UNKNOWN_REINDEX_ERROR) return nestedMessage
+  }
+
+  const message = (error as { message?: unknown }).message
+  if (typeof message === 'string' && message.trim()) return message
+
+  const cause = (error as { cause?: unknown }).cause
+  if (cause) {
+    const causeMessage = getReindexErrorMessage(cause, seen)
+    if (causeMessage !== UNKNOWN_REINDEX_ERROR) return causeMessage
+  }
+
+  return UNKNOWN_REINDEX_ERROR
+}
 
 export function createReindexSubtreeJobHandler(
   knowledgeLockManager: KnowledgeLockManager,
@@ -109,7 +135,7 @@ export function createReindexSubtreeJobHandler(
       } catch (error) {
         // Roots are already visible as active after reset. If scheduling the durable
         // follow-up job fails, flip them to failed so the UI does not show stuck work.
-        const message = error instanceof Error ? error.message : String(error)
+        const message = getReindexErrorMessage(error)
         const unscheduledRootIds = rootItemIds.filter((rootItemId) => !completedSchedulingRootIds.has(rootItemId))
         if (unscheduledRootIds.length > 0) {
           await knowledgeItemService.setSubtreeStatus(baseId, unscheduledRootIds, 'failed', {
@@ -175,7 +201,7 @@ async function markReindexSubtreeFailedOnSettled(event: JobSettledEvent): Promis
   } catch (error) {
     logger.error(
       'Failed to flip reindex-subtree targets to failed in onSettled',
-      error instanceof Error ? error : new Error(String(error)),
+      error instanceof Error ? error : new Error(getReindexErrorMessage(error)),
       {
         jobId: event.jobId,
         baseId: input.baseId,

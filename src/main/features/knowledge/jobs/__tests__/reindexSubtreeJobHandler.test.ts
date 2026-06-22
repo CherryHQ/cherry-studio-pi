@@ -147,6 +147,29 @@ describe('reindex-subtree job handler', () => {
     })
   })
 
+  it('preserves structured rescheduling failures when marking reset roots failed', async () => {
+    const handler = createReindexSubtreeJobHandler(knowledgeLockManager as never, workflowService as never)
+    const root = createDirectoryItem('dir-1')
+    const child = createNoteItem('note-1', 'dir-1')
+    const structuredError = { error: { message: 'job queue temporarily unavailable' } }
+    knowledgeItemGetSubtreeItemsMock.mockImplementation(
+      async (_baseId: string, _rootIds: string[], options: { includeRoots?: boolean; leafOnly?: boolean } = {}) => {
+        if (options.leafOnly) return [child]
+        if (options.includeRoots) return [root, child]
+        return [child]
+      }
+    )
+    scheduleItemMock.mockRejectedValueOnce(structuredError)
+
+    await expect(handler.execute(createCtx({ baseId: 'kb-1', rootItemIds: ['dir-1'] }, 'reindex-job'))).rejects.toBe(
+      structuredError
+    )
+
+    expect(knowledgeItemSetSubtreeStatusMock).toHaveBeenCalledWith('kb-1', ['dir-1'], 'failed', {
+      error: 'Failed to schedule reindex after reset: job queue temporarily unavailable'
+    })
+  })
+
   it('onSettled marks active roots without follow-up jobs failed', async () => {
     const handler = createReindexSubtreeJobHandler(knowledgeLockManager as never, workflowService as never)
     getJobMock.mockResolvedValue(
