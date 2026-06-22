@@ -1,7 +1,8 @@
 // import { loggerService } from '@logger'
 import { Box } from '@cherrystudio/ui'
 import { usePreference } from '@data/hooks/usePreference'
-import AppModalProvider from '@renderer/components/AppModal'
+import AppModalProvider, { type AppModalApi } from '@renderer/components/AppModal'
+import { ensureWindowModalFallback, resetWindowModalFallbackIfCurrent } from '@renderer/components/AppModal/fallback'
 import { useAgentSessionAutoRenameSync } from '@renderer/hooks/agents/useSession'
 import { useAppInit } from '@renderer/hooks/useAppInit'
 import { useTopicAutoRenameSync } from '@renderer/hooks/useTopic'
@@ -32,6 +33,8 @@ let onShow = noopShow
 let onHide = noopHide
 let onHideAll = noopHideAll
 
+ensureWindowModalFallback()
+
 interface Props {
   children?: React.ReactNode
 }
@@ -46,6 +49,7 @@ type ElementItem = {
 const TopViewContent: React.FC<Props> = ({ children }) => {
   const [elements, setElements] = useState<ElementItem[]>([])
   const elementsRef = useRef<ElementItem[]>([])
+  const modalRef = useRef<AppModalApi | undefined>(undefined)
   elementsRef.current = elements
 
   const [exitFullscreenPref] = usePreference('shortcut.app.fullscreen.exit')
@@ -60,6 +64,15 @@ const TopViewContent: React.FC<Props> = ({ children }) => {
   useEffect(() => {
     window.toast = toast
   }, [toast])
+
+  useEffect(() => {
+    ensureWindowModalFallback()
+
+    return () => {
+      resetWindowModalFallbackIfCurrent(modalRef.current)
+      modalRef.current = undefined
+    }
+  }, [])
 
   const handlePop = useCallback(() => {
     const views = [...elementsRef.current]
@@ -126,6 +139,7 @@ const TopViewContent: React.FC<Props> = ({ children }) => {
       {children}
       <AppModalProvider
         onReady={(modal) => {
+          modalRef.current = modal
           window.modal = modal
         }}
       />
