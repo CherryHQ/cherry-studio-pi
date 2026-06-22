@@ -1,6 +1,8 @@
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 
+import { getErrorMessage } from '@main/utils/errorMessage'
+
 export type LegacyProjectionArchiveCleanupOptions = {
   prefixes: readonly string[]
   keepLatest?: number
@@ -20,10 +22,6 @@ function normalizeKeepLatest(value: number | undefined) {
   if (value === undefined) return DEFAULT_LEGACY_PROJECTION_ARCHIVE_RETENTION
   if (!Number.isFinite(value)) return DEFAULT_LEGACY_PROJECTION_ARCHIVE_RETENTION
   return Math.max(0, Math.floor(value))
-}
-
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error)
 }
 
 export async function pruneManagedLegacyProjectionArchives(
@@ -84,7 +82,10 @@ export async function pruneManagedLegacyProjectionArchives(
         await fsp.rm(candidate.path, { recursive: true, force: true })
         report.removed.push(candidate.path)
       } catch (error) {
-        report.failed.push({ path: candidate.path, error: errorMessage(error) })
+        report.failed.push({
+          path: candidate.path,
+          error: getErrorMessage(error, 'Unknown legacy archive cleanup error')
+        })
       }
     }
   }

@@ -2,7 +2,7 @@ import fsp from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { pruneManagedLegacyProjectionArchives } from '../LegacyProjectionArchiveCleanup'
 
@@ -14,6 +14,7 @@ describe('pruneManagedLegacyProjectionArchives', () => {
   })
 
   afterEach(async () => {
+    vi.restoreAllMocks()
     await fsp.rm(tempRoot, { recursive: true, force: true })
   })
 
@@ -61,5 +62,23 @@ describe('pruneManagedLegacyProjectionArchives', () => {
     expect(report.removed).toEqual([])
     await expect(exists(protectedOld)).resolves.toBe(true)
     await expect(exists(newer)).resolves.toBe(true)
+  })
+
+  it('preserves structured cleanup failures in the report', async () => {
+    const oldArchive = await createLegacyDir('agent-projection-2026-01-01', 1000)
+    await createLegacyDir('agent-projection-2026-01-02', 2000)
+    vi.spyOn(fsp, 'rm').mockRejectedValueOnce({
+      response: {
+        status: 423,
+        statusText: 'Locked'
+      }
+    })
+
+    const report = await pruneManagedLegacyProjectionArchives(tempRoot, {
+      prefixes: ['agent-projection-'],
+      keepLatest: 1
+    })
+
+    expect(report.failed).toEqual([{ path: oldArchive, error: '423 Locked' }])
   })
 })
