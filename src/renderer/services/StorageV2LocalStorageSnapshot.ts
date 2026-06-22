@@ -3,6 +3,10 @@ import {
   RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY,
   serializeRendererPersistCacheValue
 } from '@shared/data/cache/cacheSchemas'
+import {
+  STORAGE_V2_DURABLE_LOCAL_STORAGE_KEYS,
+  STORAGE_V2_MCP_PROVIDER_TOKEN_KEYS
+} from '@shared/data/storage/localStorageKeys'
 
 import { getRendererStorageV2Api } from './StorageV2RendererApi'
 import { serializeStorageV2MirrorError, type StorageV2RuntimeMirrorStatusEntry } from './StorageV2RuntimeMirrorStatus'
@@ -10,25 +14,8 @@ import { unrefTimer } from './StorageV2TimerUtils'
 
 const logger = loggerService.withContext('StorageV2LocalStorageSnapshot')
 
-const MCP_PROVIDER_TOKEN_KEYS = [
-  'mcprouter_token',
-  'modelscope_token',
-  'tokenLanyunToken',
-  'tokenflux_token',
-  'ai302_token',
-  'bailian_token'
-] as const
-
-const DURABLE_LOCAL_STORAGE_KEYS = [
-  'language',
-  'memory_currentUserId',
-  'onboarding-completed',
-  'privacy-popup-accepted',
-  RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY
-] as const
-
-const MCP_PROVIDER_TOKEN_KEY_SET = new Set<string>(MCP_PROVIDER_TOKEN_KEYS)
-const DURABLE_LOCAL_STORAGE_KEY_SET = new Set<string>(DURABLE_LOCAL_STORAGE_KEYS)
+const MCP_PROVIDER_TOKEN_KEY_SET = new Set<string>(STORAGE_V2_MCP_PROVIDER_TOKEN_KEYS)
+const DURABLE_LOCAL_STORAGE_KEY_SET = new Set<string>(STORAGE_V2_DURABLE_LOCAL_STORAGE_KEYS)
 const DEFAULT_LOCAL_STORAGE_MIRROR_DEBOUNCE_MS = 0
 const LOCAL_STORAGE_MIRROR_RETRY_MS = 5000
 const MCP_PROVIDER_TOKEN_CLEAR_MODE = 'explicit'
@@ -95,7 +82,7 @@ export function getStorageV2LocalStorageSnapshot(): StorageV2LocalStorageSnapsho
     }
   }
 
-  for (const key of DURABLE_LOCAL_STORAGE_KEYS) {
+  for (const key of STORAGE_V2_DURABLE_LOCAL_STORAGE_KEYS) {
     const value = safeGetLocalStorageItem(key)
     const sanitizedValue = sanitizeDurableLocalStorageValue(key, value)
     if (sanitizedValue) {
@@ -103,14 +90,14 @@ export function getStorageV2LocalStorageSnapshot(): StorageV2LocalStorageSnapsho
     }
   }
 
-  for (const key of MCP_PROVIDER_TOKEN_KEYS) {
+  for (const key of STORAGE_V2_MCP_PROVIDER_TOKEN_KEYS) {
     const token = safeGetLocalStorageItem(key)
     if (token) {
       mcpProviderTokens[key] = token
     }
   }
 
-  const clearedMcpProviderTokenKeys = MCP_PROVIDER_TOKEN_KEYS.filter(
+  const clearedMcpProviderTokenKeys = STORAGE_V2_MCP_PROVIDER_TOKEN_KEYS.filter(
     (key) => pendingClearedMcpProviderTokenKeys.has(key) && !mcpProviderTokens[key]
   )
 

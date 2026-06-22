@@ -3,6 +3,10 @@ import {
   RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY,
   serializeRendererPersistCacheValue
 } from '@shared/data/cache/cacheSchemas'
+import {
+  STORAGE_V2_DURABLE_LOCAL_STORAGE_KEYS,
+  STORAGE_V2_MCP_PROVIDER_TOKEN_KEYS
+} from '@shared/data/storage/localStorageKeys'
 import type { Assistant } from '@shared/data/types/assistant'
 
 import { isSensitiveHeaderName } from './SecretFieldDetection'
@@ -75,22 +79,8 @@ type SecretField = {
   kind: string
 }
 
-const MCP_PROVIDER_TOKEN_KEYS = new Set([
-  'mcprouter_token',
-  'modelscope_token',
-  'tokenLanyunToken',
-  'tokenflux_token',
-  'ai302_token',
-  'bailian_token'
-])
-
-const DURABLE_LOCAL_STORAGE_KEYS = new Set([
-  'language',
-  'memory_currentUserId',
-  'onboarding-completed',
-  'privacy-popup-accepted',
-  RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY
-])
+const MCP_PROVIDER_TOKEN_KEYS = new Set<string>(STORAGE_V2_MCP_PROVIDER_TOKEN_KEYS)
+const DURABLE_LOCAL_STORAGE_KEYS = new Set<string>(STORAGE_V2_DURABLE_LOCAL_STORAGE_KEYS)
 
 export type StorageV2LegacyImportOptions = {
   dryRun?: boolean

@@ -5,6 +5,7 @@ import { getErrorMessage } from '@main/utils/errorMessage'
 import { ErrorCode, isDataApiError } from '@shared/data/api'
 import type { CreateModelDto, UpdateModelDto } from '@shared/data/api/schemas/models'
 import type { CreateProviderDto, UpdateProviderDto } from '@shared/data/api/schemas/providers'
+import { STORAGE_V2_MCP_PROVIDER_TOKEN_KEYS } from '@shared/data/storage/localStorageKeys'
 import type { Assistant } from '@shared/data/types/assistant'
 import { isUniqueModelId, type Model as DataApiModel, parseUniqueModelId } from '@shared/data/types/model'
 import type { ApiKeyEntry, ProviderSettings } from '@shared/data/types/provider'
@@ -74,14 +75,7 @@ const LLM_SETTINGS_SECRET_FIELDS = [
   }
 ] as const
 
-const MCP_PROVIDER_TOKEN_KEYS = new Set([
-  'mcprouter_token',
-  'modelscope_token',
-  'tokenLanyunToken',
-  'tokenflux_token',
-  'ai302_token',
-  'bailian_token'
-])
+const MCP_PROVIDER_TOKEN_KEYS = new Set<string>(STORAGE_V2_MCP_PROVIDER_TOKEN_KEYS)
 const PROVIDER_EXTRA_HEADERS_CREDENTIAL_KIND = 'extraHeaders'
 const PROVIDER_EXTRA_HEADER_SCOPES = ['settings', 'providerSettings'] as const
 type ProviderExtraHeaderScope = (typeof PROVIDER_EXTRA_HEADER_SCOPES)[number]
