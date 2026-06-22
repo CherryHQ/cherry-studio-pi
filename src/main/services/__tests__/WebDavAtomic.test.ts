@@ -80,6 +80,66 @@ describe('WebDavAtomic', () => {
     expect(client.putFileContents).not.toHaveBeenCalled()
   })
 
+  it('stops instead of overwriting when remote JSON verification is locked', async () => {
+    const client = {
+      getFileContents: vi.fn(async () => {
+        throw { response: { status: 423, statusText: 'Locked' } }
+      }),
+      putFileContents: vi.fn(),
+      deleteFile: vi.fn()
+    }
+
+    await expect(
+      writeWebDavJsonAtomically(
+        client as any,
+        '/sync/v1/manifest.json',
+        { ok: true },
+        {
+          logger,
+          operation: 'test sync json',
+          overwrite: false
+        }
+      )
+    ).rejects.toThrow('423 Locked')
+
+    expect(client.getFileContents).toHaveBeenCalledWith('/sync/v1/manifest.json', { format: 'binary' })
+    expect(client.putFileContents).not.toHaveBeenCalled()
+    expect(client.deleteFile).not.toHaveBeenCalled()
+  })
+
+  it('treats explicit missing remote file errors as absent JSON during overwrite checks', async () => {
+    const remote = new Map<string, string>()
+    const client = {
+      getFileContents: vi.fn(async (filePath: string) => {
+        const contents = remote.get(filePath)
+        if (contents === undefined) throw new Error(`Missing remote file: ${filePath}`)
+        return contents
+      }),
+      putFileContents: vi.fn(async (filePath: string, contents: string) => {
+        remote.set(filePath, contents)
+        return true
+      }),
+      deleteFile: vi.fn(async (filePath: string) => {
+        remote.delete(filePath)
+      })
+    }
+
+    await expect(
+      writeWebDavJsonAtomically(
+        client as any,
+        '/sync/v1/manifest.json',
+        { ok: true },
+        {
+          logger,
+          operation: 'test sync json',
+          overwrite: false
+        }
+      )
+    ).resolves.toBeUndefined()
+
+    expect(remote.get('/sync/v1/manifest.json')).toBe(JSON.stringify({ ok: true }, null, 2))
+  })
+
   it('does not let a stalled temporary delete keep a successful atomic write pending forever', async () => {
     vi.useFakeTimers()
     const client = {

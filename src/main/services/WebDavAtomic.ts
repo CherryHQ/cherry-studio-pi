@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import path from 'node:path'
 
 import { runWebDavOperation, WebDavOperationError } from '@main/services/WebDavRetry'
+import { getErrorMessage } from '@main/utils/errorMessage'
 import type { WebDAVClient } from 'webdav'
 
 type WebDavAtomicLogger = {
@@ -133,6 +134,13 @@ async function readRemoteJsonHash(client: WebDAVClient, filePath: string, option
   return hashJsonValue(JSON.parse(webDavBufferToString(contents)))
 }
 
+function isMissingRemoteJsonFileError(error: WebDavOperationError) {
+  if (error.status === 404) return true
+  if (error.status !== null) return false
+
+  return /\bMissing remote file\b/i.test(getErrorMessage(error.originalError, error.message))
+}
+
 export async function verifyRemoteJsonHash(
   client: WebDAVClient,
   filePath: string,
@@ -145,7 +153,8 @@ export async function verifyRemoteJsonHash(
     if (error instanceof RemoteJsonVerificationSizeError) {
       throw error
     }
-    if (error instanceof WebDavOperationError && error.transient) {
+    if (error instanceof WebDavOperationError) {
+      if (isMissingRemoteJsonFileError(error)) return false
       throw error
     }
     return false
