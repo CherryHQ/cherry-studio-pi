@@ -54,7 +54,7 @@ vi.mock('react-i18next', async (importOriginal) => {
 })
 
 import { AssistantSelector } from '../AssistantSelector'
-import { RESOURCE_SELECTOR_FORCE_CLOSE_EVENT } from '../resourceSelectorEvents'
+import { getResourceSelectorForceCloseSource, RESOURCE_SELECTOR_FORCE_CLOSE_EVENT } from '../resourceSelectorEvents'
 
 const ALPHA_ASSISTANT_ID = '11111111-1111-4111-8111-111111111111'
 const BETA_ASSISTANT_ID = '22222222-2222-4222-8222-222222222222'
@@ -246,6 +246,9 @@ describe('AssistantSelector library navigation', () => {
         })
       })
       expect(closeResourceSelectors.mock.calls.length).toBeGreaterThanOrEqual(2)
+      expect(
+        closeResourceSelectors.mock.calls.map(([event]) => getResourceSelectorForceCloseSource(event))
+      ).not.toContain(undefined)
     } finally {
       window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)
     }

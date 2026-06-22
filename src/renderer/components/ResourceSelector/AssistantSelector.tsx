@@ -11,7 +11,6 @@ import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { type ReactElement, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { scheduleCloseTransientResourceSelectors } from './resourceSelectorEvents'
 import { ResourceSelectorShell, type ResourceSelectorShellItem } from './ResourceSelectorShell'
 import { useCreatedAtSort } from './useCreatedAtSort'
 
@@ -132,11 +131,9 @@ export function AssistantSelector(props: AssistantSelectorProps) {
     isPinActionDisabled,
     ...(openTab && {
       onEditItem: (id: string) => {
-        scheduleCloseTransientResourceSelectors()
         openTab(buildLibraryRouteUrl(buildLibraryEditSearch('assistant', id)), { forceNew: true })
       },
       onCreateNew: () => {
-        scheduleCloseTransientResourceSelectors()
         openTab(buildLibraryRouteUrl(buildLibraryCreateSearch('assistant')), { forceNew: true })
       }
     }),

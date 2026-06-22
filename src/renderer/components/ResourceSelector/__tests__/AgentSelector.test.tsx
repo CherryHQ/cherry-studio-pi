@@ -52,7 +52,7 @@ vi.mock('react-i18next', async (importOriginal) => {
 })
 
 import { AgentSelector, type AgentSelectorItem } from '../AgentSelector'
-import { RESOURCE_SELECTOR_FORCE_CLOSE_EVENT } from '../resourceSelectorEvents'
+import { getResourceSelectorForceCloseSource, RESOURCE_SELECTOR_FORCE_CLOSE_EVENT } from '../resourceSelectorEvents'
 
 const ALPHA_AGENT_ID = '44444444-4444-4444-8444-444444444444'
 const BETA_AGENT_ID = '55555555-5555-4555-8555-555555555555'
@@ -272,6 +272,9 @@ describe('AgentSelector', () => {
         expect(openTabMock).toHaveBeenCalledWith('/app/library?resourceType=agent&action=create', { forceNew: true })
       })
       expect(closeResourceSelectors.mock.calls.length).toBeGreaterThanOrEqual(2)
+      expect(
+        closeResourceSelectors.mock.calls.map(([event]) => getResourceSelectorForceCloseSource(event))
+      ).not.toContain(undefined)
     } finally {
       window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)
     }

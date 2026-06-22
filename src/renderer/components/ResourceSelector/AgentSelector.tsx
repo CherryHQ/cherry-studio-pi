@@ -12,7 +12,6 @@ import { Bot } from 'lucide-react'
 import { type ReactElement, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { scheduleCloseTransientResourceSelectors } from './resourceSelectorEvents'
 import { ResourceSelectorShell, type ResourceSelectorShellItem } from './ResourceSelectorShell'
 import { useCreatedAtSort } from './useCreatedAtSort'
 
@@ -99,11 +98,9 @@ export function AgentSelector(props: AgentSelectorProps) {
     isPinActionDisabled,
     ...(openTab && {
       onEditItem: (id: string) => {
-        scheduleCloseTransientResourceSelectors()
         openTab(buildLibraryRouteUrl(buildLibraryEditSearch('agent', id)), { forceNew: true })
       },
       onCreateNew: () => {
-        scheduleCloseTransientResourceSelectors()
         openTab(buildLibraryRouteUrl(buildLibraryCreateSearch('agent')), { forceNew: true })
       }
     }),
