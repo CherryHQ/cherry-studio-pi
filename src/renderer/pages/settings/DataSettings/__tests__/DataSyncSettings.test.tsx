@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Modal } from 'antd'
+import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import DataSyncSettings from '../DataSyncSettings'
@@ -66,6 +67,15 @@ vi.mock('@renderer/services/DataSyncService', () => ({
   stopDataSyncAutoSync: mocks.stopDataSyncAutoSync,
   subscribeDataSyncRuntimeState: mocks.subscribeDataSyncRuntimeState,
   syncAppDataNow: mocks.syncAppDataNow
+}))
+
+vi.mock('../..', () => ({
+  SettingDivider: () => <hr />,
+  SettingGroup: ({ children }: { children?: ReactNode; theme?: string }) => <section>{children}</section>,
+  SettingHelpText: ({ children }: { children?: ReactNode }) => <p>{children}</p>,
+  SettingRow: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  SettingRowTitle: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  SettingTitle: ({ children }: { children?: ReactNode }) => <h2>{children}</h2>
 }))
 
 function syncButton() {
