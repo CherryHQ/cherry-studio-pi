@@ -2853,6 +2853,43 @@ describe('AppDataSyncService', () => {
     expect(mocks.storageV2.upsertSyncState).not.toHaveBeenCalledWith('last-sync-summary', expect.anything())
   })
 
+  it('stops instead of uploading runtime directory bundles when WebDAV existence checks fail', async () => {
+    const skillPath = path.join(mocks.runtimeDataRoot, 'Skills', 'sync-fixture', 'SKILL.md')
+    await fsp.mkdir(path.dirname(skillPath), { recursive: true })
+    await fsp.writeFile(skillPath, '# Locked Runtime Bundle Guard')
+    const mtime = new Date('2026-06-01T12:00:00.000Z')
+    await fsp.utimes(skillPath, mtime, mtime)
+
+    mocks.webdav.exists.mockImplementation(async (filePath: string) => {
+      const remotePath = String(filePath)
+      if (remotePath.endsWith('/.sync.lock.json')) {
+        return mocks.remoteFiles.has(filePath)
+      }
+      if (remotePath.includes('/runtime-directories/bundles/Skills/')) {
+        throw {
+          response: {
+            status: 423,
+            statusText: 'Locked'
+          }
+        }
+      }
+      if (mocks.remoteFiles.has(filePath)) return true
+      return true
+    })
+
+    await expect(new AppDataSyncService().syncNow(config)).rejects.toThrow('423 Locked')
+
+    expect(
+      mocks.webdav.putFileContents.mock.calls.some(([filePath]) =>
+        String(filePath).includes('/runtime-directories/bundles/Skills/')
+      )
+    ).toBe(false)
+    expect(
+      mocks.webdav.putFileContents.mock.calls.some(([filePath]) => String(filePath).endsWith('/manifest.json'))
+    ).toBe(false)
+    expect(mocks.storageV2.upsertSyncState).not.toHaveBeenCalledWith('last-sync-summary', expect.anything())
+  })
+
   it('defers local-only app data records when first joining an existing sync space', async () => {
     mocks.db.listRecords.mockResolvedValueOnce([
       {

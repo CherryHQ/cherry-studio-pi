@@ -3659,7 +3659,10 @@ export class AppDataSyncService {
         logger,
         signal
       }
-    ).catch(() => false)
+    ).catch((error) => {
+      if (error instanceof WebDavOperationError && error.status === 404) return false
+      throw error
+    })
     if (!exists) {
       await runWebDavOperation(
         `uploading runtime directory bundle ${remotePath}`,
