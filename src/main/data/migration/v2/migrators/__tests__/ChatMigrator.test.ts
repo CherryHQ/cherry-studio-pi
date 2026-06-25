@@ -940,6 +940,59 @@ describe('ChatMigrator.insertStagedTopics file_ref backfill', () => {
     expect(rows.filter((r) => r.role !== 'root').some((r) => r.parentId === null)).toBe(false)
   })
 
+  it('converts content-bearing legacy root rows before inserting message_root_parent_check data', async () => {
+    const migrator = new ChatMigrator()
+    const legacyRoot = newMessage('legacy-root', 't-legacy-root', [{ type: 'main_text', content: 'kept content' }])
+    legacyRoot.role = 'root'
+    const child = newMessage('legacy-child', 't-legacy-root', [{ type: 'main_text', content: 'child' }], 'legacy-root')
+    stage(migrator, [{ topic: newTopic('t-legacy-root', 100), messages: [legacyRoot, child], pinned: false }], [])
+
+    const fn = (migrator as unknown as Record<string, unknown>)['insertStagedTopics'] as (
+      ctx: MigrationContext
+    ) => Promise<{ messagesInserted: number }>
+    await fn.call(migrator, ctxOf())
+
+    const rows = await dbh.db.select().from(messageTable).where(eq(messageTable.topicId, 't-legacy-root'))
+    const structuralRoots = rows.filter((r) => r.parentId === null)
+    const migratedRoot = rows.find((r) => r.id === 'legacy-root')
+    const migratedChild = rows.find((r) => r.id === 'legacy-child')
+
+    expect(structuralRoots).toHaveLength(1)
+    expect(structuralRoots[0].role).toBe('root')
+    expect(migratedRoot?.role).toBe('system')
+    expect(migratedRoot?.parentId).toBe(structuralRoots[0].id)
+    expect(migratedChild?.parentId).toBe('legacy-root')
+    expect(rows.every((r) => (r.role === 'root') === (r.parentId === null))).toBe(true)
+  })
+
+  it('drops empty legacy root rows and remaps their children to the new virtual root', async () => {
+    const migrator = new ChatMigrator()
+    const emptyLegacyRoot = newMessage('legacy-empty-root', 't-empty-root', [])
+    emptyLegacyRoot.role = 'root'
+    const child = newMessage(
+      'legacy-root-child',
+      't-empty-root',
+      [{ type: 'main_text', content: 'child content' }],
+      'legacy-empty-root'
+    )
+    stage(migrator, [{ topic: newTopic('t-empty-root', 100), messages: [emptyLegacyRoot, child], pinned: false }], [])
+
+    const fn = (migrator as unknown as Record<string, unknown>)['insertStagedTopics'] as (
+      ctx: MigrationContext
+    ) => Promise<{ messagesInserted: number }>
+    await fn.call(migrator, ctxOf())
+
+    const rows = await dbh.db.select().from(messageTable).where(eq(messageTable.topicId, 't-empty-root'))
+    const structuralRoots = rows.filter((r) => r.parentId === null)
+    const migratedChild = rows.find((r) => r.id === 'legacy-root-child')
+
+    expect(rows.some((r) => r.id === 'legacy-empty-root')).toBe(false)
+    expect(structuralRoots).toHaveLength(1)
+    expect(structuralRoots[0].role).toBe('root')
+    expect(migratedChild?.parentId).toBe(structuralRoots[0].id)
+    expect(rows.every((r) => (r.role === 'root') === (r.parentId === null))).toBe(true)
+  })
+
   it('skips file_ref for dangling fileId and records warning', async () => {
     const migrator = new ChatMigrator()
     const messages = [newMessage('m-dangle', 't-dangle', [{ type: 'image', fileId: 'nonexistent-fe' }])]

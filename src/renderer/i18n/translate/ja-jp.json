@@ -6622,13 +6622,13 @@
         "menu_label": "インスタンスを追加"
       },
       "filter": {
-        "agent": "エージェントサポート",
+        "agent": "Claude Agent SDK 互換",
         "all": "すべてのプロバイダー",
-        "disabled": "障害者専用",
+        "disabled": "無効のみ",
         "enabled": "有効のみ",
         "label": "フィルタープロバイダー"
       },
-      "filter_agent": "フィルターエージェント対応プロバイダー",
+      "filter_agent": "Claude Agent SDK 互換プロバイダーをフィルター",
       "get_api_key": "APIキーを取得",
       "logo_upload_failed": "選択した画像を処理できませんでした",
       "misc": "その他",

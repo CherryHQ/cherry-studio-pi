@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import ProviderList from '../ProviderList'
+import { normalizeProviderFilterMode } from '../ProviderList/providerFilterMode'
 
 const reorderSpy = vi.fn()
 const useProvidersMock = vi.fn()
@@ -126,6 +127,17 @@ function deferred<T = void>() {
   })
   return { promise, resolve, reject }
 }
+
+describe('normalizeProviderFilterMode', () => {
+  it('keeps valid list filters and maps legacy agent links to Claude Agent SDK filtering', () => {
+    expect(normalizeProviderFilterMode('all')).toBe('all')
+    expect(normalizeProviderFilterMode('enabled')).toBe('enabled')
+    expect(normalizeProviderFilterMode('disabled')).toBe('disabled')
+    expect(normalizeProviderFilterMode('agent')).toBe('claude-agent')
+    expect(normalizeProviderFilterMode('claude-agent')).toBe('claude-agent')
+    expect(normalizeProviderFilterMode('unknown')).toBeUndefined()
+  })
+})
 
 describe('ProviderList', () => {
   const providers = [
@@ -331,7 +343,9 @@ describe('ProviderList', () => {
     expect(screen.getByText('OpenAI')).toBeInTheDocument()
     expect(screen.getByText('Anthropic')).toBeInTheDocument()
 
-    rerender(<ProviderList selectedProviderId="openai" filterModeHint="agent" onSelectProvider={onSelectProvider} />)
+    rerender(
+      <ProviderList selectedProviderId="openai" filterModeHint="claude-agent" onSelectProvider={onSelectProvider} />
+    )
 
     expect(screen.queryByText('OpenAI')).not.toBeInTheDocument()
     expect(screen.getByText('Anthropic')).toBeInTheDocument()

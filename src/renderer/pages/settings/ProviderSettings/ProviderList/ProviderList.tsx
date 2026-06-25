@@ -114,7 +114,7 @@ export default function ProviderList({ selectedProviderId, filterModeHint, onSel
       if (filterMode === 'disabled' && provider.isEnabled) {
         return false
       }
-      if (filterMode === 'agent' && !isAnthropicSupportedProvider(provider)) {
+      if (filterMode === 'claude-agent' && !isAnthropicSupportedProvider(provider)) {
         return false
       }
       const keywords = searchText.toLowerCase().split(/\s+/).filter(Boolean)

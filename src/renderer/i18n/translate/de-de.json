@@ -6622,13 +6622,13 @@
         "menu_label": "Instanz hinzufügen"
       },
       "filter": {
-        "agent": "Vom Agenten unterstützt",
+        "agent": "Kompatibel mit Claude Agent SDK",
         "all": "Alle Anbieter",
-        "disabled": "Nur für Behinderte",
+        "disabled": "Nur deaktivierte",
         "enabled": "Nur aktiviert",
         "label": "Filteranbieter"
       },
-      "filter_agent": "Von Filter-Agent unterstützte Anbieter",
+      "filter_agent": "Mit Claude Agent SDK kompatible Anbieter filtern",
       "get_api_key": "Hier klicken um Schlüssel zu erhalten",
       "logo_upload_failed": "Verarbeitung des ausgewählten Bildes fehlgeschlagen",
       "misc": "Sonstige",

@@ -6622,13 +6622,13 @@
         "menu_label": "Agregar instancia"
       },
       "filter": {
-        "agent": "Soporte de Agente",
+        "agent": "Compatible con Claude Agent SDK",
         "all": "Todos los Proveedores",
-        "disabled": "Solo discapacitados",
+        "disabled": "Solo deshabilitados",
         "enabled": "Solo habilitado",
         "label": "Filtrar proveedores"
       },
-      "filter_agent": "Proveedores compatibles con el agente de filtrado",
+      "filter_agent": "Filtrar proveedores compatibles con Claude Agent SDK",
       "get_api_key": "Haga clic aquí para obtener la clave",
       "logo_upload_failed": "Error al procesar la imagen seleccionada",
       "misc": "otro",

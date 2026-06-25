@@ -6696,13 +6696,13 @@
         "menu_label": "Add instance"
       },
       "filter": {
-        "agent": "Agent Supported",
+        "agent": "Claude Agent SDK compatible",
         "all": "All Providers",
         "disabled": "Disabled Only",
         "enabled": "Enabled Only",
         "label": "Filter providers"
       },
-      "filter_agent": "Filter Agent Supported Providers",
+      "filter_agent": "Filter Claude Agent SDK compatible providers",
       "get_api_key": "Get API Key",
       "logo_upload_failed": "Failed to process the selected image",
       "misc": "Other",

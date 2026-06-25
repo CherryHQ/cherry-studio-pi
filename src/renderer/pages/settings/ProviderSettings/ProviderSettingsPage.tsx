@@ -6,6 +6,7 @@ import { startTransition, useCallback, useEffect, useMemo, useRef, useState } fr
 
 import { useProviderDeepLinkImport } from './hooks/useProviderDeepLinkImport'
 import ProviderList from './ProviderList'
+import { normalizeProviderFilterMode } from './ProviderList/providerFilterMode'
 import ProviderSetting from './ProviderSetting'
 import { isProviderSettingsListVisibleProvider } from './utils/providerDisplay'
 
@@ -33,7 +34,7 @@ export default function ProviderSettingsPage({ isOnboarding = false }: ProviderS
 
   const providers = useMemo(() => (Array.isArray(rawProviders) ? rawProviders : []), [rawProviders])
   const visibleProviders = useMemo(() => providers.filter(isProviderSettingsListVisibleProvider), [providers])
-  const filterModeHint = search.filter === 'agent' ? 'agent' : undefined
+  const filterModeHint = normalizeProviderFilterMode(search.filter)
 
   useEffect(() => {
     setLastSelectedProviderIdRef.current = setLastSelectedProviderId
@@ -56,7 +57,7 @@ export default function ProviderSettingsPage({ isOnboarding = false }: ProviderS
   useEffect(() => {
     let shouldConsume = false
 
-    if (search.filter === 'agent') {
+    if (filterModeHint) {
       shouldConsume = true
     }
 
@@ -70,7 +71,7 @@ export default function ProviderSettingsPage({ isOnboarding = false }: ProviderS
       const restSearch = omit(search, ['filter', 'id'])
       void navigate({ to: '/settings/provider', search: restSearch as Record<string, string>, replace: true })
     }
-  }, [navigate, search, setSelectedProviderId, visibleProviders])
+  }, [filterModeHint, navigate, search, setSelectedProviderId, visibleProviders])
 
   useEffect(() => {
     if (!selectedProviderId && visibleProviders[0]) {

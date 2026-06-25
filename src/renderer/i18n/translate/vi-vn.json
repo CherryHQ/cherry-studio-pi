@@ -6622,13 +6622,13 @@
         "menu_label": "Thêm phiên bản"
       },
       "filter": {
-        "agent": "Được hỗ trợ bởi đại lý",
+        "agent": "Tương thích Claude Agent SDK",
         "all": "Tất cả nhà cung cấp",
-        "disabled": "Chỉ dành cho người khuyết tật",
+        "disabled": "Chỉ nhà cung cấp đã tắt",
         "enabled": "Chỉ được kích hoạt",
         "label": "Lọc nhà cung cấp"
       },
-      "filter_agent": "Các nhà cung cấp được Hỗ trợ bởi Agent Lọc",
+      "filter_agent": "Lọc nhà cung cấp tương thích Claude Agent SDK",
       "get_api_key": "Lấy Khóa API",
       "logo_upload_failed": "Không thể xử lý hình ảnh đã chọn",
       "misc": "Khác",

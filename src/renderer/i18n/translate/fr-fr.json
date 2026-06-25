@@ -6622,13 +6622,13 @@
         "menu_label": "Ajouter une instance"
       },
       "filter": {
-        "agent": "Prise en charge par un agent",
+        "agent": "Compatible avec Claude Agent SDK",
         "all": "Tous les fournisseurs",
-        "disabled": "Uniquement pour personnes handicapées",
+        "disabled": "Désactivés uniquement",
         "enabled": "Activé uniquement",
         "label": "Fournisseurs de filtres"
       },
-      "filter_agent": "Fournisseurs pris en charge par l'agent de filtrage",
+      "filter_agent": "Filtrer les fournisseurs compatibles avec Claude Agent SDK",
       "get_api_key": "Cliquez ici pour obtenir une clé",
       "logo_upload_failed": "Échec du traitement de l'image sélectionnée",
       "misc": "autre",

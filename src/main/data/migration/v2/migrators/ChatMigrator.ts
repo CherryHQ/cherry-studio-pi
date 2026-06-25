@@ -149,6 +149,27 @@ function buildVirtualRoot(id: string, topicId: string, createdAt: number): NewMe
   }
 }
 
+function hasMessageContent(message: NewMessage): boolean {
+  return Array.isArray(message.data?.parts) && message.data.parts.length > 0
+}
+
+function normalizeMigratedContentMessage(message: NewMessage): NewMessage | null {
+  if (message.role !== 'root') {
+    return message
+  }
+
+  if (!hasMessageContent(message)) {
+    logger.warn(`Skipping legacy structural root message ${message.id} during chat migration`)
+    return null
+  }
+
+  logger.warn(`Converting content-bearing legacy root message ${message.id} to system during chat migration`)
+  return {
+    ...message,
+    role: 'system'
+  }
+}
+
 /**
  * Assistant data from Redux for assistant lookup. Both `assistants[]` and the
  * standalone `defaultAssistant` slot can carry topics under `.topics[]` —
@@ -1054,6 +1075,12 @@ export class ChatMigrator extends BaseMigrator {
         const rootId = uuidv4()
         batchMessages.push(buildVirtualRoot(rootId, data.topic.id, data.topic.createdAt))
         for (const msg of data.messages) {
+          const normalizedMessage = normalizeMigratedContentMessage(msg)
+          if (!normalizedMessage) {
+            idRemap.set(msg.id, rootId)
+            continue
+          }
+          msg.role = normalizedMessage.role
           if (msg.parentId === null) {
             msg.parentId = rootId
           }
