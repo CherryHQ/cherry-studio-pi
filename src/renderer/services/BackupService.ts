@@ -202,6 +202,11 @@ const setLocalBackupSyncState = (patch: Partial<RemoteSyncState>) => {
   Object.assign(backupSyncState.localBackupSync, patch)
 }
 
+function latestSyncTime(...values: Array<number | null | undefined>): number | undefined {
+  const times = values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+  return times.length > 0 ? Math.min(Math.max(...times), Date.now()) : undefined
+}
+
 // 重试删除S3文件的辅助函数
 async function deleteS3FileWithRetry(fileName: string, s3Config: S3Config, maxRetries = 3) {
   let lastError: Error | null = null
@@ -891,6 +896,7 @@ export function startAutoSync(immediate = false, type?: BackupType) {
 
     // 根据备份类型获取相应的配置和状态
     const backup = getBackupSyncState()
+    const legacyBackup = store.getState().backup ?? {}
 
     if (backupType === 'webdav') {
       if (webdavSyncTimeout) {
@@ -898,7 +904,7 @@ export function startAutoSync(immediate = false, type?: BackupType) {
         webdavSyncTimeout = null
       }
       syncInterval = getWebdavBackupSettings().webdavSyncInterval
-      lastSyncTime = backup.webdavSync?.lastSyncTime || undefined
+      lastSyncTime = latestSyncTime(backup.webdavSync?.lastSyncTime, legacyBackup.webdavSync?.lastSyncTime)
       logPrefix = '[WebdavAutoSync]'
     } else if (backupType === 's3') {
       if (s3SyncTimeout) {
@@ -906,7 +912,7 @@ export function startAutoSync(immediate = false, type?: BackupType) {
         s3SyncTimeout = null
       }
       syncInterval = getS3BackupSettings().syncInterval
-      lastSyncTime = backup.s3Sync?.lastSyncTime || undefined
+      lastSyncTime = latestSyncTime(backup.s3Sync?.lastSyncTime, legacyBackup.s3Sync?.lastSyncTime)
       logPrefix = '[S3AutoSync]'
     } else if (backupType === 'local') {
       if (localSyncTimeout) {
@@ -914,7 +920,7 @@ export function startAutoSync(immediate = false, type?: BackupType) {
         localSyncTimeout = null
       }
       syncInterval = getLocalBackupSettings().localBackupSyncInterval
-      lastSyncTime = backup.localBackupSync?.lastSyncTime || undefined
+      lastSyncTime = latestSyncTime(backup.localBackupSync?.lastSyncTime, legacyBackup.localBackupSync?.lastSyncTime)
       logPrefix = '[LocalAutoSync]'
     } else {
       return

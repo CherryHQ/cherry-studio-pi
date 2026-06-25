@@ -189,12 +189,34 @@ vi.mock('@renderer/services/NutstoreService', () => ({
   backupToNutstore: vi.fn(),
   checkConnection: vi.fn().mockResolvedValue(true),
   createDirectory: vi.fn(),
+  getNutstoreSyncState: vi.fn(() => ({
+    lastSyncError: null,
+    lastSyncTime: null,
+    syncing: false
+  })),
   restoreFromNutstore: vi.fn(),
   startNutstoreAutoSync: vi.fn().mockResolvedValue(undefined),
   stopNutstoreAutoSync: vi.fn()
 }))
 
 vi.mock('@renderer/services/BackupService', () => ({
+  getBackupSyncState: vi.fn(() => ({
+    localBackupSync: {
+      lastSyncError: null,
+      lastSyncTime: null,
+      syncing: false
+    },
+    s3Sync: {
+      lastSyncError: null,
+      lastSyncTime: null,
+      syncing: false
+    },
+    webdavSync: {
+      lastSyncError: null,
+      lastSyncTime: null,
+      syncing: false
+    }
+  })),
   startAutoSync: mocks.startAutoSync,
   stopAutoSync: mocks.stopAutoSync
 }))
