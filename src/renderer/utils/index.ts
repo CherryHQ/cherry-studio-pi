@@ -1,10 +1,6 @@
-import { loggerService } from '@logger'
 import type { AppModalFuncProps } from '@renderer/components/AppModal'
 import type { Model, ModelType } from '@renderer/types'
 import { isEqual } from 'lodash'
-import { v4 as uuidv4 } from 'uuid'
-
-const logger = loggerService.withContext('Utils')
 
 /**
  * 异步执行一个函数。
@@ -56,14 +52,6 @@ export const waitAsyncFunction = (
 }
 
 /**
- * Generate a UUID v4 string.
- * @returns {string} A UUID v4 string
- */
-export function uuid(): string {
-  return uuidv4()
-}
-
-/**
  * 从错误对象中提取错误信息。
  * @param {any} error 错误对象或字符串
  * @returns {string} 提取的错误信息，如果没有则返回空字符串
@@ -105,20 +93,6 @@ export function removeQuotes(str: string): string {
 export function removeSpecialCharacters(str: string): string {
   // First remove newlines and quotes, then remove other special characters
   return str.replace(/[\n"]/g, '').replace(/[\p{M}\p{P}]/gu, '')
-}
-
-/**
- * 检查 URL 是否是有效的代理 URL。
- * @param {string} url 代理 URL
- * @returns {boolean} 是否有效
- */
-export const isValidProxyUrl = (url: string): boolean => {
-  try {
-    const parsed = new URL(url.trim())
-    return ['http:', 'https:', 'socks:', 'socks4:', 'socks5:'].includes(parsed.protocol) && Boolean(parsed.hostname)
-  } catch {
-    return false
-  }
 }
 
 /**
@@ -184,29 +158,6 @@ export function hasObjectKey(obj: any, key: string): boolean {
 }
 
 /**
- * 从npm readme中提取 npx mcp config
- * @param {string} readme readme字符串
- * @returns {Record<string, any> | null} mcp config sample
- */
-export function getMcpConfigSampleFromReadme(readme: string): Record<string, any> | null {
-  if (readme) {
-    try {
-      const regex = /"mcpServers"\s*:\s*({(?:[^{}]*|{(?:[^{}]*|{[^{}]*})*})*})/g
-      for (const match of readme.matchAll(regex)) {
-        let orgSample = JSON.parse(match[1])
-        orgSample = orgSample[Object.keys(orgSample)[0] ?? '']
-        if (orgSample.command === 'npx') {
-          return orgSample
-        }
-      }
-    } catch (e) {
-      logger.error('getMcpConfigSampleFromReadme', e as Error)
-    }
-  }
-  return null
-}
-
-/**
  * 判断模型是否为用户手动选择
  * @param {Model} model 模型对象
  * @param {ModelType} type 模型类型
@@ -228,7 +179,9 @@ export * from './file'
 export * from './image'
 export * from './json'
 export * from './match'
+export * from './mcp'
 export * from './naming'
 export * from './sort'
 export * from './style'
 export * from './url'
+export * from './uuid'
