@@ -25,11 +25,23 @@ function waitForDialogCloseFrame() {
   if (typeof window === 'undefined') return Promise.resolve()
 
   return new Promise<void>((resolve) => {
+    let resolved = false
+    const resolveOnce = () => {
+      if (resolved) return
+      resolved = true
+      resolve()
+    }
+
+    const timeoutId = window.setTimeout(resolveOnce, 50)
     if (typeof window.requestAnimationFrame === 'function') {
-      window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve()))
+      window.requestAnimationFrame(() =>
+        window.requestAnimationFrame(() => {
+          window.clearTimeout(timeoutId)
+          resolveOnce()
+        })
+      )
       return
     }
-    window.setTimeout(resolve, 0)
   })
 }
 
