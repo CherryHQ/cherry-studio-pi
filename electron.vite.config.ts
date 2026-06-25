@@ -126,6 +126,7 @@ export default defineConfig({
       alias: {
         '@renderer': resolve('src/renderer'),
         '@shared': resolve('src/shared'),
+        '@types': resolve('src/renderer/types'),
         '@logger': resolve('src/renderer/services/LoggerService'),
         '@data': resolve('src/renderer/data'),
         '@mcp-trace/trace-core': resolve('packages/mcp-trace/trace-core'),
