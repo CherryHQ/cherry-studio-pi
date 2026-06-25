@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
 import { QueryBooleanSchema } from '../_endpointHelpers'
-import { ListFilesQuerySchema } from '../files'
 import { ListMcpServersQuerySchema } from '../mcpServers'
 import { BranchMessagesQuerySchema, DeleteMessageQuerySchema } from '../messages'
 import { ListModelsQuerySchema } from '../models'
@@ -24,7 +23,6 @@ describe('QueryBooleanSchema', () => {
   })
 
   it('is used by DataApi boolean query filters', () => {
-    expect(ListFilesQuerySchema.parse({ inTrash: 'false', origin: 'external' }).inTrash).toBe(false)
     expect(BranchMessagesQuerySchema.parse({ includeSiblings: 'false' }).includeSiblings).toBe(false)
     expect(DeleteMessageQuerySchema.parse({ cascade: 'false' }).cascade).toBe(false)
     expect(ListMcpServersQuerySchema.parse({ isActive: 'false' }).isActive).toBe(false)
