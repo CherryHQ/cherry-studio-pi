@@ -44,7 +44,7 @@ const ModelListHeader: React.FC<ModelListHeaderProps> = ({
           <div className={modelListClasses.titleHelpRow}>
             <ProviderHelpLink
               target="_blank"
-              rel="noopener noreferrer"
+              rel="noreferrer"
               href={docsLink}
               className={modelListClasses.titleHelpLink}>
               {t('settings.models.docs')}

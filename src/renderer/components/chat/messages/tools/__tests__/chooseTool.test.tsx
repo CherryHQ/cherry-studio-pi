@@ -1,4 +1,4 @@
-import type { NormalToolResponse } from '@renderer/types'
+import type { NormalToolResponse } from '@renderer/types/mcpTool'
 import { render } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -10,7 +10,7 @@ vi.mock('../meta/MessageMetaTool', () => ({
 vi.mock('../knowledge/MessageKnowledgeSearch', () => ({
   MessageKnowledgeSearchToolTitle: () => <div data-testid="kb-card" />
 }))
-vi.mock('../web-search/MessageWebSearch', () => ({
+vi.mock('../webSearch/MessageWebSearch', () => ({
   MessageWebSearchToolTitle: () => <div data-testid="web-card" />
 }))
 vi.mock('../agent', () => ({

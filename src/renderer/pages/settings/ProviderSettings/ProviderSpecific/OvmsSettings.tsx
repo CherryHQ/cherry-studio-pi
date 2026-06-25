@@ -1,9 +1,8 @@
 import { Button, ColFlex } from '@cherrystudio/ui'
 import { cn } from '@cherrystudio/ui/lib/utils'
-import { getErrorMessage } from '@renderer/utils/error'
 import { AlertTriangle, CheckCircle2, Info, XCircle } from 'lucide-react'
 import type { FC } from 'react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 
 import { useOvmsSupport } from '../hooks/useOvmsSupport'
@@ -23,46 +22,25 @@ const OvmsSettings: FC = () => {
   const [isInstallingOvms, setIsInstallingOvms] = useState(false)
   const [isRunningOvms, setIsRunningOvms] = useState(false)
   const [isStoppingOvms, setIsStoppingOvms] = useState(false)
-  const isMountedRef = useRef(true)
-  const installingRef = useRef(false)
-  const runningRef = useRef(false)
-  const stoppingRef = useRef(false)
 
   useEffect(() => {
-    isMountedRef.current = true
-
     const checkStatus = async () => {
       if (!isSupported) return
       const status = await window.api.ovms.getStatus()
-      if (isMountedRef.current) {
-        setOvmsStatus(status)
-      }
+      setOvmsStatus(status)
     }
     void checkStatus()
-
-    return () => {
-      isMountedRef.current = false
-      installingRef.current = false
-      runningRef.current = false
-      stoppingRef.current = false
-    }
   }, [isSupported])
 
   const installOvms = async () => {
-    if (installingRef.current) {
-      return
-    }
-
-    installingRef.current = true
-    setIsInstallingOvms(true)
     try {
+      setIsInstallingOvms(true)
       await window.api.installOvmsBinary()
       const status = await window.api.ovms.getStatus()
-      if (isMountedRef.current) {
-        setOvmsStatus(status)
-      }
+      setOvmsStatus(status)
+      setIsInstallingOvms(false)
     } catch (error: unknown) {
-      const errMsg = getErrorMessage(error)
+      const errMsg = error instanceof Error ? error.message : String(error)
       const errCodeMsg = {
         '100': t('ovms.failed.install_code_100'),
         '101': t('ovms.failed.install_code_101'),
@@ -77,58 +55,34 @@ const OvmsSettings: FC = () => {
       const code = match ? match[1] : 'unknown'
       const errorMsg = code in errCodeMsg ? (errCodeMsg[code as keyof typeof errCodeMsg] ?? errMsg) : errMsg
 
-      window.toast?.error(t('ovms.failed.install') + errorMsg)
-    } finally {
-      installingRef.current = false
-      if (isMountedRef.current) {
-        setIsInstallingOvms(false)
-      }
+      window.toast.error(t('ovms.failed.install') + errorMsg)
+      setIsInstallingOvms(false)
     }
   }
 
   const runOvms = async () => {
-    if (runningRef.current) {
-      return
-    }
-
-    runningRef.current = true
-    setIsRunningOvms(true)
     try {
+      setIsRunningOvms(true)
       await window.api.ovms.runOvms()
       const status = await window.api.ovms.getStatus()
-      if (isMountedRef.current) {
-        setOvmsStatus(status)
-      }
+      setOvmsStatus(status)
+      setIsRunningOvms(false)
     } catch (error: unknown) {
-      window.toast?.error(t('ovms.failed.run') + getErrorMessage(error))
-    } finally {
-      runningRef.current = false
-      if (isMountedRef.current) {
-        setIsRunningOvms(false)
-      }
+      window.toast.error(t('ovms.failed.run') + (error instanceof Error ? error.message : String(error)))
+      setIsRunningOvms(false)
     }
   }
 
   const stopOvms = async () => {
-    if (stoppingRef.current) {
-      return
-    }
-
-    stoppingRef.current = true
-    setIsStoppingOvms(true)
     try {
+      setIsStoppingOvms(true)
       await window.api.ovms.stopOvms()
       const status = await window.api.ovms.getStatus()
-      if (isMountedRef.current) {
-        setOvmsStatus(status)
-      }
+      setOvmsStatus(status)
+      setIsStoppingOvms(false)
     } catch (error: unknown) {
-      window.toast?.error(t('ovms.failed.stop') + getErrorMessage(error))
-    } finally {
-      stoppingRef.current = false
-      if (isMountedRef.current) {
-        setIsStoppingOvms(false)
-      }
+      window.toast.error(t('ovms.failed.stop') + (error instanceof Error ? error.message : String(error)))
+      setIsStoppingOvms(false)
     }
   }
 
@@ -206,12 +160,13 @@ const OvmsSettings: FC = () => {
               i18nKey="ovms.description"
               components={{
                 div: <div />,
+                dev: <div />,
                 p: <p />,
                 a: (
                   <a
                     className="text-primary underline-offset-4 hover:underline"
                     href="https://github.com/openvinotoolkit/model_server/blob/c55551763d02825829337b62c2dcef9339706f79/docs/deploying_server_baremetal.md"
-                    rel="noopener noreferrer"
+                    rel="noreferrer"
                     target="_blank"
                   />
                 )

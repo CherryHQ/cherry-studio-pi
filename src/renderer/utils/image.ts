@@ -1,10 +1,9 @@
 import { loggerService } from '@logger'
+import i18n from '@renderer/i18n'
 import imageCompression from 'browser-image-compression'
 import * as htmlToImage from 'html-to-image'
 
 const logger = loggerService.withContext('Utils:image')
-
-const CAPTURE_ASSET_FETCH_TIMEOUT_MS = 5_000
 
 /**
  * 将文件转换为 Base64 编码的字符串或 ArrayBuffer。
@@ -114,8 +113,7 @@ export const captureScrollable = async (elRef: React.RefObject<HTMLElement | nul
           el.scrollTop = originalScrollTop
         }, 0)
 
-        const { default: i18n } = await import('@renderer/i18n')
-        window.toast?.error(i18n.t('message.error.dimension_too_large'))
+        window.toast.error(i18n.t('message.error.dimension_too_large'))
         return Promise.reject()
       }
 
@@ -235,11 +233,7 @@ export async function captureScrollableIframe(
 
     const fetchAsDataUrl = async (url: string): Promise<string> => {
       try {
-        const res = await fetch(url, {
-          mode: 'cors',
-          credentials: 'omit',
-          signal: AbortSignal.timeout(CAPTURE_ASSET_FETCH_TIMEOUT_MS)
-        })
+        const res = await fetch(url, { mode: 'cors', credentials: 'omit' })
         if (!res.ok) return url
         const blob = await res.blob()
         return new Promise((resolve) => {
@@ -301,11 +295,7 @@ export async function captureScrollableIframe(
       Array.from(externalSheets).map(async (link) => {
         if (!link.href) return
         try {
-          const res = await fetch(link.href, {
-            mode: 'cors',
-            credentials: 'omit',
-            signal: AbortSignal.timeout(CAPTURE_ASSET_FETCH_TIMEOUT_MS)
-          })
+          const res = await fetch(link.href, { mode: 'cors', credentials: 'omit' })
           if (res.ok) {
             const cssText = await res.text()
             const blocks = await processCss(cssText, link.href)

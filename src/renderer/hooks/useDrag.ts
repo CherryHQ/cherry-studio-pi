@@ -23,8 +23,7 @@ export const useDrag = <T extends HTMLElement>(onDrop?: (e: React.DragEvent<T>) 
     e.stopPropagation()
     // 确保是离开当前元素，而不是进入子元素
     // logger.debug('drag leave', { currentTarget: e.currentTarget, relatedTarget: e.relatedTarget })
-    const relatedTarget = e.relatedTarget
-    if (relatedTarget instanceof Node && e.currentTarget.contains(relatedTarget)) {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) {
       return
     }
     setIsDragging(false)

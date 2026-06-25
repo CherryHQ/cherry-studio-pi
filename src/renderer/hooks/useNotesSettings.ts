@@ -1,9 +1,8 @@
 import { useMultiplePreferences } from '@data/hooks/usePreference'
 import { loggerService } from '@logger'
-import type { EditorView } from '@renderer/types'
+import type { EditorView } from '@renderer/types/app'
 import type { NotesSortType } from '@renderer/types/note'
-
-import { useSaveFailedToast } from './useSaveFailedToast'
+import { useTranslation } from 'react-i18next'
 
 const logger = loggerService.withContext('useNotesSettings')
 
@@ -31,8 +30,8 @@ export interface NotesSettings {
 }
 
 export const useNotesSettings = () => {
+  const { t } = useTranslation()
   const [values, setValues] = useMultiplePreferences(NOTES_SETTINGS_PREFERENCE_KEYS)
-  const showSaveFailed = useSaveFailedToast('notes.settings.save_failed')
 
   const settings: NotesSettings = {
     isFullWidth: values.isFullWidth,
@@ -47,21 +46,21 @@ export const useNotesSettings = () => {
   const updateSettings = (newSettings: Partial<NotesSettings>) => {
     void setValues(newSettings).catch((error) => {
       logger.error('Failed to update notes settings', error as Error)
-      showSaveFailed(error)
+      window.toast.error(t('notes.settings.save_failed'))
     })
   }
 
   const updateNotesPath = (path: string) => {
     void setValues({ notesPath: path }).catch((error) => {
       logger.error('Failed to update notes path', error as Error)
-      showSaveFailed(error)
+      window.toast.error(t('notes.settings.save_failed'))
     })
   }
 
   const updateSortType = (value: NotesSortType) => {
     void setValues({ sortType: value }).catch((error) => {
       logger.error('Failed to update notes sort type', error as Error)
-      showSaveFailed(error)
+      window.toast.error(t('notes.settings.save_failed'))
     })
   }
 

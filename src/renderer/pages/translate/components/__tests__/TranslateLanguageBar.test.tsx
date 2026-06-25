@@ -29,7 +29,7 @@ vi.mock('@cherrystudio/ui', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
   const { createContext, use, cloneElement, isValidElement } = await import('react')
   type Ctx = { open: boolean; onOpenChange: (next: boolean) => void }
-  const PopoverContext = createContext<Ctx>({ open: false, onOpenChange: () => {} })
+  const PopoverCtx = createContext<Ctx>({ open: false, onOpenChange: () => {} })
 
   const Popover = ({
     children,
@@ -39,18 +39,13 @@ vi.mock('@cherrystudio/ui', async (importOriginal) => {
     children?: React.ReactNode
     open?: boolean
     onOpenChange?: (next: boolean) => void
-  }) => (
-    <PopoverContext value={{ open: open ?? false, onOpenChange: onOpenChange ?? (() => {}) }}>
-      {children}
-    </PopoverContext>
-  )
+  }) => <PopoverCtx value={{ open: open ?? false, onOpenChange: onOpenChange ?? (() => {}) }}>{children}</PopoverCtx>
 
   const PopoverTrigger = ({ children, asChild }: { children: React.ReactNode; asChild?: boolean }) => {
-    const { open, onOpenChange } = use(PopoverContext)
+    const { open, onOpenChange } = use(PopoverCtx)
     const toggle = () => onOpenChange(!open)
     if (asChild && isValidElement(children)) {
       const child = children as React.ReactElement<{ onClick?: (e: React.MouseEvent) => void }>
-      // eslint-disable-next-line @eslint-react/no-clone-element -- Test double mirrors PopoverTrigger asChild semantics.
       return cloneElement(child, {
         onClick: (e: React.MouseEvent) => {
           child.props.onClick?.(e)
@@ -66,7 +61,7 @@ vi.mock('@cherrystudio/ui', async (importOriginal) => {
   }
 
   const PopoverContent = ({ children }: { children?: React.ReactNode }) => {
-    const { open } = use(PopoverContext)
+    const { open } = use(PopoverCtx)
     return open ? <div data-testid="popover-content">{children}</div> : null
   }
 

@@ -4,7 +4,7 @@ import { useLanguages } from '@renderer/hooks/translate'
 import { formatApiKeys, splitApiKeyString, validateApiHost } from '@renderer/utils/api'
 import type { FileProcessorFeature, FileProcessorId } from '@shared/data/preference/preferenceTypes'
 import { List, SquareCheckBig } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingHelpLink, SettingHelpText, SettingHelpTextRow, SettingRow, SettingRowTitle, SettingTitle } from '../..'
@@ -62,33 +62,15 @@ export function ProcessorPanel({
       ? defaultImageProcessor === processor.id
       : defaultDocumentProcessor === processor.id
 
-  const apiKeysValue = processor.apiKeys?.join(', ') ?? ''
-  const apiHostValue = entry.capability.apiHost ?? ''
-  const modelIdValue = entry.capability.modelId ?? ''
-  const [apiKeysInput, setApiKeysInput] = useState(() => apiKeysValue)
-  const [apiHostInput, setApiHostInput] = useState(apiHostValue)
-  const [modelIdInput, setModelIdInput] = useState(modelIdValue)
-  const mountedRef = useRef(true)
+  const [apiKeysInput, setApiKeysInput] = useState(() => processor.apiKeys?.join(', ') ?? '')
+  const [apiHostInput, setApiHostInput] = useState(entry.capability.apiHost ?? '')
+  const [modelIdInput, setModelIdInput] = useState(entry.capability.modelId ?? '')
 
   useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
-
-  useEffect(() => {
-    setApiKeysInput(apiKeysValue)
-  }, [apiKeysValue, entry.key])
-
-  useEffect(() => {
-    setApiHostInput(apiHostValue)
-  }, [apiHostValue, entry.key])
-
-  useEffect(() => {
-    setModelIdInput(modelIdValue)
-  }, [modelIdValue, entry.key])
+    setApiKeysInput(processor.apiKeys?.join(', ') ?? '')
+    setApiHostInput(entry.capability.apiHost ?? '')
+    setModelIdInput(entry.capability.modelId ?? '')
+  }, [entry.key])
 
   const languageOptions = useMemo(() => {
     if (!languages) {
@@ -126,9 +108,7 @@ export function ProcessorPanel({
         await action()
       } catch (error) {
         logger.error(`Failed to ${actionName}`, error as Error)
-        if (mountedRef.current) {
-          window.toast?.error(t('settings.tool.file_processing.errors.save_failed'))
-        }
+        window.toast.error(t('settings.tool.file_processing.errors.save_failed'))
       }
     },
     [t]
@@ -151,7 +131,7 @@ export function ProcessorPanel({
     const trimmedApiHost = apiHostInput.trim()
     setApiHostInput(trimmedApiHost)
     if (!validateApiHost(trimmedApiHost)) {
-      window.toast?.warning(t('settings.tool.file_processing.errors.invalid_api_host'))
+      window.toast.warning(t('settings.tool.file_processing.errors.invalid_api_host'))
       return
     }
     await persist(() => onSetCapabilityField(processor.id, entry.feature, 'apiHost', trimmedApiHost), 'save API host')

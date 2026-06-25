@@ -77,7 +77,6 @@ const AiDiagnosisSectionWithStatus = memo(
     const [result, setResult] = useState<DiagnosisResult | null>(cachedDiagnosis ?? null)
     const [diagError, setDiagError] = useState<string>('')
     const cancelledRef = useRef(false)
-    const runningRef = useRef(false)
 
     useEffect(() => {
       cancelledRef.current = false
@@ -95,8 +94,7 @@ const AiDiagnosisSectionWithStatus = memo(
     }, [])
 
     const runDiagnosis = useCallback(async () => {
-      if (!error || runningRef.current) return
-      runningRef.current = true
+      if (!error) return
       cancelledRef.current = false
       onStatusChange('loading')
       setDiagError('')
@@ -112,8 +110,6 @@ const AiDiagnosisSectionWithStatus = memo(
         if (cancelledRef.current) return
         setDiagError(err instanceof Error ? err.message : 'Diagnosis failed')
         onStatusChange('error')
-      } finally {
-        runningRef.current = false
       }
     }, [error, i18n.language, onStatusChange, diagnosisContext, blockId])
 
@@ -129,10 +125,15 @@ const AiDiagnosisSectionWithStatus = memo(
         )}
         {status === 'error' && (
           <>
-            <div className="mb-2.5 flex items-center gap-1.5 font-semibold text-destructive text-sm">{diagError}</div>
+            <div
+              className="mb-2.5 flex items-center gap-1.5 font-semibold text-sm"
+              style={{ color: 'var(--color-error)' }}>
+              {diagError}
+            </div>
             <button
               type="button"
-              className="cursor-pointer rounded border border-border px-2 py-1 text-foreground text-xs"
+              className="cursor-pointer rounded border px-2 py-1 text-xs"
+              style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }}
               onClick={() => void runDiagnosis()}>
               {t('common.retry')}
             </button>
@@ -146,7 +147,7 @@ const AiDiagnosisSectionWithStatus = memo(
               <CheckCircle size={14} />
               {t('error.diagnosis.ai_result')}
             </div>
-            <div className="text-[13px] text-foreground-secondary leading-[1.7]">
+            <div className="text-[13px] leading-[1.7]" style={{ color: 'var(--color-text-2)' }}>
               {result.explanation || result.summary}
             </div>
             {result.steps.length > 0 && (

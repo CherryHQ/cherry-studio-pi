@@ -121,11 +121,10 @@ function syncApiKeyValueFromServer(value: ApiKeyValue, serverApiKey: string): Ap
 export function useProviderApiKey(providerId: string) {
   const { provider } = useProvider(providerId)
   const { data: apiKeysData } = useProviderApiKeys(providerId)
-  const { updateApiKeys, updateProvider } = useProviderMutations(providerId)
+  const { updateApiKeys } = useProviderMutations(providerId)
 
   const serverApiKey = useMemo(() => getEnabledApiKeyString(apiKeysData), [apiKeysData])
   const [value, setValue] = useState<ApiKeyValue>(() => createApiKeyValue(serverApiKey))
-  const mountedRef = useRef(true)
   const previousProviderIdRef = useRef(providerId)
   const valueRef = useRef(value)
   const saveApiKeyRef = useRef<(value: string) => Promise<void>>(async () => undefined)
@@ -136,32 +135,10 @@ export function useProviderApiKey(providerId: string) {
         return
       }
 
-      const nextEntries = toApiKeyEntries(value, apiKeysData)
-      await updateApiKeys(nextEntries)
-
-      const hasEnabledKey = nextEntries.some((entry) => entry.isEnabled && entry.key.trim().length > 0)
-      if (!hasEnabledKey || provider.isEnabled) {
-        return
-      }
-
-      try {
-        await updateProvider({ isEnabled: true })
-      } catch (error) {
-        logger.error('Failed to enable provider after saving API key', { providerId: provider.id, error })
-        if (mountedRef.current) {
-          window.toast?.error(i18n.t('settings.models.add.provider_enable_failed'))
-        }
-      }
+      await updateApiKeys(toApiKeyEntries(value, apiKeysData))
     },
-    [apiKeysData, provider, updateApiKeys, updateProvider]
+    [apiKeysData, provider, updateApiKeys]
   )
-
-  useEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
 
   useEffect(() => {
     valueRef.current = value
@@ -176,10 +153,8 @@ export function useProviderApiKey(providerId: string) {
       debounce((nextValue: string) => {
         void saveApiKeyRef.current(nextValue).catch((error) => {
           logger.error('Failed to save API keys', error as Error)
-          if (mountedRef.current) {
-            window.toast?.error(i18n.t('settings.provider.api_key.save_failed'))
-            setValue((current) => ({ ...current, hasPendingSync: true }))
-          }
+          window.toast.error(i18n.t('settings.provider.api_key.save_failed'))
+          setValue((current) => ({ ...current, hasPendingSync: true }))
         })
       }, 150),
     []
@@ -200,8 +175,7 @@ export function useProviderApiKey(providerId: string) {
     setValue((previousValue) => (isSameApiKeyValue(previousValue, nextValue) ? previousValue : nextValue))
   }, [providerId, saveLater, serverApiKey])
 
-  // Flush before switching providers while refs still point at the previous provider.
-  useEffect(() => () => saveLater.flush(), [providerId, saveLater])
+  useEffect(() => () => saveLater.flush(), [saveLater])
 
   const setInputApiKey = useCallback(
     (nextInputApiKey: string) => {

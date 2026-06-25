@@ -5,16 +5,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useSyncZhipuWebSearchApiKeys, useWebSearchProviders, useWebSearchSettings } from '../useWebSearch'
 
-function deferred<T = void>() {
-  let resolve!: (value: T | PromiseLike<T>) => void
-  let reject!: (reason?: unknown) => void
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise
-    reject = rejectPromise
-  })
-  return { promise, resolve, reject }
-}
-
 vi.mock('react-i18next', async (importOriginal) => {
   const actual = await importOriginal<typeof ReactI18next>()
 
@@ -131,34 +121,8 @@ describe('useWebSearch', () => {
     })
 
     await waitFor(() => {
-      expect(toastErrorMock).toHaveBeenCalledWith('settings.tool.websearch.errors.zhipu_sync_failed: persist failed')
+      expect(toastErrorMock).toHaveBeenCalledWith('settings.tool.websearch.errors.zhipu_sync_failed')
     })
-  })
-
-  it('ignores stale Zhipu web search sync failures after unmount', async () => {
-    const save = deferred()
-    MockUsePreferenceUtils.setPreferenceValue('chat.web_search.provider_overrides', {})
-    MockUsePreferenceUtils.mockPreferenceReturn(
-      'chat.web_search.provider_overrides',
-      {},
-      vi.fn().mockReturnValue(save.promise)
-    )
-
-    const { result, unmount } = renderHook(() => useSyncZhipuWebSearchApiKeys())
-
-    act(() => {
-      result.current('zhipu', 'zhipu-key')
-    })
-
-    unmount()
-
-    await act(async () => {
-      save.reject(new Error('late failure'))
-      await save.promise.catch(() => undefined)
-      await Promise.resolve()
-    })
-
-    expect(toastErrorMock).not.toHaveBeenCalled()
   })
 
   it('updates web search blacklist domains through settings', async () => {

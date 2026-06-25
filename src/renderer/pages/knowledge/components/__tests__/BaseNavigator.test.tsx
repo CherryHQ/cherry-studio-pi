@@ -197,7 +197,6 @@ vi.mock('@cherrystudio/ui', () => {
           onClick?: (event: ReactMouseEvent) => void
         }>
 
-        // eslint-disable-next-line @eslint-react/no-clone-element -- Test-only asChild mock injects trigger behavior into its child.
         return React.cloneElement(child, {
           onClick: (event: ReactMouseEvent) => {
             child.props.onClick?.(event)
@@ -458,6 +457,8 @@ const createKnowledgeBase = (overrides: Partial<KnowledgeBaseListItem> = {}): Kn
   fileProcessorId: undefined,
   chunkSize: 1024,
   chunkOverlap: 200,
+  chunkStrategy: 'structured',
+  chunkSeparator: '\\n\\n',
   threshold: undefined,
   documentCount: undefined,
   status: 'completed',

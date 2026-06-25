@@ -1,52 +1,26 @@
 import { loggerService } from '@logger'
-import { COMPOSER_FILE_KIND, type PastedTextFileMetadata } from '@renderer/types'
-import { getFileExtension, isSupportedFile } from '@renderer/utils'
-import { type ComposerAttachment, toComposerAttachment } from '@renderer/utils/messageUtils/composerAttachment'
-import { allFilesExt } from '@shared/config/constant'
+import { LONG_TEXT_PASTE_THRESHOLD } from '@renderer/config/constant'
+import { COMPOSER_FILE_KIND, type PastedTextFileMetadata } from '@renderer/types/file'
+import { getFileExtension, isSupportedFile } from '@renderer/utils/file'
+import { type ComposerAttachment, toComposerAttachment } from '@renderer/utils/message/composerAttachment'
 
 const logger = loggerService.withContext('pasteHandling')
-const COMPOSER_PASTE_STATE_KEY = '__CHERRY_STUDIO_PI_COMPOSER_PASTE_STATE__'
 
 // Track last focused component
 type ComponentType = 'inputbar' | 'messageEditor' | 'TranslatePage' | null
+let lastFocusedComponent: ComponentType = 'inputbar' // Default to inputbar
 
 // 处理函数类型
 type PasteHandler = (event: ClipboardEvent) => Promise<boolean>
-type PasteHandlers = Partial<Record<Exclude<ComponentType, null>, PasteHandler>>
-
-type ComposerPasteState = {
-  handlers: PasteHandlers
-  initialized: boolean
-  lastFocusedComponent: ComponentType
-  pasteListener?: EventListener
-}
-
-type ComposerPasteGlobal = typeof globalThis & {
-  [COMPOSER_PASTE_STATE_KEY]?: ComposerPasteState
-}
-
-function getComposerPasteState() {
-  const globalState = globalThis as ComposerPasteGlobal
-  globalState[COMPOSER_PASTE_STATE_KEY] ??= {
-    handlers: {},
-    initialized: false,
-    lastFocusedComponent: 'inputbar'
-  }
-  return globalState[COMPOSER_PASTE_STATE_KEY]
-}
-
-const composerPasteState = getComposerPasteState()
 
 // 处理函数存储
-const handlers = composerPasteState.handlers
+const handlers: {
+  inputbar?: PasteHandler
+  messageEditor?: PasteHandler
+} = {}
 
-function isEditablePasteTarget(target: EventTarget | Element | null | undefined) {
-  if (!(target instanceof Element)) return false
-  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return true
-  if (target instanceof HTMLElement && target.isContentEditable) return true
-
-  return Boolean(target.closest('input, textarea, [contenteditable="true"], [contenteditable="plaintext-only"]'))
-}
+// 初始化标志
+let isInitialized = false
 
 /**
  * 处理粘贴事件的通用服务
@@ -57,8 +31,6 @@ export const handlePaste = async (
   supportExts: string[],
   setFiles: (updater: (prevFiles: ComposerAttachment[]) => ComposerAttachment[]) => void,
   setText?: (text: string) => void,
-  pasteLongTextAsFile?: boolean,
-  pasteLongTextThreshold?: number,
   text?: string,
   resizeTextArea?: () => void,
   t?: (key: string) => string
@@ -67,8 +39,8 @@ export const handlePaste = async (
     // 优先处理文本粘贴
     const clipboardText = event.clipboardData?.getData('text')
     if (clipboardText) {
-      // 1. 文本粘贴（仅在用户开启“长文本转文件”时生效）
-      if (pasteLongTextAsFile && pasteLongTextThreshold && clipboardText.length > pasteLongTextThreshold) {
+      // 1. 文本粘贴
+      if (clipboardText.length > LONG_TEXT_PASTE_THRESHOLD) {
         // 长文本直接转文件，阻止默认粘贴
         event.preventDefault()
 
@@ -94,7 +66,6 @@ export const handlePaste = async (
     if (event.clipboardData?.files && event.clipboardData.files.length > 0) {
       event.preventDefault()
       const extensionSet = new Set(supportExts)
-      const supportAllFiles = extensionSet.has(allFilesExt)
       try {
         for (const file of event.clipboardData.files) {
           // 使用新的API获取文件路径
@@ -103,7 +74,7 @@ export const handlePaste = async (
           // 如果没有路径，可能是剪贴板中的图像数据
           if (!filePath) {
             // 图像生成也支持图像编辑
-            if (file.type.startsWith('image/') && (supportAllFiles || extensionSet.has(getFileExtension(file.name)))) {
+            if (file.type.startsWith('image/') && supportExts.includes(getFileExtension(file.name))) {
               const tempFilePath = await window.api.file.createTempFile(file.name)
               const arrayBuffer = await file.arrayBuffer()
               const uint8Array = new Uint8Array(arrayBuffer)
@@ -115,7 +86,7 @@ export const handlePaste = async (
               }
             } else {
               if (t) {
-                window.toast?.info?.(t('chat.input.file_not_supported'))
+                window.toast.info(t('chat.input.file_not_supported'))
               }
             }
             continue
@@ -129,14 +100,14 @@ export const handlePaste = async (
             }
           } else {
             if (t) {
-              window.toast?.info?.(t('chat.input.file_not_supported'))
+              window.toast.info(t('chat.input.file_not_supported'))
             }
           }
         }
       } catch (error) {
         logger.error('onPaste:', error as Error)
         if (t) {
-          window.toast?.error?.(t('chat.input.file_error'))
+          window.toast.error(t('chat.input.file_error'))
         }
       }
       return true
@@ -153,14 +124,14 @@ export const handlePaste = async (
  * 设置最后聚焦的组件
  */
 export const setLastFocusedComponent = (component: ComponentType) => {
-  composerPasteState.lastFocusedComponent = component
+  lastFocusedComponent = component
 }
 
 /**
  * 获取最后聚焦的组件
  */
 export const getLastFocusedComponent = (): ComponentType => {
-  return composerPasteState.lastFocusedComponent
+  return lastFocusedComponent
 }
 
 /**
@@ -168,30 +139,15 @@ export const getLastFocusedComponent = (): ComponentType => {
  * 应用启动时只调用一次
  */
 export const init = () => {
-  if (composerPasteState.initialized) return
-
-  const pasteListener: EventListener = (event) => {
-    void handleGlobalPaste(event as ClipboardEvent)
-  }
+  if (isInitialized) return
 
   // 添加全局粘贴事件监听
-  document.addEventListener('paste', pasteListener)
+  document.addEventListener('paste', async (event) => {
+    await handleGlobalPaste(event)
+  })
 
-  composerPasteState.pasteListener = pasteListener
-  composerPasteState.initialized = true
+  isInitialized = true
   logger.verbose('Global paste handler initialized')
-}
-
-/**
- * 注销全局粘贴事件监听
- */
-export const unregisterGlobalPasteListener = () => {
-  if (composerPasteState.pasteListener) {
-    document.removeEventListener('paste', composerPasteState.pasteListener)
-  }
-
-  delete composerPasteState.pasteListener
-  composerPasteState.initialized = false
 }
 
 /**
@@ -220,13 +176,19 @@ export const unregisterHandler = (component: ComponentType) => {
  */
 const handleGlobalPaste = async (event: ClipboardEvent): Promise<boolean> => {
   // 如果当前有活动元素且是输入区域，不执行全局处理
-  if (isEditablePasteTarget(event.target) || isEditablePasteTarget(document.activeElement)) {
+  const activeElement = document.activeElement
+  if (
+    activeElement &&
+    (activeElement.tagName === 'INPUT' ||
+      activeElement.tagName === 'TEXTAREA' ||
+      activeElement.getAttribute('contenteditable') === 'true')
+  ) {
     return false
   }
 
   // 根据最后聚焦的组件调用相应处理程序
-  if (composerPasteState.lastFocusedComponent && handlers[composerPasteState.lastFocusedComponent]) {
-    const handler = handlers[composerPasteState.lastFocusedComponent]
+  if (lastFocusedComponent && handlers[lastFocusedComponent]) {
+    const handler = handlers[lastFocusedComponent]
     if (handler) {
       return await handler(event)
     }
@@ -248,13 +210,6 @@ export default {
   setLastFocusedComponent,
   getLastFocusedComponent,
   init,
-  unregisterGlobalPasteListener,
   registerHandler,
   unregisterHandler
-}
-
-if (import.meta.hot) {
-  import.meta.hot.dispose(() => {
-    unregisterGlobalPasteListener()
-  })
 }

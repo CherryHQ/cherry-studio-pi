@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { getKnowledgeBaseFailureReason, getKnowledgeItemFailureReason, normalizeKnowledgeError } from '../error'
+import { getKnowledgeBaseFailureReason, getKnowledgeItemFailureReason } from '../error'
 
 // Identity translator: returns the i18n key itself, so each assertion pins exactly which key the
 // mapping selected without coupling to real locale copy.
@@ -30,13 +30,5 @@ describe('getKnowledgeItemFailureReason', () => {
 
   it('passes a free-form item error message through unchanged', () => {
     expect(getKnowledgeItemFailureReason({ error: 'boom: something broke' }, t)).toBe('boom: something broke')
-  })
-})
-
-describe('normalizeKnowledgeError', () => {
-  it('preserves nested IPC bridge error details', () => {
-    expect(normalizeKnowledgeError({ error: { message: 'knowledge bridge failed' } }).message).toBe(
-      'knowledge bridge failed'
-    )
   })
 })

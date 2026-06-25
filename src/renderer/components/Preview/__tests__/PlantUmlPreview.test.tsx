@@ -74,28 +74,6 @@ describe('PlantUmlPreview', () => {
       )
     })
 
-    it('should fetch diagrams with an abort signal timeout', async () => {
-      const fetchMock = vi.fn().mockResolvedValue({
-        ok: true,
-        text: vi.fn().mockResolvedValue('<svg />')
-      })
-      vi.stubGlobal('fetch', fetchMock)
-
-      render(<PlantUmlPreview>{diagram}</PlantUmlPreview>)
-      const renderPlantUml = mocks.useDebouncedRender.mock.calls[0]?.[1] as (
-        content: string,
-        container: HTMLDivElement
-      ) => Promise<void>
-      const container = document.createElement('div')
-
-      await renderPlantUml(diagram, container)
-
-      expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/svg/'), {
-        signal: expect.any(AbortSignal)
-      })
-      expect(mocks.renderSvgInShadowHost).toHaveBeenCalledWith('<svg />', container)
-    })
-
     it('should handle empty content', () => {
       render(<PlantUmlPreview>{''}</PlantUmlPreview>)
 

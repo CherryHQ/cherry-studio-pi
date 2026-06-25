@@ -6,11 +6,10 @@ import i18n from '@renderer/i18n'
 // reason this service depends on `src/renderer/store/`. Do not build on it.
 import store from '@renderer/store'
 import { addAssistant } from '@renderer/store/assistants'
-import type { LegacyAssistant } from '@renderer/types'
-import { uuid } from '@renderer/utils'
+import type { LegacyAssistant } from '@renderer/types/assistant'
+import { uuid } from '@renderer/utils/uuid'
 
 import { DEFAULT_ASSISTANT_SETTINGS } from '../AssistantService'
-import { upsertStorageV2AssistantList } from '../StorageV2AssistantWriteService'
 import { availableImporters } from './importers'
 import type { ConversationImporter, ImportResponse } from './types'
 import { saveImportToDatabase } from './utils/database'
@@ -131,7 +130,7 @@ class ImportServiceClass {
         settings: DEFAULT_ASSISTANT_SETTINGS
       }
 
-      await upsertStorageV2AssistantList([assistant, ...store.getState().assistants.assistants])
+      // [v1→v2 tail — deprecated] Writes to the legacy Redux store; no v2 code reads it.
       store.dispatch(addAssistant(assistant))
 
       logger.info(

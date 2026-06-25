@@ -66,8 +66,8 @@ const AntdProvider: FC<PropsWithChildren> = ({ children }) => {
             fontFamily: 'var(--code-font-family)'
           },
           Segmented: {
-            itemActiveBg: 'var(--color-muted)',
-            itemHoverBg: 'var(--color-muted)',
+            itemActiveBg: 'var(--color-background-soft)',
+            itemHoverBg: 'var(--color-background-soft)',
             trackBg: 'rgba(153,153,153,0.15)'
           },
           Switch: {
@@ -97,7 +97,7 @@ const AntdProvider: FC<PropsWithChildren> = ({ children }) => {
             colorBgElevated: '#ffffff'
           },
           Modal: {
-            colorBgElevated: 'var(--color-card)'
+            colorBgElevated: 'var(--modal-background)'
           },
           Divider: {
             colorSplit: 'rgba(128,128,128,0.15)'

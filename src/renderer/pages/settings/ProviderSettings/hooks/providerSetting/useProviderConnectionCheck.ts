@@ -68,7 +68,7 @@ export function useProviderConnectionCheck(providerId: string) {
     }
 
     if (isEmpty(checkableApiKeys)) {
-      window.toast?.error(i18n.t('message.error.enter.api.label'))
+      window.toast.error(i18n.t('message.error.enter.api.label'))
       return
     }
 
@@ -78,12 +78,12 @@ export function useProviderConnectionCheck(providerId: string) {
   const startConnectionCheck = useCallback(
     async ({ model, apiKey }: { model?: Model; apiKey: string }) => {
       if (!provider || !model) {
-        window.toast?.error(i18n.t('message.error.enter.model'))
+        window.toast.error(i18n.t('message.error.enter.model'))
         return
       }
 
       if (!apiKey) {
-        window.toast?.error(i18n.t('message.error.enter.api.label'))
+        window.toast.error(i18n.t('message.error.enter.api.label'))
         return
       }
 
@@ -123,7 +123,7 @@ export function useProviderConnectionCheck(providerId: string) {
         // was superseded or aborted before touching success state.
         if (runId !== runIdRef.current || controller.signal.aborted) return
 
-        window.toast?.success({
+        window.toast.success({
           timeout: 2000,
           title: i18n.t('message.api.connection.success')
         })
@@ -147,7 +147,7 @@ export function useProviderConnectionCheck(providerId: string) {
             error
           })
         }
-        window.toast?.error({
+        window.toast.error({
           timeout: 8000,
           title: i18n.t(didCommitApiKey ? 'message.api.connection.failed' : 'settings.provider.api_key.save_failed')
         })
@@ -167,7 +167,7 @@ export function useProviderConnectionCheck(providerId: string) {
 
   const checkApi = useCallback(async () => {
     if (isEmpty(checkableModels)) {
-      window.toast?.error({
+      window.toast.error({
         timeout: 5000,
         title: t('settings.provider.no_models_for_check')
       })
@@ -176,7 +176,7 @@ export function useProviderConnectionCheck(providerId: string) {
 
     const firstModel = checkableModels[0]
     if (!firstModel) {
-      window.toast?.error(i18n.t('message.error.enter.model'))
+      window.toast.error(i18n.t('message.error.enter.model'))
       return
     }
 

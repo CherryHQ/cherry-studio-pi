@@ -15,7 +15,7 @@ import { useMiniApps } from '@renderer/hooks/useMiniApps'
 import { PRESETS_MINI_APPS } from '@shared/data/presets/miniApps'
 import { Upload } from 'lucide-react'
 import type { ChangeEvent, FC } from 'react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface Props {
@@ -36,21 +36,6 @@ const NewMiniAppPanel: FC<Props> = ({ open, onClose }) => {
   const [logo, setLogo] = useState('')
   const [logoUrl, setLogoUrl] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const mountedRef = useRef(true)
-  const openRef = useRef(open)
-  const submittingRef = useRef(false)
-
-  useEffect(() => {
-    openRef.current = open
-  }, [open])
-
-  useEffect(() => {
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
-
-  const isActive = () => mountedRef.current && openRef.current
 
   const reset = () => {
     setId('')
@@ -60,11 +45,7 @@ const NewMiniAppPanel: FC<Props> = ({ open, onClose }) => {
     setLogoUrl('')
   }
 
-  const handleClose = (force = false) => {
-    if (submittingRef.current && !force) {
-      return
-    }
-
+  const handleClose = () => {
     reset()
     onClose()
   }
@@ -87,45 +68,28 @@ const NewMiniAppPanel: FC<Props> = ({ open, onClose }) => {
     if (!file) return
     const reader = new FileReader()
     reader.onload = (event) => {
-      if (!isActive()) {
-        return
-      }
-
       const data = event.target?.result
       if (typeof data === 'string') {
         setLogo(data)
         setLogoUrl('')
-        window.toast?.success(t('settings.miniApps.custom.logo_upload_success'))
+        window.toast.success(t('settings.miniApps.custom.logo_upload_success'))
       }
     }
-    reader.onerror = () => {
-      if (isActive()) {
-        window.toast?.error(t('settings.miniApps.custom.logo_upload_error'))
-      }
-    }
+    reader.onerror = () => window.toast.error(t('settings.miniApps.custom.logo_upload_error'))
     reader.readAsDataURL(file)
     e.target.value = ''
   }
 
   const handleSubmit = async () => {
-    if (submittingRef.current) {
-      return
-    }
-
     const trimmedId = id.trim()
-    if (!trimmedId || !name.trim() || !url.trim()) {
-      return
-    }
-
     if (PRESETS_MINI_APPS.some((app) => app.id === trimmedId)) {
-      window.toast?.error(t('settings.miniApps.custom.conflicting_ids', { ids: trimmedId }))
+      window.toast.error(t('settings.miniApps.custom.conflicting_ids', { ids: trimmedId }))
       return
     }
     if (existingAppIds.has(trimmedId)) {
-      window.toast?.error(t('settings.miniApps.custom.duplicate_ids', { ids: trimmedId }))
+      window.toast.error(t('settings.miniApps.custom.duplicate_ids', { ids: trimmedId }))
       return
     }
-    submittingRef.current = true
     setSubmitting(true)
     try {
       await createCustomMiniApp({
@@ -136,20 +100,13 @@ const NewMiniAppPanel: FC<Props> = ({ open, onClose }) => {
         bordered: false,
         supportedRegions: ['CN', 'Global']
       })
-      if (isActive()) {
-        window.toast?.success(t('settings.miniApps.custom.save_success'))
-        handleClose(true)
-      }
+      window.toast.success(t('settings.miniApps.custom.save_success'))
+      handleClose()
     } catch (error) {
-      if (isActive()) {
-        window.toast?.error(t('settings.miniApps.custom.save_error'))
-        logger.error('Failed to save custom mini app:', error as Error)
-      }
+      window.toast.error(t('settings.miniApps.custom.save_error'))
+      logger.error('Failed to save custom mini app:', error as Error)
     } finally {
-      submittingRef.current = false
-      if (mountedRef.current) {
-        setSubmitting(false)
-      }
+      setSubmitting(false)
     }
   }
 
@@ -234,9 +191,7 @@ const NewMiniAppPanel: FC<Props> = ({ open, onClose }) => {
 
         <DialogFooter>
           <DialogClose asChild>
-            <Button variant="outline" disabled={submitting}>
-              {t('common.cancel')}
-            </Button>
+            <Button variant="outline">{t('common.cancel')}</Button>
           </DialogClose>
           <Button onClick={handleSubmit} disabled={!canSubmit} loading={submitting}>
             {t('common.save')}

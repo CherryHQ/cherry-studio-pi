@@ -4,7 +4,7 @@ import { uuid } from '@renderer/utils/uuid'
 import type { PaintingMode } from '@shared/data/types/painting'
 import { useCallback, useEffect, useRef } from 'react'
 
-import { normalizePaintingGenerateError, presentPaintingGenerateError } from '../errors/paintingGenerateError'
+import { presentPaintingGenerateError } from '../errors/paintingGenerateError'
 import { paintingDataToCreateDto } from '../model/mappers/paintingDataToCreateDto'
 import { paintingDataToUpdateDto } from '../model/mappers/paintingDataToUpdateDto'
 import {
@@ -124,7 +124,7 @@ export function usePaintingGeneration({ painting, onPaintingChange }: UsePaintin
       const failedState: PaintingGenerationState = {
         ...generationState,
         generationStatus: isCanceled ? 'canceled' : 'failed',
-        generationError: isCanceled ? null : normalizePaintingGenerateError(error).message
+        generationError: isCanceled ? null : error instanceof Error ? error.message : String(error)
       }
       cacheService.set(cacheKey, paintingGenerationStateToCache(failedState))
       applyIfVisible({ ...targetPainting, ...failedState } as PaintingData)

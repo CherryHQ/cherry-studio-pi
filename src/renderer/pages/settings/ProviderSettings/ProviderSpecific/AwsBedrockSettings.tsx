@@ -38,15 +38,6 @@ const AwsBedrockSettings: FC<Props> = ({ providerId }) => {
   const [localSecretAccessKey, setLocalSecretAccessKey] = useState(iamConfig?.secretAccessKey ?? '')
   const [localRegion, setLocalRegion] = useState(currentRegion)
   const isIamDraftDirtyRef = useRef(false)
-  const mountedRef = useRef(true)
-  const saveSeqRef = useRef(0)
-
-  useEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
 
   const resetLocalIamConfig = useCallback(() => {
     setLocalAccessKeyId(iamConfig?.accessKeyId ?? '')
@@ -64,9 +55,6 @@ const AwsBedrockSettings: FC<Props> = ({ providerId }) => {
     isIamDraftDirtyRef.current = true
   }
 
-  const nextSaveSeq = () => ++saveSeqRef.current
-  const isCurrentSave = (saveSeq: number) => mountedRef.current && saveSeqRef.current === saveSeq
-
   // Both AWS variants need a region to reach a working Bedrock endpoint.
   // Reject persisting an empty one (no silent 'us-east-1' default, no empty
   // string) so the user explicitly supplies it before it is written.
@@ -74,7 +62,7 @@ const AwsBedrockSettings: FC<Props> = ({ providerId }) => {
     if (localRegion.trim().length > 0) {
       return true
     }
-    window.toast?.warning(t('settings.provider.aws-bedrock.region_required'))
+    window.toast.warning(t('settings.provider.aws-bedrock.region_required'))
     return false
   }
 
@@ -82,7 +70,6 @@ const AwsBedrockSettings: FC<Props> = ({ providerId }) => {
     if (!ensureRegionProvided()) {
       return
     }
-    const saveSeq = nextSaveSeq()
     try {
       const region = localRegion.trim()
       if (value === 'iam') {
@@ -90,14 +77,10 @@ const AwsBedrockSettings: FC<Props> = ({ providerId }) => {
       } else {
         await updateAuthConfig({ type: 'api-key-aws', region })
       }
-      if (isCurrentSave(saveSeq)) {
-        isIamDraftDirtyRef.current = false
-      }
+      isIamDraftDirtyRef.current = false
     } catch (error) {
-      if (isCurrentSave(saveSeq)) {
-        logger.error('Failed to update AWS Bedrock auth type', { providerId, error })
-        window.toast?.error(t('settings.provider.save_failed'))
-      }
+      logger.error('Failed to update AWS Bedrock auth type', { providerId, error })
+      window.toast.error(t('settings.provider.save_failed'))
     }
   }
 
@@ -105,7 +88,6 @@ const AwsBedrockSettings: FC<Props> = ({ providerId }) => {
     if (!ensureRegionProvided()) {
       return
     }
-    const saveSeq = nextSaveSeq()
     try {
       await updateAuthConfig({
         type: 'iam-aws' as const,
@@ -113,33 +95,24 @@ const AwsBedrockSettings: FC<Props> = ({ providerId }) => {
         accessKeyId: localAccessKeyId,
         secretAccessKey: localSecretAccessKey
       })
-      if (isCurrentSave(saveSeq)) {
-        isIamDraftDirtyRef.current = false
-      }
+      isIamDraftDirtyRef.current = false
     } catch (error) {
-      if (isCurrentSave(saveSeq)) {
-        logger.error('Failed to save AWS Bedrock IAM config', { providerId, error })
-        window.toast?.error(t('settings.provider.save_failed'))
-        isIamDraftDirtyRef.current = false
-        resetLocalIamConfig()
-      }
+      logger.error('Failed to save AWS Bedrock IAM config', { providerId, error })
+      window.toast.error(t('settings.provider.save_failed'))
+      isIamDraftDirtyRef.current = false
+      resetLocalIamConfig()
     }
   }
 
   const saveApiKeyAwsRegion = async () => {
-    const saveSeq = nextSaveSeq()
     try {
       await updateAuthConfig({ type: 'api-key-aws', region: localRegion.trim() })
-      if (isCurrentSave(saveSeq)) {
-        isIamDraftDirtyRef.current = false
-      }
+      isIamDraftDirtyRef.current = false
     } catch (error) {
-      if (isCurrentSave(saveSeq)) {
-        logger.error('Failed to save AWS Bedrock api-key region', { providerId, error })
-        window.toast?.error(t('settings.provider.save_failed'))
-        isIamDraftDirtyRef.current = false
-        resetLocalIamConfig()
-      }
+      logger.error('Failed to save AWS Bedrock api-key region', { providerId, error })
+      window.toast.error(t('settings.provider.save_failed'))
+      isIamDraftDirtyRef.current = false
+      resetLocalIamConfig()
     }
   }
 

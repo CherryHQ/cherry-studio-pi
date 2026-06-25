@@ -1,7 +1,6 @@
 import { loggerService } from '@logger'
 import type { McpError } from '@modelcontextprotocol/sdk/types.js'
-import type { AgentServerError } from '@renderer/types'
-import { AgentServerErrorSchema } from '@renderer/types'
+import { type AgentServerError, AgentServerErrorSchema } from '@renderer/types/agent'
 import type {
   AiSdkErrorUnion,
   SerializedAiSdkError,
@@ -63,72 +62,28 @@ export function formatErrorMessage(error: unknown): string {
     return formatAgentServerError(parseResult.data)
   }
   const detailedError = getErrorDetails(error)
-  if (detailedError && typeof detailedError === 'object') {
-    delete detailedError.headers
-    delete detailedError.stack
-    delete detailedError.request_id
-  }
+  delete detailedError?.headers
+  delete detailedError?.stack
+  delete detailedError?.request_id
 
   if (detailedError) {
-    const formattedJson = safeJsonStringify(detailedError, 2)
+    const formattedJson = JSON.stringify(detailedError, null, 2)
       .split('\n')
       .map((line) => `  ${line}`)
       .join('\n')
-    const message =
-      detailedError && typeof detailedError === 'object' ? (detailedError as { message?: unknown }).message : undefined
-    return typeof message === 'string' && message ? message : `Error Details:\n${formattedJson}`
+    return detailedError.message ? detailedError.message : `Error Details:\n${formattedJson}`
   } else {
     logger.warn('Get detailed error failed.')
     return ''
   }
 }
 
-function normalizeMessageText(message: unknown): string | null {
-  if (typeof message !== 'string') return null
-
-  const normalizedMessage = message.trim()
-  return normalizedMessage.length > 0 ? normalizedMessage : null
-}
-
-function parseStatus(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isInteger(value)) return value
-  if (typeof value === 'string' && /^\d{3}$/.test(value.trim())) return Number(value)
-  return null
-}
-
-function extractErrorMessage(error: unknown, seen = new WeakSet<object>()): string | null {
-  if (error instanceof Error) {
-    return normalizeMessageText(error.message) ?? extractErrorMessage(error.cause, seen)
+export function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message
+  } else {
+    return t('error.unknown')
   }
-  if (typeof error === 'string') {
-    return normalizeMessageText(error)
-  }
-  if (typeof error === 'number' || typeof error === 'boolean' || typeof error === 'bigint') {
-    return String(error)
-  }
-  if (!error || typeof error !== 'object') {
-    return null
-  }
-
-  if (seen.has(error)) return null
-  seen.add(error)
-
-  const source = error as Record<string, unknown>
-  for (const key of ['message', 'error', 'cause', 'reason', 'description', 'response'] as const) {
-    const nested = extractErrorMessage(source[key], seen)
-    if (nested) return nested
-  }
-
-  const status = parseStatus(source.status) ?? parseStatus(source.statusCode) ?? parseStatus(source.code)
-  const statusText = normalizeMessageText(source.statusText)
-  if (status && statusText) return `${status} ${statusText}`
-  if (status) return `HTTP ${status}`
-
-  return normalizeMessageText(source.code)
-}
-
-export function getErrorMessage(error: unknown, fallback?: string): string {
-  return extractErrorMessage(error) ?? fallback ?? t('error.unknown')
 }
 
 export function formatErrorMessageWithPrefix(error: unknown, prefix: string): string {
@@ -324,35 +279,27 @@ export function safeToString(value: unknown): string {
     return String(value)
   }
 
-  // 处理函数
-  if (typeof value === 'function') {
-    return value.toString()
-  }
-
   // 处理对象（包括数组）
   if (typeof value === 'object') {
-    return safeJsonStringify(value)
+    // 处理函数
+    if (typeof value === 'function') {
+      return value.toString()
+    }
+    // 其他对象
+    try {
+      return JSON.stringify(value, getCircularReplacer())
+    } catch (err) {
+      return '[Unserializable: ' + err + ']'
+    }
   }
 
   return String(value)
-}
-
-function safeJsonStringify(value: unknown, space?: number): string {
-  try {
-    return JSON.stringify(value, getCircularReplacer(), space) ?? String(value)
-  } catch (err) {
-    return '[Unserializable: ' + err + ']'
-  }
 }
 
 // 防止循环引用导致的 JSON.stringify 崩溃
 function getCircularReplacer() {
   const seen = new WeakSet()
   return (_key: string, value: unknown) => {
-    if (typeof value === 'bigint') {
-      return value.toString()
-    }
-
     if (typeof value === 'object' && value !== null) {
       if (seen.has(value)) {
         return '[Circular]'

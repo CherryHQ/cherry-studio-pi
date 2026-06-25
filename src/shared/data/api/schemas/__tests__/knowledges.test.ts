@@ -5,6 +5,8 @@ import {
   CreateKnowledgeItemSchema,
   DEFAULT_KNOWLEDGE_BASE_CHUNK_OVERLAP,
   DEFAULT_KNOWLEDGE_BASE_CHUNK_SIZE,
+  DEFAULT_KNOWLEDGE_CHUNK_SEPARATOR,
+  DEFAULT_KNOWLEDGE_CHUNK_STRATEGY,
   isCompletedKnowledgeBase,
   KNOWLEDGE_BASE_ERROR_MISSING_EMBEDDING_MODEL,
   KnowledgeAddItemInputSchema,
@@ -228,9 +230,9 @@ describe('Knowledge base schemas', () => {
     ).toBe(false)
 
     expect(ListKnowledgeBasesQuerySchema.safeParse({ page: 1, limit: 20, extra: true }).success).toBe(false)
-    expect(ListKnowledgeItemsQuerySchema.safeParse({ page: 1, limit: 20, type: 'note', extra: true }).success).toBe(
-      false
-    )
+    expect(
+      ListKnowledgeItemsQuerySchema.safeParse({ cursor: 'cursor-1', limit: 20, type: 'note', extra: true }).success
+    ).toBe(false)
   })
 
   it('coerces knowledge base pagination query strings while preserving optional filters', () => {
@@ -298,6 +300,8 @@ describe('Knowledge base schemas', () => {
       groupId: null,
       status: 'completed',
       error: null,
+      chunkStrategy: DEFAULT_KNOWLEDGE_CHUNK_STRATEGY,
+      chunkSeparator: DEFAULT_KNOWLEDGE_CHUNK_SEPARATOR,
       chunkSize: DEFAULT_KNOWLEDGE_BASE_CHUNK_SIZE,
       chunkOverlap: DEFAULT_KNOWLEDGE_BASE_CHUNK_OVERLAP,
       searchMode: 'hybrid',
@@ -319,6 +323,8 @@ describe('Knowledge base schemas', () => {
       groupId: null,
       status: 'failed',
       error: KNOWLEDGE_BASE_ERROR_MISSING_EMBEDDING_MODEL,
+      chunkStrategy: DEFAULT_KNOWLEDGE_CHUNK_STRATEGY,
+      chunkSeparator: DEFAULT_KNOWLEDGE_CHUNK_SEPARATOR,
       chunkSize: DEFAULT_KNOWLEDGE_BASE_CHUNK_SIZE,
       chunkOverlap: DEFAULT_KNOWLEDGE_BASE_CHUNK_OVERLAP,
       searchMode: 'hybrid',
@@ -505,6 +511,8 @@ it('accepts failed knowledge bases with a null embedding model id', () => {
     groupId: null,
     status: 'failed',
     error: KNOWLEDGE_BASE_ERROR_MISSING_EMBEDDING_MODEL,
+    chunkStrategy: DEFAULT_KNOWLEDGE_CHUNK_STRATEGY,
+    chunkSeparator: DEFAULT_KNOWLEDGE_CHUNK_SEPARATOR,
     chunkSize: DEFAULT_KNOWLEDGE_BASE_CHUNK_SIZE,
     chunkOverlap: DEFAULT_KNOWLEDGE_BASE_CHUNK_OVERLAP,
     searchMode: 'hybrid',
@@ -521,6 +529,8 @@ it('rejects invalid knowledge base status error combinations', () => {
     name: 'KB',
     dimensions: 1024,
     groupId: null,
+    chunkStrategy: DEFAULT_KNOWLEDGE_CHUNK_STRATEGY,
+    chunkSeparator: DEFAULT_KNOWLEDGE_CHUNK_SEPARATOR,
     chunkSize: DEFAULT_KNOWLEDGE_BASE_CHUNK_SIZE,
     chunkOverlap: DEFAULT_KNOWLEDGE_BASE_CHUNK_OVERLAP,
     searchMode: 'hybrid' as const,
@@ -635,6 +645,8 @@ describe('isCompletedKnowledgeBase', () => {
     embeddingModelId: 'embed-model',
     status: 'completed',
     error: null,
+    chunkStrategy: DEFAULT_KNOWLEDGE_CHUNK_STRATEGY,
+    chunkSeparator: DEFAULT_KNOWLEDGE_CHUNK_SEPARATOR,
     chunkSize: DEFAULT_KNOWLEDGE_BASE_CHUNK_SIZE,
     chunkOverlap: DEFAULT_KNOWLEDGE_BASE_CHUNK_OVERLAP,
     searchMode: 'hybrid',

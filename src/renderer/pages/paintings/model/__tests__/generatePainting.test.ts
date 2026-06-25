@@ -1,175 +1,87 @@
-import type { FileMetadata } from '@renderer/types'
-import type { FileEntry } from '@shared/data/types/file/fileEntry'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { FileMetadata } from '@renderer/types/file'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { ipcRequestMock, runPaintingMock } = vi.hoisted(() => ({
-  ipcRequestMock: vi.fn(),
-  runPaintingMock: vi.fn(async (generate: () => Promise<{ files?: FileMetadata[] } | undefined>) => {
-    const result = await generate()
-    return result?.files ?? []
-  })
-}))
-
-vi.mock('@renderer/ipc', () => ({
-  ipcApi: { request: ipcRequestMock }
-}))
+const runPaintingMock = vi.fn(async (generate: () => Promise<unknown>) => {
+  await generate()
+  return [] as FileMetadata[]
+})
 
 vi.mock('../runPainting', () => ({
-  runPainting: (generate: () => Promise<{ files?: FileMetadata[] } | undefined>) => runPaintingMock(generate)
+  runPainting: (generate: () => Promise<unknown>) => runPaintingMock(generate)
 }))
 
-vi.mock('../../utils/fileEntryAdapter', () => ({
-  fileEntryToMetadata: vi.fn()
-}))
+// Image generation goes through ipcApi.request('ai.generate_image', { requestId, payload }).
+const { ipcRequestMock } = vi.hoisted(() => ({ ipcRequestMock: vi.fn() }))
+vi.mock('@renderer/ipc', () => ({ ipcApi: { request: ipcRequestMock } }))
 
-import { fileEntryToMetadata } from '../../utils/fileEntryAdapter'
 import type { GeneratePaintingOptions } from '../generatePainting'
 import { generatePainting } from '../generatePainting'
 
-const generatedFile: FileMetadata = {
-  id: 'file-1',
-  name: 'file-1.png',
-  origin_name: 'file-1.png',
-  path: 'internal://file-1.png',
-  size: 123,
-  ext: '.png',
-  type: 'image',
-  created_at: '2026-06-07T00:00:00.000Z',
-  count: 1
-}
-
-const fileEntry = { id: 'entry-1', name: 'file-1.png' } as unknown as FileEntry
-let originalCrypto: Crypto
-
-function createOptions(
-  signal: AbortSignal,
-  aiSdkParams: GeneratePaintingOptions['aiSdkParams'] = {}
+function makeOptions(
+  aiSdkParams: GeneratePaintingOptions['aiSdkParams'],
+  signal: AbortSignal = new AbortController().signal
 ): GeneratePaintingOptions {
   return {
     provider: {
-      id: 'openai',
-      name: 'OpenAI',
-      apiHost: 'https://example.com',
+      id: 'aihubmix',
+      name: 'AiHubMix',
+      apiHost: 'https://aihubmix.com',
       isEnabled: true,
-      getApiKey: vi.fn(async () => 'api-key')
+      getApiKey: async () => 'sk'
     },
     signal,
     modelId: 'gpt-image-1',
-    prompt: 'a quiet studio',
+    prompt: 'a fox',
     aiSdkParams
   }
 }
 
-function createDeferred<T>() {
-  let resolve!: (value: T) => void
-  let reject!: (reason?: unknown) => void
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res
-    reject = rej
-  })
-  return { promise, resolve, reject }
-}
-
 describe('generatePainting', () => {
   beforeEach(() => {
-    originalCrypto = globalThis.crypto
-    Object.defineProperty(globalThis, 'crypto', {
-      configurable: true,
-      value: { randomUUID: vi.fn(() => 'request-1') }
-    })
     runPaintingMock.mockClear()
     ipcRequestMock.mockReset()
     ipcRequestMock.mockImplementation(async (route: string) =>
-      route === 'ai.generate_image' ? { files: [fileEntry] } : undefined
+      route === 'ai.generate_image' ? { files: [] } : undefined
     )
-    vi.mocked(fileEntryToMetadata).mockResolvedValue(generatedFile)
   })
 
-  afterEach(() => {
-    Object.defineProperty(globalThis, 'crypto', {
-      configurable: true,
-      value: originalCrypto
-    })
-    vi.restoreAllMocks()
-  })
+  // The image payload now rides in the second arg as `{ requestId, payload }`.
+  const imagePayload = (): Record<string, unknown> => {
+    const call = ipcRequestMock.mock.calls.find(([route]) => route === 'ai.generate_image')
+    if (!call) throw new Error('ai.generate_image was not requested')
+    return (call[1] as { payload: Record<string, unknown> }).payload
+  }
 
-  it('does not start an IPC image request when the signal is already aborted', async () => {
-    const controller = new AbortController()
-    controller.abort()
+  it("forwards the 'auto' size sentinel as-is for main to omit", async () => {
+    await generatePainting(makeOptions({ imageSize: 'auto' }))
 
-    await expect(generatePainting(createOptions(controller.signal))).rejects.toMatchObject({
-      name: 'AbortError',
-      message: 'Image generation aborted'
-    })
-    expect(ipcRequestMock).not.toHaveBeenCalled()
-  })
-
-  it('sends the image payload through ai.generate_image', async () => {
-    const controller = new AbortController()
-
-    await expect(
-      generatePainting(
-        createOptions(controller.signal, {
-          imageSize: '1024x1024',
-          batchSize: 2,
-          negativePrompt: 'blur',
-          inputImages: ['data:image/png;base64,a']
-        })
-      )
-    ).resolves.toEqual([generatedFile])
-
-    expect(ipcRequestMock).toHaveBeenCalledWith('ai.generate_image', {
-      requestId: 'request-1',
-      payload: expect.objectContaining({
-        uniqueModelId: 'openai::gpt-image-1',
-        prompt: 'a quiet studio',
-        inputImages: ['data:image/png;base64,a'],
-        n: 2,
-        size: '1024x1024',
-        negativePrompt: 'blur'
-      })
+    expect(imagePayload()).toMatchObject({
+      uniqueModelId: 'aihubmix::gpt-image-1',
+      prompt: 'a fox',
+      size: 'auto'
     })
   })
 
-  it('aborts an in-flight IPC request and skips persisted-file adaptation', async () => {
-    const controller = new AbortController()
-    const deferred = createDeferred<{ files: FileEntry[] }>()
-    ipcRequestMock.mockImplementation((route: string) => {
-      if (route === 'ai.generate_image') return deferred.promise
-      return Promise.resolve(undefined)
+  it('keeps concrete imageSize as the IPC size', async () => {
+    await generatePainting(makeOptions({ imageSize: '1024x1024' }))
+
+    expect(imagePayload()).toMatchObject({
+      size: '1024x1024'
     })
-
-    const promise = generatePainting(createOptions(controller.signal))
-
-    controller.abort()
-    expect(ipcRequestMock).toHaveBeenCalledWith('ai.abort_image', { requestId: 'request-1' })
-
-    deferred.resolve({ files: [fileEntry] })
-    await expect(promise).rejects.toMatchObject({ name: 'AbortError' })
-    expect(fileEntryToMetadata).not.toHaveBeenCalled()
   })
 
-  it('removes the abort listener after a successful generation', async () => {
-    const controller = new AbortController()
-
-    await expect(generatePainting(createOptions(controller.signal))).resolves.toEqual([generatedFile])
-
-    ipcRequestMock.mockClear()
-    controller.abort()
-    expect(ipcRequestMock).not.toHaveBeenCalledWith('ai.abort_image', expect.anything())
-  })
-
+  // A provider failure now crosses IpcApi as an IpcError (name 'IpcError'), which no longer
+  // satisfies runPainting's `name === 'AbortError'` silent-cancel check — generatePainting's
+  // `.catch` re-derives a real AbortError only when the user aborted, else re-throws the original.
   it('re-throws a real AbortError when the request rejects after the user aborted', async () => {
     const controller = new AbortController()
+    controller.abort()
     ipcRequestMock.mockImplementation(async (route: string) => {
       if (route === 'ai.generate_image') throw new Error('cancelled by main')
       return undefined
     })
 
-    const promise = generatePainting(createOptions(controller.signal))
-    controller.abort()
-
-    await expect(promise).rejects.toMatchObject({ name: 'AbortError' })
+    await expect(generatePainting(makeOptions({}, controller.signal))).rejects.toMatchObject({ name: 'AbortError' })
   })
 
   it('re-throws the original error when the request rejects without a user abort', async () => {
@@ -179,6 +91,6 @@ describe('generatePainting', () => {
       return undefined
     })
 
-    await expect(generatePainting(createOptions(new AbortController().signal))).rejects.toBe(failure)
+    await expect(generatePainting(makeOptions({}))).rejects.toBe(failure)
   })
 })

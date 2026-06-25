@@ -1,7 +1,7 @@
 import type * as CherryStudioUi from '@cherrystudio/ui'
 import type * as RendererConstantModule from '@renderer/config/constant'
 import { mockRendererLoggerService } from '@test-mocks/RendererLoggerService'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type React from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -168,18 +168,15 @@ vi.mock('@cherrystudio/ui', async (importOriginal) => {
       active,
       icon,
       label,
-      labelClassName,
       suffix,
       ...props
     }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
       active?: boolean
       icon?: React.ReactNode
       label: string
-      labelClassName?: string
       suffix?: React.ReactNode
     }) => {
       void icon
-      void labelClassName
 
       return (
         <button type="button" aria-pressed={active} {...props}>
@@ -234,23 +231,6 @@ vi.mock('@cherrystudio/ui', async (importOriginal) => {
     )
   }
 })
-
-type Deferred<T> = {
-  promise: Promise<T>
-  resolve: (value: T) => void
-  reject: (reason?: unknown) => void
-}
-
-function deferred<T>(): Deferred<T> {
-  let resolve: (value: T) => void = () => {}
-  let reject: (reason?: unknown) => void = () => {}
-  const promise = new Promise<T>((promiseResolve, promiseReject) => {
-    resolve = promiseResolve
-    reject = promiseReject
-  })
-
-  return { promise, resolve, reject }
-}
 
 describe('FileProcessingSettings', () => {
   let loggerErrorSpy: ReturnType<typeof vi.spyOn>
@@ -440,42 +420,6 @@ describe('FileProcessingSettings', () => {
     expect(screen.getByPlaceholderText('settings.provider.api_host')).toHaveValue('https://draft.example.com')
   })
 
-  it('keeps API key drafts when API host save rerenders the same processor', async () => {
-    const { rerender } = render(<FileProcessingSettings />)
-
-    fireEvent.click(
-      (await screen.findAllByRole('button', { name: /settings.tool.file_processing.processors.mistral.name/ }))[0]
-    )
-
-    const apiKeysInput = screen.getByPlaceholderText('settings.tool.file_processing.fields.api_keys_placeholder')
-    fireEvent.change(apiKeysInput, {
-      target: { value: 'key-draft' }
-    })
-    fireEvent.change(screen.getByPlaceholderText('settings.provider.api_host'), {
-      target: { value: 'https://draft.example.com' }
-    })
-    fireEvent.blur(screen.getByPlaceholderText('settings.provider.api_host'))
-
-    await waitFor(() => {
-      expect(setOverridesMock).toHaveBeenCalledWith({
-        mistral: {
-          capabilities: {
-            image_to_text: {
-              apiHost: 'https://draft.example.com'
-            }
-          }
-        }
-      })
-    })
-
-    overridesMock.value = setOverridesMock.mock.calls.at(-1)?.[0] ?? {}
-    rerender(<FileProcessingSettings />)
-
-    expect(screen.getByPlaceholderText('settings.tool.file_processing.fields.api_keys_placeholder')).toHaveValue(
-      'key-draft'
-    )
-  })
-
   it('reports API host save failures', async () => {
     const error = new Error('persist failed')
     setOverridesMock.mockRejectedValueOnce(error)
@@ -493,40 +437,6 @@ describe('FileProcessingSettings', () => {
       expect(window.toast.error).toHaveBeenCalledWith('settings.tool.file_processing.errors.save_failed')
     })
     expect(loggerErrorSpy).toHaveBeenCalledWith('Failed to save API host', error)
-  })
-
-  it('ignores API host save failures after the processor panel unmounts', async () => {
-    const runningSave = deferred<void>()
-    setOverridesMock.mockReturnValueOnce(runningSave.promise)
-    const { unmount } = render(<FileProcessingSettings />)
-
-    fireEvent.click(
-      (await screen.findAllByRole('button', { name: /settings.tool.file_processing.processors.mistral.name/ }))[0]
-    )
-    fireEvent.change(screen.getByPlaceholderText('settings.provider.api_host'), {
-      target: { value: 'https://draft.example.com' }
-    })
-    fireEvent.blur(screen.getByPlaceholderText('settings.provider.api_host'))
-
-    await waitFor(() => {
-      expect(setOverridesMock).toHaveBeenCalledWith({
-        mistral: {
-          capabilities: {
-            image_to_text: {
-              apiHost: 'https://draft.example.com'
-            }
-          }
-        }
-      })
-    })
-    unmount()
-
-    await act(async () => {
-      runningSave.reject(new Error('persist failed after unmount'))
-      await runningSave.promise.catch(() => undefined)
-    })
-
-    expect(window.toast.error).not.toHaveBeenCalled()
   })
 
   it('trims API host before persisting', async () => {

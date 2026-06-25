@@ -1,75 +1,44 @@
+import { cacheService } from '@data/CacheService'
 import { loggerService } from '@logger'
-import { cacheService } from '@renderer/data/CacheService'
 import db from '@renderer/databases'
 import i18n from '@renderer/i18n'
-import type { FileMetadata } from '@renderer/types'
-import { getFileDirectory } from '@renderer/utils'
-import { pathToFileUrl } from '@renderer/utils/fileUrl'
+import type { FileMetadata } from '@renderer/types/file'
+import { getFileDirectory } from '@renderer/utils/file'
 import dayjs from 'dayjs'
-
-import { storageV2FileRecoveryService } from './StorageV2FileRecoveryService'
 
 const logger = loggerService.withContext('FileManager')
 
-type FileLogSummary = Partial<
-  Pick<FileMetadata, 'id' | 'name' | 'origin_name' | 'size' | 'ext' | 'type' | 'count' | 'tokens' | 'purpose'>
->
-
-function summarizeFileForLog(file: FileMetadata | undefined): FileLogSummary | null {
-  if (!file) return null
-
-  return {
-    id: file.id,
-    name: file.name,
-    origin_name: file.origin_name,
-    size: file.size,
-    ext: file.ext,
-    type: file.type,
-    count: file.count,
-    tokens: file.tokens,
-    purpose: file.purpose
-  }
-}
-
-function getCachedFilesPath(): string | undefined {
-  return cacheService.get('app.path.files')
-}
-
-function getStoredFilePath(file: FileMetadata): string {
-  const filesPath = getCachedFilesPath()
-  if (filesPath) return `${filesPath}/${file.id}${file.ext}`
-  return file.path || `${file.id}${file.ext}`
-}
-
+/**
+ * @deprecated Slated for v2 redesign — do not extend.
+ *
+ * This class predates the v2 file module and bundles three unrelated
+ * responsibilities that should be split apart:
+ *
+ *   1. **Dexie `db.files` CRUD + reference counting** — superseded by the
+ *      v2 `file_entry` + `file_ref` tables. Renderer never writes those
+ *      directly; it goes through File IPC (`createInternalEntry`,
+ *      `ensureExternalEntry`, `permanentDelete`, …).
+ *   2. **Thin IPC wrappers** (`selectFiles`, `readBinaryImage`, …) — should
+ *      either be inlined at call sites or moved into a focused IPC client.
+ *   3. **Pure utility helpers** (`getFilePath`, `getSafePath`, `getFileUrl`,
+ *      `isDangerFile`, `formatFileName`) — belong in `@renderer/utils/file`.
+ *
+ * Phase 2 Batch 0 attempted to migrate `addFile` / `uploadFile` / `deleteFile`
+ * to v2 IPC in place, but doing so broke the v1 contract: the v1 `addFile`
+ * was a Dexie-only reference-count operation that assumed the physical file
+ * was already on disk (written upstream by `saveBase64Image` / `download` /
+ * etc.), whereas the v2 path-based `createInternalEntry` re-copies the file
+ * and mints a new uuid. Production callers (`imageCallbacks`, paintings
+ * pages) discard the return value, leaving a duplicate physical copy plus
+ * an unreferenced `file_entry`, while the business object still points at
+ * the original (now entry-less) uuid.
+ *
+ * The cutover is being reverted here and the class re-marked as legacy
+ * pending its v2-shaped replacement. The replacement work is tracked
+ * separately; until it lands, **do not add new call sites** — write straight
+ * to File IPC (`window.api.file.createInternalEntry` etc.) from new code.
+ */
 class FileManager {
-  private static async upsertStorageV2File(file: FileMetadata | undefined): Promise<void> {
-    if (!file) return
-
-    if (typeof window.api?.storageV2?.upsertFile !== 'function') {
-      throw new Error('Storage v2 file upsert API unavailable')
-    }
-
-    try {
-      await window.api.storageV2.upsertFile(file as unknown as Record<string, unknown>)
-    } catch (error) {
-      logger.warn('Failed to upsert file in Storage v2:', error as Error)
-      throw error
-    }
-  }
-
-  private static async deleteStorageV2File(id: string): Promise<void> {
-    if (typeof window.api?.storageV2?.deleteFile !== 'function') {
-      throw new Error('Storage v2 file delete API unavailable')
-    }
-
-    try {
-      await window.api.storageV2.deleteFile(id)
-    } catch (error) {
-      logger.warn('Failed to tombstone file in Storage v2:', error as Error)
-      throw error
-    }
-  }
-
   static async selectFiles(options?: Electron.OpenDialogOptions): Promise<FileMetadata[] | null> {
     return await window.api.file.select(options)
   }
@@ -78,13 +47,10 @@ class FileManager {
     const fileRecord = await db.files.get(file.id)
 
     if (fileRecord) {
-      const updatedFile = { ...fileRecord, count: fileRecord.count + 1 }
-      await this.upsertStorageV2File(updatedFile)
-      await db.files.update(fileRecord.id, updatedFile)
-      return updatedFile
+      await db.files.update(fileRecord.id, { ...fileRecord, count: fileRecord.count + 1 })
+      return fileRecord
     }
 
-    await this.upsertStorageV2File(file)
     await db.files.add(file)
 
     return file
@@ -105,39 +71,33 @@ class FileManager {
   }
 
   static async addBase64File(file: FileMetadata): Promise<FileMetadata> {
-    logger.info('Adding base64 file', summarizeFileForLog(file))
+    logger.info(`Adding base64 file: ${JSON.stringify(file)}`)
 
     const base64File = await window.api.file.base64File(file.id + file.ext)
     const fileRecord = await db.files.get(base64File.id)
 
     if (fileRecord) {
-      const updatedFile = { ...fileRecord, count: fileRecord.count + 1 }
-      await this.upsertStorageV2File(updatedFile)
-      await db.files.update(fileRecord.id, updatedFile)
-      return updatedFile
+      await db.files.update(fileRecord.id, { ...fileRecord, count: fileRecord.count + 1 })
+      return fileRecord
     }
 
-    await this.upsertStorageV2File(base64File)
     await db.files.add(base64File)
 
     return base64File
   }
 
   static async uploadFile(file: FileMetadata): Promise<FileMetadata> {
-    logger.info('Uploading file', summarizeFileForLog(file))
+    logger.info(`Uploading file: ${JSON.stringify(file)}`)
 
     const uploadFile = await window.api.file.upload(file)
-    logger.info('Uploaded file', summarizeFileForLog(uploadFile))
+    logger.info('Uploaded file:', uploadFile)
     const fileRecord = await db.files.get(uploadFile.id)
 
     if (fileRecord) {
-      const updatedFile = { ...fileRecord, count: fileRecord.count + 1 }
-      await this.upsertStorageV2File(updatedFile)
-      await db.files.update(fileRecord.id, updatedFile)
-      return updatedFile
+      await db.files.update(fileRecord.id, { ...fileRecord, count: fileRecord.count + 1 })
+      return fileRecord
     }
 
-    await this.upsertStorageV2File(uploadFile)
     await db.files.add(uploadFile)
 
     return uploadFile
@@ -148,30 +108,25 @@ class FileManager {
   }
 
   static async getFile(id: string): Promise<FileMetadata | undefined> {
-    let file = await db.files.get(id)
-
-    if (!file) {
-      const restored = await storageV2FileRecoveryService.projectFileIfMissing(id, 'file-manager-get-missing')
-      if (restored) {
-        file = await db.files.get(id)
-      }
-    }
+    const file = await db.files.get(id)
 
     if (file) {
-      file.path = getStoredFilePath(file)
+      const filesPath = cacheService.get('app.path.files') ?? ''
+      file.path = filesPath + '/' + file.id + file.ext
     }
 
     return file
   }
 
   static getFilePath(file: FileMetadata) {
-    return getStoredFilePath(file)
+    const filesPath = cacheService.get('app.path.files') ?? ''
+    return filesPath + '/' + file.id + file.ext
   }
 
   static async deleteFile(id: string, force: boolean = false): Promise<void> {
     const file = await this.getFile(id)
 
-    logger.info('Deleting file', summarizeFileForLog(file))
+    logger.info('Deleting file:', file)
 
     if (!file) {
       return
@@ -179,14 +134,11 @@ class FileManager {
 
     if (!force) {
       if (file.count > 1) {
-        const updatedFile = { ...file, count: file.count - 1 }
-        await this.upsertStorageV2File(updatedFile)
-        await db.files.update(id, updatedFile)
+        await db.files.update(id, { ...file, count: file.count - 1 })
         return
       }
     }
 
-    await this.deleteStorageV2File(id)
     await db.files.delete(id)
 
     try {
@@ -204,12 +156,10 @@ class FileManager {
     const failed = results.filter((r) => r.status === 'rejected')
     if (failed.length > 0) {
       logger.warn(`File deletions completed with ${failed.length} files failed to delete:`, failed)
-      throw new Error(`Failed to delete ${failed.length} file(s)`)
     }
   }
 
   static async allFiles(): Promise<FileMetadata[]> {
-    await storageV2FileRecoveryService.projectMissingFiles('file-manager-all')
     return db.files.toArray()
   }
 
@@ -224,12 +174,8 @@ class FileManager {
   }
 
   static getFileUrl(file: FileMetadata) {
-    const filesPath = getCachedFilesPath()
-    return pathToFileUrl(filesPath ? `${filesPath}/${file.name}` : file.path || file.name)
-  }
-
-  static getSafeFileUrl(file: FileMetadata) {
-    return pathToFileUrl(this.getSafePath(file))
+    const filesPath = cacheService.get('app.path.files') ?? ''
+    return 'file://' + filesPath + '/' + file.name
   }
 
   static async updateFile(file: FileMetadata) {
@@ -237,7 +183,6 @@ class FileManager {
       file.origin_name = file.origin_name + file.ext
     }
 
-    await this.upsertStorageV2File(file)
     await db.files.update(file.id, file)
   }
 

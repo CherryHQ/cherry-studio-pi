@@ -1,8 +1,7 @@
 import { CopyIcon } from '@renderer/components/Icons'
 import { useCodeStyle } from '@renderer/context/CodeStyleProvider'
 import { useTimer } from '@renderer/hooks/useTimer'
-import type { NormalToolResponse } from '@renderer/types'
-import { sanitizeHtml } from '@renderer/utils/html'
+import type { NormalToolResponse } from '@renderer/types/mcpTool'
 import { Check, Wrench } from 'lucide-react'
 import type { ComponentPropsWithoutRef, FC } from 'react'
 import { memo, useEffect, useMemo, useState } from 'react'
@@ -246,18 +245,11 @@ const ToolExecBody: FC<{ toolResponse: NormalToolResponse }> = ({ toolResponse }
   const [highlighted, setHighlighted] = useState<string>('')
 
   useEffect(() => {
-    if (!code) {
-      setHighlighted('')
-      return
-    }
+    if (!code) return
     let cancelled = false
-    void highlightCode(code, 'javascript')
-      .then((html) => {
-        if (!cancelled) setHighlighted(sanitizeHtml(html))
-      })
-      .catch(() => {
-        if (!cancelled) setHighlighted('')
-      })
+    void highlightCode(code, 'javascript').then((html) => {
+      if (!cancelled) setHighlighted(html)
+    })
     return () => {
       cancelled = true
     }

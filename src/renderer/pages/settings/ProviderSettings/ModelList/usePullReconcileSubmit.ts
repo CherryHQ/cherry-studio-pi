@@ -2,7 +2,7 @@ import { useMutation } from '@data/hooks/useDataApi'
 import { loggerService } from '@logger'
 import { useProvider } from '@renderer/hooks/useProvider'
 import { enableProviderWhenModelsAvailable } from '@renderer/pages/settings/ProviderSettings/utils/providerEnablement'
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { toCreateModelDto } from './modelSync'
@@ -23,21 +23,12 @@ type UsePullReconcileSubmitOptions = {
  */
 export function usePullReconcileSubmit({ providerId, onApplyCommitted }: UsePullReconcileSubmitOptions) {
   const { t } = useTranslation()
-  const mountedRef = useRef(true)
   const { provider, updateProvider } = useProvider(providerId)
   const { trigger: reconcileTrigger, isLoading: applyBusy } = useMutation(
     'POST',
     '/providers/:providerId/models:reconcile',
-    { refresh: ['/models', '/pins'] }
+    { refresh: ['/models'] }
   )
-
-  useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
 
   const confirmApply = useCallback(
     async (payload: ModelPullApplyPayload) => {
@@ -50,23 +41,13 @@ export function usePullReconcileSubmit({ providerId, onApplyCommitted }: UsePull
             toRemove
           }
         })
-
-        if (!mountedRef.current) {
-          return
-        }
-
         await enableProviderWhenModelsAvailable(
           provider,
           updateProvider,
           reconciledModels.length,
           'pull_reconcile_apply'
         )
-
-        if (!mountedRef.current) {
-          return
-        }
-
-        window.toast?.success(
+        window.toast.success(
           t('settings.models.manage.sync_apply_result', {
             added: toAdd.length,
             deprecated: 0,
@@ -75,12 +56,8 @@ export function usePullReconcileSubmit({ providerId, onApplyCommitted }: UsePull
         )
         onApplyCommitted()
       } catch (error) {
-        if (!mountedRef.current) {
-          return
-        }
-
         logger.error('Failed to apply pull reconcile selection', { providerId, error })
-        window.toast?.error(t('settings.models.manage.sync_pull_failed'))
+        window.toast.error(t('settings.models.manage.sync_pull_failed'))
       }
     },
     [onApplyCommitted, provider, providerId, reconcileTrigger, t, updateProvider]

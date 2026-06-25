@@ -3,7 +3,7 @@ import { closestCenter } from '@dnd-kit/core'
 import Scrollbar from '@renderer/components/Scrollbar'
 import { providerListClasses } from '@renderer/pages/settings/ProviderSettings/primitives/ProviderSettingsPrimitives'
 import type { Provider } from '@shared/data/types/provider'
-import { type ReactNode, useEffect, useMemo, useRef } from 'react'
+import { type ReactNode, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { groupProvidersByPreset } from './providerGrouping'
@@ -103,21 +103,12 @@ export default function ProviderListContent({
   renderItem
 }: ProviderListContentProps) {
   const { t } = useTranslation()
-  const mountedRef = useRef(true)
   const entries = useMemo(() => groupProvidersByPreset(visibleProviders), [visibleProviders])
   const hasResults = visibleProviders.length > 0
   const visibleIndexById = useMemo(
     () => new Map(visibleProviders.map((provider, index) => [provider.id, index])),
     [visibleProviders]
   )
-
-  useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
 
   const renderFlat = () => (
     <ReorderableList
@@ -167,9 +158,7 @@ export default function ProviderListContent({
 
       try {
         void Promise.resolve(onReorder(nextProviders)).catch((error: unknown) => {
-          if (mountedRef.current) {
-            onReorderError?.(error)
-          }
+          onReorderError?.(error)
         })
       } catch (error: unknown) {
         onReorderError?.(error)

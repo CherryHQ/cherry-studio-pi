@@ -1,33 +1,15 @@
 import '@testing-library/jest-dom/vitest'
 
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import ImageViewer, { getImageBlobFromSource } from '../ImageViewer'
-
-type Deferred<T> = {
-  promise: Promise<T>
-  resolve: (value: T | PromiseLike<T>) => void
-  reject: (reason?: unknown) => void
-}
-
-function deferred<T>(): Deferred<T> {
-  let resolve!: Deferred<T>['resolve']
-  let reject!: Deferred<T>['reject']
-  const promise = new Promise<T>((promiseResolve, promiseReject) => {
-    resolve = promiseResolve
-    reject = promiseReject
-  })
-
-  return { promise, resolve, reject }
-}
 
 const mocks = vi.hoisted(() => ({
   download: vi.fn(),
   convertImageToPng: vi.fn(),
   fetch: vi.fn(),
   fsRead: vi.fn(),
-  loggerError: vi.fn(),
   toast: {
     error: vi.fn(),
     success: vi.fn()
@@ -35,14 +17,6 @@ const mocks = vi.hoisted(() => ({
   clipboard: {
     write: vi.fn(),
     writeText: vi.fn()
-  }
-}))
-
-vi.mock('@logger', () => ({
-  loggerService: {
-    withContext: () => ({
-      error: mocks.loggerError
-    })
   }
 }))
 
@@ -74,8 +48,6 @@ describe('ImageViewer', () => {
 
     mocks.convertImageToPng.mockImplementation(async (blob: Blob) => blob)
     mocks.fetch.mockResolvedValue({
-      ok: true,
-      status: 200,
       blob: async () => new Blob(['remote'], { type: 'image/webp' })
     })
     mocks.fsRead.mockResolvedValue(new Uint8Array([1, 2, 3]))
@@ -117,39 +89,10 @@ describe('ImageViewer', () => {
     expect(mocks.toast.success).toHaveBeenCalledWith('message.copy.success')
   })
 
-  it('copies image source even when toast is not available', async () => {
-    Object.assign(window, { toast: undefined })
-
-    render(<ImageViewer src="https://example.com/image.png" alt="Example image" />)
-
-    fireEvent.contextMenu(screen.getByRole('img', { name: 'Example image' }))
-    fireEvent.click(screen.getByRole('button', { name: 'preview.copy.src' }))
-
-    await waitFor(() => {
-      expect(mocks.clipboard.writeText).toHaveBeenCalledWith('https://example.com/image.png')
-    })
-  })
-
-  it('logs non-Error copy source failures without exposing details in the toast', async () => {
-    mocks.clipboard.writeText.mockRejectedValueOnce('clipboard permission denied')
-
-    render(<ImageViewer src="https://example.com/image.png" alt="Example image" />)
-
-    fireEvent.contextMenu(screen.getByRole('img', { name: 'Example image' }))
-    fireEvent.click(screen.getByRole('button', { name: 'preview.copy.src' }))
-
-    await waitFor(() => {
-      expect(mocks.toast.error).toHaveBeenCalledWith('message.copy.failed')
-    })
-    expect(mocks.loggerError).toHaveBeenCalledWith('Failed to copy image source', {
-      error: 'clipboard permission denied',
-      stack: undefined
-    })
-  })
-
   it('copies image data from the context menu', async () => {
     render(<ImageViewer src="data:image/png;base64,aGVsbG8=" alt="Example image" />)
 
+    fireEvent.contextMenu(screen.getByRole('img', { name: 'Example image' }))
     fireEvent.click(screen.getByRole('button', { name: 'common.copy' }))
 
     await waitFor(() => {
@@ -159,71 +102,15 @@ describe('ImageViewer', () => {
     expect(mocks.toast.success).toHaveBeenCalledWith('message.copy.success')
   })
 
-  it('logs nested copy image failures without exposing details in the toast', async () => {
-    mocks.convertImageToPng.mockRejectedValueOnce({
-      error: {
-        message: 'native conversion failed',
-        stack: 'native-stack'
-      }
-    })
-
-    render(<ImageViewer src="data:image/png;base64,aGVsbG8=" alt="Example image" />)
-
-    fireEvent.click(screen.getByRole('button', { name: 'common.copy' }))
-
-    await waitFor(() => {
-      expect(mocks.toast.error).toHaveBeenCalledWith('message.copy.failed')
-    })
-    expect(mocks.loggerError).toHaveBeenCalledWith('Failed to copy image', {
-      error: 'native conversion failed',
-      stack: 'native-stack'
-    })
-  })
-
-  it('ignores delayed copy source feedback after unmount', async () => {
-    const runningCopy = deferred<void>()
-    mocks.clipboard.writeText.mockReturnValueOnce(runningCopy.promise)
-    const { unmount } = render(<ImageViewer src="https://example.com/image.png" alt="Example image" />)
-
-    fireEvent.contextMenu(screen.getByRole('img', { name: 'Example image' }))
-    fireEvent.click(screen.getByRole('button', { name: 'preview.copy.src' }))
-    unmount()
-
-    await act(async () => {
-      runningCopy.resolve()
-      await runningCopy.promise
-    })
-
-    expect(mocks.toast.success).not.toHaveBeenCalled()
-    expect(mocks.toast.error).not.toHaveBeenCalled()
-  })
-
-  it('ignores delayed copy image feedback after unmount', async () => {
-    const runningCopy = deferred<void>()
-    mocks.clipboard.write.mockReturnValueOnce(runningCopy.promise)
-    const { unmount } = render(<ImageViewer src="data:image/png;base64,aGVsbG8=" alt="Example image" />)
-
-    fireEvent.click(screen.getByRole('button', { name: 'common.copy' }))
-    await waitFor(() => {
-      expect(mocks.clipboard.write).toHaveBeenCalledWith([expect.any(MockClipboardItem)])
-    })
-    unmount()
-
-    await act(async () => {
-      runningCopy.resolve()
-      await runningCopy.promise
-    })
-
-    expect(mocks.toast.success).not.toHaveBeenCalled()
-    expect(mocks.toast.error).not.toHaveBeenCalled()
-  })
-
-  it('downloads the image from the context menu', () => {
+  it('downloads the image from the context menu', async () => {
     render(<ImageViewer src="https://example.com/image.png" alt="Example image" />)
 
+    fireEvent.contextMenu(screen.getByRole('img', { name: 'Example image' }))
     fireEvent.click(screen.getByRole('button', { name: 'common.download' }))
 
-    expect(mocks.download).toHaveBeenCalledWith('https://example.com/image.png')
+    await waitFor(() => {
+      expect(mocks.download).toHaveBeenCalledWith('https://example.com/image.png')
+    })
   })
 
   it('reads image blobs from data URLs', async () => {
@@ -244,21 +131,7 @@ describe('ImageViewer', () => {
   it('reads image blobs from remote URLs', async () => {
     const blob = await getImageBlobFromSource('https://example.com/image.webp')
 
-    expect(mocks.fetch).toHaveBeenCalledWith('https://example.com/image.webp', {
-      signal: expect.any(AbortSignal)
-    })
+    expect(mocks.fetch).toHaveBeenCalledWith('https://example.com/image.webp')
     expect(blob.type).toBe('image/webp')
-  })
-
-  it('rejects failed remote image responses before copying/downloading blobs', async () => {
-    mocks.fetch.mockResolvedValueOnce({
-      ok: false,
-      status: 404,
-      blob: async () => new Blob(['not found'], { type: 'text/html' })
-    })
-
-    await expect(getImageBlobFromSource('https://example.com/missing.png')).rejects.toThrow(
-      'Failed to fetch image: HTTP 404'
-    )
   })
 })

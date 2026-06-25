@@ -51,7 +51,7 @@ export default function ApiKey({
               {meta.apiKeyWebsite && !meta.isDmxapi ? (
                 <ProviderHelpLink
                   target="_blank"
-                  rel="noopener noreferrer"
+                  rel="noreferrer"
                   href={meta.apiKeyWebsite}
                   className={fieldClasses.titleHelpLink}>
                   {t('settings.provider.get_api_key')}

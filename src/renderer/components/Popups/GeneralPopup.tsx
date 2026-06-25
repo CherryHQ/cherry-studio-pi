@@ -3,7 +3,7 @@ import { cn } from '@cherrystudio/ui/lib/utils'
 import { loggerService } from '@logger'
 import { TopView } from '@renderer/components/TopView'
 import type { CSSProperties, ReactNode } from 'react'
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useTopViewClose } from './useTopViewClose'
@@ -86,68 +86,34 @@ const PopupContainer: React.FC<Props> = ({
   ...rest
 }) => {
   const [open, setOpen] = useState(true)
-  const [submitting, setSubmitting] = useState(false)
-  const mountedRef = useRef(true)
-  const submittingRef = useRef(false)
   const { t } = useTranslation()
   const close = useTopViewClose({ afterClose: rest.afterClose, resolve, setOpen, topViewKey: TopViewKey })
-
-  useEffect(() => {
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
 
   const settle = (result: any) => {
     close(result)
   }
 
   const onOk = async () => {
-    if (submittingRef.current) {
-      return
-    }
-
-    submittingRef.current = true
-    setSubmitting(true)
-    let shouldClose = false
     try {
       const result = await handleOk?.()
-      if (!mountedRef.current) {
-        return
-      }
-
       if (result === false) {
         return
       }
-      shouldClose = true
     } catch (error) {
-      if (!mountedRef.current) {
-        return
-      }
-
       logger.error('GeneralPopup onOk handler failed:', error as Error)
       return
-    } finally {
-      submittingRef.current = false
-      if (mountedRef.current && !shouldClose) {
-        setSubmitting(false)
-      }
     }
 
     settle({})
   }
 
   const onCancel = () => {
-    if (submittingRef.current) {
-      return
-    }
-
     handleCancel?.()
     settle({})
   }
 
   const onOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen && !submittingRef.current) {
+    if (!nextOpen) {
       onCancel()
     }
   }
@@ -161,6 +127,7 @@ const PopupContainer: React.FC<Props> = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={closable}
+        closeOnOverlayClick={maskClosable}
         className={cn(shouldUseCustomWidth && 'sm:max-w-none', rootClassName, className)}
         style={getContentStyle({ ...rest, styles, width })}
         onEscapeKeyDown={(event) => {
@@ -184,7 +151,7 @@ const PopupContainer: React.FC<Props> = ({
             <DialogFooter>
               <Button
                 variant="outline"
-                disabled={cancelButtonProps?.disabled || submitting}
+                disabled={cancelButtonProps?.disabled}
                 className={cancelButtonProps?.className}
                 style={cancelButtonProps?.style}
                 onClick={onCancel}>
@@ -192,8 +159,7 @@ const PopupContainer: React.FC<Props> = ({
               </Button>
               <Button
                 variant={okButtonProps?.danger ? 'destructive' : 'default'}
-                disabled={okButtonProps?.disabled || submitting}
-                loading={submitting}
+                disabled={okButtonProps?.disabled}
                 className={okButtonProps?.className}
                 style={okButtonProps?.style}
                 onClick={onOk}>

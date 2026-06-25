@@ -1,6 +1,5 @@
 import { Button, MenuItem, MenuList, Popover, PopoverContent, PopoverTrigger } from '@cherrystudio/ui'
 import { loggerService } from '@logger'
-import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { ChevronsDown, ChevronsUp, MoreHorizontal, ToggleLeft, ToggleRight } from 'lucide-react'
 import type React from 'react'
 import { useCallback, useMemo, useState } from 'react'
@@ -48,7 +47,7 @@ const ProviderModelList: React.FC<ProviderModelListProps> = ({
     setOpenMenu(null)
     void Promise.resolve(modelList.header.onToggleVisibleModels(false)).catch((error) => {
       logger.error('Failed to disable visible provider models', { providerId, error })
-      window.toast?.error(formatErrorMessageWithPrefix(error, t('settings.models.manage.operation_failed')))
+      window.toast.error(t('settings.models.manage.operation_failed'))
     })
   }, [modelList.header, providerId, t])
 
@@ -56,7 +55,7 @@ const ProviderModelList: React.FC<ProviderModelListProps> = ({
     setOpenMenu(null)
     void Promise.resolve(modelList.header.onToggleVisibleModels(true)).catch((error) => {
       logger.error('Failed to enable visible provider models', { providerId, error })
-      window.toast?.error(formatErrorMessageWithPrefix(error, t('settings.models.manage.operation_failed')))
+      window.toast.error(t('settings.models.manage.operation_failed'))
     })
   }, [modelList.header, providerId, t])
 
@@ -211,6 +210,8 @@ const ProviderModelList: React.FC<ProviderModelListProps> = ({
           disabled={modelList.sections.disabled}
           pendingModelIds={modelList.sections.pendingModelIds}
           onEditModel={modelList.sections.onEditModel}
+          onDeleteModel={modelList.sections.onDeleteModel}
+          onDeleteModels={modelList.sections.onDeleteModels}
           onToggleModel={modelList.sections.onToggleModel}
           onToggleModels={modelList.sections.onToggleModels}
           bulkActionDisabled={toolbarDisabled}

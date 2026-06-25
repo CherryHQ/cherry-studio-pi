@@ -5,8 +5,7 @@
  */
 
 import { loggerService } from '@logger'
-import type { BuiltinMcpServerName } from '@renderer/types'
-import { BuiltinMcpServerNames } from '@renderer/types'
+import { type BuiltinMcpServerName, BuiltinMcpServerNames } from '@shared/utils/mcp'
 
 const logger = loggerService.withContext('i18n:label')
 
@@ -186,7 +185,7 @@ export const getThemeModeLabelKey = (key: string): string => {
 
 const sidebarIconKeyMap = {
   assistants: 'agent.session.group.conversation',
-  agents: 'agent.sidebar_title',
+  agents: 'title.work',
   store: 'assistants.presets.title',
   paintings: 'paintings.title',
   translate: 'translate.title',
@@ -207,7 +206,7 @@ export const getSidebarIconLabelKey = (key: string): string => {
 // chat carve brings feat's Sidebar; remove together with that.
 const sidebarFavoriteKeyMap = {
   assistants: 'assistants.title',
-  agents: 'agent.sidebar_title',
+  agents: 'title.work',
   store: 'assistants.presets.title',
   paintings: 'paintings.title',
   translate: 'translate.title',

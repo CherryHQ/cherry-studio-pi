@@ -1,5 +1,5 @@
 /**
- * Message-bound translation hook for the `MessageMenubar` "translate this
+ * Message-bound translation hook for the `MessageMenuBar` "translate this
  * reply" flow.
  *
  * Drives a stream entirely through main:
@@ -21,11 +21,10 @@
  */
 
 import { loggerService } from '@logger'
-import { useV2Chat } from '@renderer/hooks/V2ChatContext'
+import { useOptionalTranslationOverlaySetter, useRefresh } from '@renderer/components/chat/messages/blocks'
 import { ipcApi } from '@renderer/ipc'
-import { useOptionalTranslationOverlaySetter } from '@renderer/pages/home/Messages/Blocks/V2Contexts'
-import type { TranslateLanguage } from '@renderer/types'
 import type { TranslateLangCode } from '@shared/data/preference/preferenceTypes'
+import type { TranslateLanguage } from '@shared/data/types/translate'
 import { useCallback, useEffect, useRef } from 'react'
 import { v4 as uuid } from 'uuid'
 
@@ -37,7 +36,7 @@ const TRANSLATE_STREAM_PREFIX = 'translate:'
 export interface UseTranslateMessageResult {
   /** Start a translation for this message. Resolves once `translate.open` has dispatched (not on stream completion). */
   translate: (text: string, language: TranslateLanguage) => Promise<void>
-  /** Abort the current stream (if any) and immediately clear renderer-side translation state. */
+  /** Abort the current stream (if any). Cleanup of subscriptions still happens via `onStreamError` / `onStreamDone`. */
   cancel: () => void
 }
 
@@ -52,7 +51,7 @@ export function useTranslateMessage(messageId: string): UseTranslateMessageResul
   // translate button, so `translate` is never invoked there — the guards
   // below just make the hook safe to mount regardless.
   const setOverlay = useOptionalTranslationOverlaySetter()
-  const v2 = useV2Chat()
+  const refresh = useRefresh()
   const activeRef = useRef<ActiveStream | null>(null)
 
   const teardown = useCallback((expectedStreamId: string | null) => {
@@ -124,7 +123,7 @@ export function useTranslateMessage(messageId: string): UseTranslateMessageResul
         if (topicId !== streamId) return
         if (status === 'success') {
           try {
-            await v2?.refresh()
+            refresh()
           } catch (err) {
             logger.warn('refresh after translation done failed', err as Error)
           }
@@ -155,16 +154,15 @@ export function useTranslateMessage(messageId: string): UseTranslateMessageResul
         throw err
       }
     },
-    [messageId, setOverlay, teardown, v2]
+    [messageId, refresh, setOverlay, teardown]
   )
 
   const cancel = useCallback(() => {
     const active = activeRef.current
     if (!active) return
     void ipcApi.request('ai.stream_abort', { topicId: active.streamId }).catch(() => {})
-    setOverlay?.(messageId, null)
-    teardown(active.streamId)
-  }, [messageId, setOverlay, teardown])
+    // onStreamError / onStreamDone (status: 'paused') will clear the overlay.
+  }, [])
 
   return { translate, cancel }
 }

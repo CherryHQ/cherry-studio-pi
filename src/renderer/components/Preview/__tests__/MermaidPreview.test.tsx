@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest'
 
 import { MermaidPreview } from '..'
@@ -109,54 +109,6 @@ describe('MermaidPreview', () => {
 
       expect(screen.getByTestId('image-preview-layout')).toBeInTheDocument()
       expect(mocks.useDebouncedRender).toHaveBeenCalledWith('', expect.any(Function), expect.any(Object))
-    })
-
-    it('should handle CJK characters in node definitions', () => {
-      const cjkCode = 'graph TD\nA[HR 组织架构变更 (PA0001)]\nB[项目管理系统]\nA-->B'
-      render(<MermaidPreview>{cjkCode}</MermaidPreview>)
-
-      expect(screen.getByTestId('image-preview-layout')).toBeInTheDocument()
-      expect(mocks.useDebouncedRender).toHaveBeenCalledWith(
-        cjkCode,
-        expect.any(Function),
-        expect.objectContaining({
-          debounceDelay: 300,
-          shouldRender: expect.any(Function)
-        })
-      )
-    })
-
-    it('should clean up the measurement element safely if it has already been detached', async () => {
-      let measureElement: HTMLElement | null = null
-      mockMermaid.render.mockImplementationOnce(async (_diagramId, _content, element) => {
-        measureElement = element
-        element.remove()
-        return {
-          svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><g>test diagram</g></svg>'
-        }
-      })
-      render(<MermaidPreview>{mermaidCode}</MermaidPreview>)
-      const renderMermaid = mocks.useDebouncedRender.mock.calls.at(-1)?.[1] as (
-        content: string,
-        container: HTMLDivElement
-      ) => Promise<void>
-      const container = document.createElement('div')
-      vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
-        width: 320,
-        height: 240,
-        top: 0,
-        left: 0,
-        right: 320,
-        bottom: 240,
-        x: 0,
-        y: 0,
-        toJSON: () => ({})
-      })
-
-      await expect(renderMermaid(mermaidCode, container)).resolves.toBeUndefined()
-
-      expect(measureElement).toBeInstanceOf(HTMLElement)
-      expect(document.body.contains(measureElement)).toBe(false)
     })
   })
 
@@ -291,9 +243,7 @@ describe('MermaidPreview', () => {
       })
 
       // Simulate MutationObserver detecting visibility change
-      act(() => {
-        observerCallback([])
-      })
+      observerCallback([])
 
       // Now make it visible
       Object.defineProperty(mermaidElement, 'offsetParent', {
@@ -302,9 +252,7 @@ describe('MermaidPreview', () => {
       })
 
       // Simulate another MutationObserver callback for visibility change
-      act(() => {
-        observerCallback([])
-      })
+      observerCallback([])
 
       // The visibility change should have been detected and component should be ready to re-render
       // We verify the component structure is correct for potential re-rendering

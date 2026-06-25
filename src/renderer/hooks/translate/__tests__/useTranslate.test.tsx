@@ -17,7 +17,7 @@ const translateTextMock =
       signal?: AbortSignal
     ) => Promise<string>
   >()
-vi.mock('@renderer/services/TranslateService', () => ({
+vi.mock('@renderer/utils/translate/translateText', () => ({
   translateText: (...args: any[]) => translateTextMock(...(args as Parameters<typeof translateTextMock>))
 }))
 
@@ -147,7 +147,7 @@ describe('useTranslate', () => {
       expect(handedSignal.aborted).toBe(true)
     })
 
-    it('aborts the previous signal when a new translate() supersedes', async () => {
+    it('aborts the previous signal when a new translate() supersedes', () => {
       pendingTranslateText()
       translateTextMock.mockResolvedValueOnce('second')
 
@@ -159,8 +159,8 @@ describe('useTranslate', () => {
       const firstSignal = translateTextMock.mock.calls[0][3] as AbortSignal
       expect(firstSignal.aborted).toBe(false)
 
-      await act(async () => {
-        await result.current.translate('two', TARGET)
+      act(() => {
+        void result.current.translate('two', TARGET)
       })
 
       expect(firstSignal.aborted).toBe(true)

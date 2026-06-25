@@ -38,7 +38,7 @@ vi.mock('@renderer/components/composer/tools/types', () => ({
   getToolsForScope: (...args: unknown[]) => mockGetToolsForScope(...args)
 }))
 
-vi.mock('@renderer/components/composer/panelEngine', () => ({
+vi.mock('@renderer/components/QuickPanel', () => ({
   useQuickPanel: () => mockUseQuickPanel()
 }))
 

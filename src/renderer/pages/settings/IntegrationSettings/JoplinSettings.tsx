@@ -2,24 +2,13 @@ import { Button, InfoTooltip, Input, RowFlex, Switch } from '@cherrystudio/ui'
 import { usePreference } from '@data/hooks/usePreference'
 import { loggerService } from '@logger'
 import { useTheme } from '@renderer/context/ThemeProvider'
-import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
-import { formatErrorMessage, formatErrorMessageWithPrefix } from '@renderer/utils/error'
+import { formatErrorMessage } from '@renderer/utils/error'
 import type { FC } from 'react'
-import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingHelpText, SettingRow, SettingRowTitle, SettingTitle } from '..'
 
 const logger = loggerService.withContext('JoplinSettings')
-const INTEGRATION_CHECK_TIMEOUT_MS = 10_000
-
-function buildJoplinNotesCheckUrl(baseUrl: string, token: string): string {
-  const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`
-  const url = new URL('notes', normalizedBaseUrl)
-  url.searchParams.set('limit', '1')
-  url.searchParams.set('token', token)
-  return url.toString()
-}
 
 const JoplinSettings: FC = () => {
   const [joplinToken, setJoplinToken] = usePreference('data.integration.joplin.token')
@@ -28,90 +17,56 @@ const JoplinSettings: FC = () => {
 
   const { t } = useTranslation()
   const { theme } = useTheme()
-  const [checkingConnection, setCheckingConnection] = useState(false)
-  const checkingConnectionRef = useRef(false)
-  const mountedRef = useRef(true)
-
-  useEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
-
-  const showSaveFailed = useSaveFailedToast()
 
   const handleJoplinTokenChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    void setJoplinToken(e.target.value).catch(showSaveFailed)
+    void setJoplinToken(e.target.value)
   }
 
   const handleJoplinUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    void setJoplinUrl(e.target.value).catch(showSaveFailed)
+    void setJoplinUrl(e.target.value)
   }
 
   const handleJoplinUrlBlur = (e: React.FocusEvent<HTMLInputElement>) => {
     let url = e.target.value
     if (url && !url.endsWith('/')) {
       url = `${url}/`
-      void setJoplinUrl(url).catch(showSaveFailed)
+      void setJoplinUrl(url)
     }
   }
 
   const handleJoplinConnectionCheck = async () => {
-    if (checkingConnectionRef.current) {
-      return
-    }
-
     try {
       if (!joplinToken) {
-        window.toast?.error(t('settings.data.joplin.check.empty_token'))
+        window.toast.error(t('settings.data.joplin.check.empty_token'))
         return
       }
       if (!joplinUrl) {
-        window.toast?.error(t('settings.data.joplin.check.empty_url'))
+        window.toast.error(t('settings.data.joplin.check.empty_url'))
         return
       }
 
-      checkingConnectionRef.current = true
-      setCheckingConnection(true)
-      const response = await fetch(buildJoplinNotesCheckUrl(joplinUrl, joplinToken), {
-        signal: AbortSignal.timeout(INTEGRATION_CHECK_TIMEOUT_MS)
-      })
+      const response = await fetch(`${joplinUrl}notes?limit=1&token=${joplinToken}`)
 
       const data = await response.json()
 
-      if (!mountedRef.current) {
-        return
-      }
-
       if (!response.ok || data?.error) {
-        window.toast?.error(t('settings.data.joplin.check.fail'))
+        window.toast.error(t('settings.data.joplin.check.fail'))
         return
       }
 
-      window.toast?.success(t('settings.data.joplin.check.success'))
+      window.toast.success(t('settings.data.joplin.check.success'))
     } catch (error) {
       logger.error('Failed to check Joplin connection', error as Error)
-      if (mountedRef.current) {
-        window.toast?.error(`${t('settings.data.joplin.check.fail')}: ${formatErrorMessage(error)}`)
-      }
-    } finally {
-      checkingConnectionRef.current = false
-      if (mountedRef.current) {
-        setCheckingConnection(false)
-      }
+      window.toast.error(`${t('settings.data.joplin.check.fail')}: ${formatErrorMessage(error)}`)
     }
   }
 
   const handleToggleJoplinExportReasoning = (checked: boolean) => {
-    void setJoplinExportReasoning(checked).catch(showSaveFailed)
+    void setJoplinExportReasoning(checked)
   }
 
   const handleJoplinHelpClick = () => {
-    void window.api.openWebsite('https://joplinapp.org/help/apps/clipper').catch((error) => {
-      logger.error('Failed to open Joplin documentation', error as Error)
-      window.toast?.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
-    })
+    void window.api.openWebsite('https://joplinapp.org/help/apps/clipper')
   }
 
   return (
@@ -152,12 +107,7 @@ const JoplinSettings: FC = () => {
               placeholder={t('settings.data.joplin.token_placeholder')}
               style={{ width: '100%' }}
             />
-            <Button
-              onClick={handleJoplinConnectionCheck}
-              variant="outline"
-              className="h-9 shrink-0"
-              disabled={checkingConnection}
-              loading={checkingConnection}>
+            <Button onClick={handleJoplinConnectionCheck} variant="outline" className="h-9 shrink-0">
               {t('settings.data.joplin.check.button')}
             </Button>
           </RowFlex>

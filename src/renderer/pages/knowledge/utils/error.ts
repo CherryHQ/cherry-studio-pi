@@ -13,6 +13,7 @@ type KnowledgeErrorTranslator = (
     | 'knowledge.error.missing_embedding_model'
     | 'knowledge.error.missing_vector_store'
     | 'knowledge.error.directory_not_migrated'
+    | 'knowledge.error.indexing_interrupted'
 ) => string
 
 /** Localized copy for a known base error code. Exhaustive over `KnowledgeBaseErrorCode`. */
@@ -47,6 +48,8 @@ const translateKnowledgeItemErrorCode = (code: KnowledgeItemErrorCode, t: Knowle
   switch (code) {
     case 'directory_not_migrated':
       return t('knowledge.error.directory_not_migrated')
+    case 'indexing_interrupted':
+      return t('knowledge.error.indexing_interrupted')
     default:
       return code satisfies never
   }
@@ -62,25 +65,10 @@ export const getKnowledgeItemFailureReason = (item: Pick<KnowledgeItem, 'error'>
   return item.error
 }
 
-function extractKnowledgeErrorMessage(error: unknown): string | undefined {
-  if (!error || typeof error !== 'object') return undefined
-
-  const message = (error as { message?: unknown }).message
-  if (typeof message === 'string' && message.trim()) return message
-
-  const nestedError = (error as { error?: unknown }).error
-  if (nestedError && typeof nestedError === 'object') {
-    const nestedMessage = (nestedError as { message?: unknown }).message
-    if (typeof nestedMessage === 'string' && nestedMessage.trim()) return nestedMessage
-  }
-
-  return undefined
-}
-
 export const normalizeKnowledgeError = (error: unknown): Error => {
   if (error instanceof Error) {
     return error
   }
 
-  return new Error(extractKnowledgeErrorMessage(error) ?? String(error))
+  return new Error(String(error))
 }

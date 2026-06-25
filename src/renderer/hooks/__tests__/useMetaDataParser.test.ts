@@ -11,107 +11,48 @@ vi.mock('axios', () => ({
   }
 }))
 
-const properties = ['og:title'] as const
-
-function deferred<T>() {
-  let resolve!: (value: T | PromiseLike<T>) => void
-  let reject!: (reason?: unknown) => void
-  const promise = new Promise<T>((promiseResolve, promiseReject) => {
-    resolve = promiseResolve
-    reject = promiseReject
-  })
-
-  return { promise, resolve, reject }
-}
+const axiosMock = vi.mocked(axios, true)
 
 describe('useMetaDataParser', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  it('allows parsing the same link again after a previous parse completes', async () => {
-    vi.mocked(axios.get)
-      .mockResolvedValueOnce({ data: '<meta property="og:title" content="First">' })
-      .mockResolvedValueOnce({ data: '<meta property="og:title" content="Second">' })
+  it('extracts document fallback metadata when Open Graph tags are absent', async () => {
+    axiosMock.get.mockResolvedValueOnce({
+      data: `
+        <!doctype html>
+        <html>
+          <head>
+            <title>习近平总书记的深情寄望鼓舞新时代少年儿童成长成才</title>
+            <meta name="description" content="Baijiahao article summary">
+            <meta property="og:imageAlt" content="Article cover image">
+            <link rel="preload" as="image" href="/cover.png">
+          </head>
+        </html>
+      `
+    })
 
-    const { result } = renderHook(() => useMetaDataParser('https://example.com', properties))
+    const { result } = renderHook(() =>
+      useMetaDataParser('https://baijiahao.baidu.com/s?id=1866720970921273171', [
+        'title',
+        'description',
+        'og:imageAlt',
+        'image'
+      ] as const)
+    )
 
     await act(async () => {
       await result.current.parseMetadata()
     })
-    expect(result.current.metadata['og:title']).toBe('First')
-    expect(result.current.isLoading).toBe(false)
-
-    await act(async () => {
-      await result.current.parseMetadata()
-    })
-
-    expect(axios.get).toHaveBeenCalledTimes(2)
-    expect(result.current.metadata['og:title']).toBe('Second')
-  })
-
-  it('resets loading state when the link changes so lazy previews can fetch the new URL', async () => {
-    vi.mocked(axios.get)
-      .mockResolvedValueOnce({ data: '<meta property="og:title" content="First">' })
-      .mockResolvedValueOnce({ data: '<meta property="og:title" content="Second">' })
-
-    const { result, rerender } = renderHook(({ link }: { link: string }) => useMetaDataParser(link, properties), {
-      initialProps: { link: 'https://first.example' }
-    })
-
-    await act(async () => {
-      await result.current.parseMetadata()
-    })
-    expect(result.current.metadata['og:title']).toBe('First')
-    expect(result.current.isLoading).toBe(false)
-
-    rerender({ link: 'https://second.example' })
 
     await waitFor(() => {
-      expect(result.current.isLoading).toBe(true)
+      expect(result.current.metadata).toEqual({
+        title: '习近平总书记的深情寄望鼓舞新时代少年儿童成长成才',
+        description: 'Baijiahao article summary',
+        'og:imageAlt': 'Article cover image',
+        image: 'https://baijiahao.baidu.com/cover.png'
+      })
     })
-
-    await act(async () => {
-      await result.current.parseMetadata()
-    })
-
-    expect(axios.get).toHaveBeenLastCalledWith('https://second.example', expect.objectContaining({ timeout: 5000 }))
-    expect(result.current.metadata['og:title']).toBe('Second')
-  })
-
-  it('ignores a stale response after the link changes', async () => {
-    const firstRequest = deferred<{ data: string }>()
-    vi.mocked(axios.get)
-      .mockReturnValueOnce(firstRequest.promise)
-      .mockResolvedValueOnce({ data: '<meta property="og:title" content="Second">' })
-
-    const { result, rerender } = renderHook(({ link }: { link: string }) => useMetaDataParser(link, properties), {
-      initialProps: { link: 'https://first.example' }
-    })
-
-    let firstParsePromise!: Promise<void>
-    await act(async () => {
-      firstParsePromise = result.current.parseMetadata()
-      await Promise.resolve()
-    })
-    expect(result.current.isLoading).toBe(true)
-
-    rerender({ link: 'https://second.example' })
-
-    await act(async () => {
-      firstRequest.resolve({ data: '<meta property="og:title" content="First">' })
-      await firstParsePromise
-    })
-
-    expect(result.current.metadata['og:title']).toBeUndefined()
-    expect(result.current.isLoading).toBe(true)
-
-    await act(async () => {
-      await result.current.parseMetadata()
-    })
-
-    expect(axios.get).toHaveBeenLastCalledWith('https://second.example', expect.objectContaining({ timeout: 5000 }))
-    expect(result.current.metadata['og:title']).toBe('Second')
-    expect(result.current.isLoading).toBe(false)
   })
 })

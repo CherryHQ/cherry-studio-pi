@@ -4,9 +4,9 @@ import type { ToolLauncherApi } from '@renderer/components/composer/tools/types'
 import { useAssistant } from '@renderer/hooks/useAssistant'
 import { useProvider } from '@renderer/hooks/useProvider'
 import { useWebSearchProviders } from '@renderer/hooks/useWebSearch'
-import { getWebSearchProviderLogo } from '@renderer/pages/settings/WebSearchSettings/utils/webSearchProviderMeta'
-import { getEffectiveMcpMode } from '@renderer/types'
+import { getEffectiveMcpMode } from '@renderer/utils/mcpMode'
 import { canModelUseAssistantWebSearch, hasModelBuiltinWebSearch } from '@renderer/utils/modelReconcile'
+import { getWebSearchProviderLogo } from '@renderer/utils/webSearchProviderMeta'
 import type { WebSearchProviderId } from '@shared/data/preference/preferenceTypes'
 import { isGemini3Model, isGeminiModel, isGPT5SeriesReasoningModel, isOpenAIWebSearchModel } from '@shared/utils/model'
 import { isGeminiWebSearchProvider } from '@shared/utils/provider'
@@ -81,7 +81,7 @@ const useWebSearchToolController = ({ assistantId, launcher }: Props) => {
 
   const onClick = useCallback(() => {
     if (!assistant || !model) {
-      window.toast?.error?.(t('error.model.not_exists'))
+      window.toast.error(t('error.model.not_exists'))
       return
     }
     if (enableWebSearch) {

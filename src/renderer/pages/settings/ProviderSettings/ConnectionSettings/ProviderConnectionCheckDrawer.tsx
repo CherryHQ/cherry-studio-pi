@@ -2,7 +2,7 @@ import { Button, RadioGroup, RadioGroupItem, SelectDropdown } from '@cherrystudi
 import { maskApiKey } from '@renderer/utils/api'
 import type { Model } from '@shared/data/types/model'
 import { sortBy } from 'lodash'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import ProviderSettingsDrawer from '../primitives/ProviderSettingsDrawer'
@@ -31,16 +31,6 @@ export default function ProviderConnectionCheckDrawer({
   const sortedModels = useMemo(() => sortBy(models, 'name'), [models])
   const [selectedModelId, setSelectedModelId] = useState<string>('')
   const [selectedKeyIndex, setSelectedKeyIndex] = useState(0)
-  const [isStarting, setIsStarting] = useState(false)
-  const mountedRef = useRef(true)
-  const startInFlightRef = useRef(false)
-
-  useEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
 
   useEffect(() => {
     if (!open) {
@@ -50,10 +40,6 @@ export default function ProviderConnectionCheckDrawer({
     setSelectedModelId(sortedModels[0]?.id ?? '')
     setSelectedKeyIndex(0)
   }, [open, sortedModels])
-
-  useEffect(() => {
-    setSelectedKeyIndex((current) => (apiKeys.length > 0 ? Math.min(current, apiKeys.length - 1) : 0))
-  }, [apiKeys.length])
 
   const selectedModel = useMemo(
     () => sortedModels.find((item) => item.id === selectedModelId) ?? sortedModels[0],
@@ -66,22 +52,6 @@ export default function ProviderConnectionCheckDrawer({
     onClose()
     onOpenModelHealthCheck?.()
   }
-  const handleStart = useCallback(async () => {
-    if (!selectedModel || !selectedApiKey || isSubmitting || isStarting || startInFlightRef.current) {
-      return
-    }
-
-    startInFlightRef.current = true
-    setIsStarting(true)
-    try {
-      await onStart({ model: selectedModel, apiKey: selectedApiKey })
-    } finally {
-      startInFlightRef.current = false
-      if (mountedRef.current) {
-        setIsStarting(false)
-      }
-    }
-  }, [isStarting, isSubmitting, onStart, selectedApiKey, selectedModel])
 
   const footer = (
     <div className={drawerClasses.splitFooter}>
@@ -97,9 +67,9 @@ export default function ProviderConnectionCheckDrawer({
           {t('common.cancel')}
         </Button>
         <Button
-          disabled={!selectedModel || !selectedApiKey || isSubmitting || isStarting}
-          loading={isSubmitting || isStarting || undefined}
-          onClick={() => void handleStart()}>
+          disabled={!selectedModel || !selectedApiKey}
+          loading={isSubmitting}
+          onClick={() => selectedModel && void onStart({ model: selectedModel, apiKey: selectedApiKey })}>
           {t('settings.models.check.start')}
         </Button>
       </div>

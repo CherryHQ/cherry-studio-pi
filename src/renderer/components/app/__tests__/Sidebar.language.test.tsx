@@ -40,7 +40,7 @@ vi.mock('react-i18next', () => ({
 }))
 
 vi.mock('@renderer/i18n/label', () => ({
-  getSidebarFavoriteLabelKey: (key: string) => key
+  getSidebarIconLabelKey: (key: string) => key
 }))
 
 vi.mock('@renderer/i18n', () => ({
@@ -74,7 +74,6 @@ vi.mock('@renderer/hooks/useTabs', () => ({
 }))
 
 vi.mock('@renderer/config/env', () => ({
-  APP_NAME: 'Cherry Studio Pi',
   AppLogo: 'app-logo.png',
   UserAvatar: 'user-avatar.png',
   isLocalAi: false
@@ -84,6 +83,10 @@ vi.mock('../../Popups/UserPopup', () => ({
   default: {
     show: vi.fn()
   }
+}))
+
+vi.mock('../../layout/ShellTabBarActions', () => ({
+  SidebarShellActions: () => null
 }))
 
 import Sidebar from '../Sidebar'

@@ -51,12 +51,6 @@ const backupSlice = createSlice({
   name: 'backup',
   initialState,
   reducers: {
-    hydrateBackupState: (_state, action: PayloadAction<Partial<BackupState>>) => {
-      return {
-        ...initialState,
-        ...action.payload
-      }
-    },
     setWebDAVSyncState: (state, action: PayloadAction<Partial<RemoteSyncState>>) => {
       state.webdavSync = { ...state.webdavSync, ...action.payload }
     },
@@ -69,5 +63,5 @@ const backupSlice = createSlice({
   }
 })
 
-export const { hydrateBackupState, setWebDAVSyncState, setLocalBackupSyncState, setS3SyncState } = backupSlice.actions
+export const { setWebDAVSyncState, setLocalBackupSyncState, setS3SyncState } = backupSlice.actions
 export default backupSlice.reducer

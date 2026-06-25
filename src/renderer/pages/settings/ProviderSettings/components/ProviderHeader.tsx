@@ -1,8 +1,8 @@
 import { Button, Switch, Tooltip } from '@cherrystudio/ui'
 import { useProvider } from '@renderer/hooks/useProvider'
 import { ProviderAvatar } from '@renderer/pages/settings/ProviderSettings/components/ProviderAvatar'
-import { Bolt, BookOpen, List } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Bolt, BookOpen } from 'lucide-react'
+import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useProviderEnable } from '../hooks/providerSetting/useProviderEnable'
@@ -20,15 +20,6 @@ export default function ProviderHeader({ providerId }: ProviderHeaderProps) {
   const { toggleProviderEnabled } = useProviderEnable(providerId)
   const [apiOptionsOpen, setApiOptionsOpen] = useState(false)
   const [isTogglingEnabled, setIsTogglingEnabled] = useState(false)
-  const mountedRef = useRef(true)
-
-  useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
 
   const handleToggleEnabled = useCallback(
     async (enabled: boolean) => {
@@ -39,13 +30,9 @@ export default function ProviderHeader({ providerId }: ProviderHeaderProps) {
       try {
         await toggleProviderEnabled(enabled)
       } catch {
-        if (mountedRef.current) {
-          window.toast?.error?.(t('settings.provider.save_failed'))
-        }
+        window.toast.error(t('settings.provider.save_failed'))
       } finally {
-        if (mountedRef.current) {
-          setIsTogglingEnabled(false)
-        }
+        setIsTogglingEnabled(false)
       }
     },
     [isTogglingEnabled, t, toggleProviderEnabled]
@@ -76,27 +63,9 @@ export default function ProviderHeader({ providerId }: ProviderHeaderProps) {
                     <a
                       href={meta.docsWebsite}
                       target="_blank"
-                      rel="noopener noreferrer"
+                      rel="noreferrer"
                       aria-label={`${meta.fancyProviderName} · ${t('common.docs')}`}>
                       <BookOpen className="size-3.5" aria-hidden />
-                    </a>
-                  </Button>
-                </Tooltip>
-              )}
-              {meta.modelsWebsite && (
-                <Tooltip content={t('settings.models.list_title')}>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    asChild
-                    className="size-7 shrink-0 rounded-lg p-0 text-foreground-muted shadow-none hover:bg-accent/40 hover:text-foreground">
-                    <a
-                      href={meta.modelsWebsite}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label={`${meta.fancyProviderName} · ${t('settings.models.list_title')}`}>
-                      <List className="size-3.5" aria-hidden />
                     </a>
                   </Button>
                 </Tooltip>

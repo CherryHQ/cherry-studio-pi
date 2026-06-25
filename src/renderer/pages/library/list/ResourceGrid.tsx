@@ -180,7 +180,7 @@ export const ResourceGrid: FC<Props> = ({
       setShowAddTag(false)
     } catch (error) {
       const message = error instanceof Error ? error.message : t('library.tag_sync_failed')
-      window.toast?.error?.(message)
+      window.toast.error(message)
       logger.error('Failed to create tag', error instanceof Error ? error : new Error(String(error)), {
         name: trimmed
       })
@@ -211,7 +211,7 @@ export const ResourceGrid: FC<Props> = ({
       setRenamingTag(null)
     } catch (error) {
       const message = error instanceof Error ? error.message : t('library.tag_sync_failed')
-      window.toast?.error?.(message)
+      window.toast.error(message)
       logger.error('Failed to rename tag', error instanceof Error ? error : new Error(String(error)), {
         id: tag.id,
         name: tag.name,
@@ -233,7 +233,7 @@ export const ResourceGrid: FC<Props> = ({
       setDeletingTag(null)
     } catch (error) {
       const message = error instanceof Error ? error.message : t('library.tag_sync_failed')
-      window.toast?.error?.(message)
+      window.toast.error(message)
       logger.error('Failed to delete tag', error instanceof Error ? error : new Error(String(error)), {
         id: tag.id,
         name: tag.name

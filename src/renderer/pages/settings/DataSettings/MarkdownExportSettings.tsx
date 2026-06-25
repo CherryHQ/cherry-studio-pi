@@ -10,9 +10,7 @@ import {
 } from '@cherrystudio/ui'
 import { usePreference } from '@data/hooks/usePreference'
 import { useTheme } from '@renderer/context/ThemeProvider'
-import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import type { FC } from 'react'
-import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingHelpText, SettingRow, SettingRowTitle, SettingTitle } from '..'
@@ -38,64 +36,40 @@ const MarkdownExportSettings: FC = () => {
   const [standardizeCitationsInExport, setStandardizeCitationsInExport] = usePreference(
     'data.export.markdown.standardize_citations'
   )
-  const mountedRef = useRef(true)
-  const selectFolderSeqRef = useRef(0)
-
-  useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-      selectFolderSeqRef.current += 1
-    }
-  }, [])
-
-  const isCurrentSelectFolder = (requestSeq: number) => mountedRef.current && requestSeq === selectFolderSeqRef.current
-  const showSaveFailed = useSaveFailedToast()
 
   const handleSelectFolder = async () => {
-    const requestSeq = ++selectFolderSeqRef.current
-
-    try {
-      const path = await window.api.file.selectFolder()
-      if (!isCurrentSelectFolder(requestSeq) || !path) {
-        return
-      }
-
-      await setmarkdownExportPath(path)
-    } catch (error) {
-      if (isCurrentSelectFolder(requestSeq)) {
-        showSaveFailed(error)
-      }
+    const path = await window.api.file.selectFolder()
+    if (path) {
+      void setmarkdownExportPath(path)
     }
   }
 
   const handleClearPath = () => {
-    void setmarkdownExportPath(null).catch(showSaveFailed)
+    void setmarkdownExportPath(null)
   }
 
   const handleToggleForceDollarMath = (checked: boolean) => {
-    void setForceDollarMathInMarkdown(checked).catch(showSaveFailed)
+    void setForceDollarMathInMarkdown(checked)
   }
 
   const handleToggleTopicNaming = (checked: boolean) => {
-    void setUseTopicNamingForMessageTitle(checked).catch(showSaveFailed)
+    void setUseTopicNamingForMessageTitle(checked)
   }
 
   const handleToggleShowModelName = (checked: boolean) => {
-    void setShowModelNameInMarkdown(checked).catch(showSaveFailed)
+    void setShowModelNameInMarkdown(checked)
   }
 
   const handleToggleShowModelProvider = (checked: boolean) => {
-    void setShowModelProviderInMarkdown(checked).catch(showSaveFailed)
+    void setShowModelProviderInMarkdown(checked)
   }
 
   const handleToggleExcludeCitations = (checked: boolean) => {
-    void setExcludeCitationsInExport(checked).catch(showSaveFailed)
+    void setExcludeCitationsInExport(checked)
   }
 
   const handleToggleStandardizeCitations = (checked: boolean) => {
-    void setStandardizeCitationsInExport(checked).catch(showSaveFailed)
+    void setStandardizeCitationsInExport(checked)
   }
 
   return (

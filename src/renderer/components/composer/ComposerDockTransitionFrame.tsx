@@ -7,8 +7,8 @@ import {
   getComposerDockMotionAttributes,
   useComposerDockMotionTransition
 } from '@renderer/components/chat/motion/composerDockMotion'
-import { useOptionalQuickPanel } from '@renderer/components/composer/panelEngine'
-import { cn } from '@renderer/utils'
+import { useOptionalQuickPanel } from '@renderer/components/QuickPanel'
+import { cn } from '@renderer/utils/style'
 import type { ReactNode } from 'react'
 import { useLayoutEffect, useRef, useState } from 'react'
 

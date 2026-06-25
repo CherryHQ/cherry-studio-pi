@@ -1,5 +1,5 @@
 import { MockUseCacheUtils } from '@test-mocks/renderer/useCache'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import type React from 'react'
 import type ReactType from 'react'
 import type { ReactNode } from 'react'
@@ -77,16 +77,7 @@ vi.mock('@cherrystudio/ui', () => {
       open?: boolean
       onOpenChange?: (open: boolean) => void
     }) => <PopoverContext value={{ open, onOpenChange }}>{children}</PopoverContext>,
-    PopoverContent: ({
-      children,
-      sideOffset: _sideOffset,
-      ...props
-    }: {
-      children?: ReactNode
-      sideOffset?: number
-      [key: string]: unknown
-    }) => {
-      void _sideOffset
+    PopoverContent: ({ children, ...props }: { children?: ReactNode; [key: string]: unknown }) => {
       const context = React.use(PopoverContext)
 
       return context.open ? (
@@ -95,17 +86,7 @@ vi.mock('@cherrystudio/ui', () => {
         </div>
       ) : null
     },
-    PopoverTrigger: ({ children }: { children: ReactNode; asChild?: boolean }) => {
-      const context = React.use(PopoverContext)
-      if (!React.isValidElement(children)) return children
-
-      return React.cloneElement(children as React.ReactElement<any>, {
-        onClick: (event: React.MouseEvent) => {
-          ;(children.props as { onClick?: (event: React.MouseEvent) => void }).onClick?.(event)
-          context.onOpenChange?.(true)
-        }
-      })
-    },
+    PopoverTrigger: ({ children }: { children: ReactNode; asChild?: boolean }) => children,
     RowFlex: ({ children, ...props }: { children?: ReactNode; [key: string]: unknown }) => (
       <div data-testid="row-flex" {...props}>
         {children}
@@ -160,7 +141,6 @@ describe('UserPopup', () => {
   })
 
   afterEach(() => {
-    vi.useRealTimers()
     vi.resetModules()
   })
 
@@ -172,84 +152,5 @@ describe('UserPopup', () => {
 
     expect(screen.getByTestId('avatar-image')).toHaveClass('object-cover')
     expect(screen.getByTestId('avatar-image')).toHaveAttribute('src', avatar)
-  })
-
-  it('settles only once when hidden repeatedly', async () => {
-    vi.useFakeTimers()
-    MockUseCacheUtils.setCacheValue('app.user.avatar', '🙂')
-    const { default: UserPopup } = await import('../UserPopup')
-    const settled = vi.fn()
-
-    void UserPopup.show().then(settled)
-    const rendered = mocks.TopView.show.mock.calls[0][0] as React.ReactNode
-    render(<>{rendered}</>)
-
-    await act(async () => {
-      UserPopup.hide()
-      UserPopup.hide()
-    })
-
-    expect(mocks.TopView.hide).not.toHaveBeenCalled()
-
-    await act(async () => {
-      vi.advanceTimersByTime(200)
-      await Promise.resolve()
-    })
-
-    expect(settled).toHaveBeenCalledTimes(1)
-    expect(mocks.TopView.hide).toHaveBeenCalledTimes(1)
-    expect(mocks.TopView.hide).toHaveBeenCalledWith('UserPopup')
-  })
-
-  it('handles avatar reset failures when toast is unavailable', async () => {
-    MockUseCacheUtils.setCacheValue('app.user.avatar', '🙂')
-    const ImageStorage = (await import('@renderer/services/ImageStorage')).default
-    vi.mocked(ImageStorage.set).mockRejectedValueOnce(new Error('storage failed'))
-    Object.defineProperty(window, 'toast', {
-      configurable: true,
-      value: undefined
-    })
-
-    await renderUserPopup()
-
-    fireEvent.click(screen.getByRole('button', { name: 'common.avatar' }))
-    const resetButton = await screen.findByText('settings.general.avatar.reset')
-
-    await act(async () => {
-      fireEvent.click(resetButton)
-      await Promise.resolve()
-    })
-
-    await waitFor(() => {
-      expect(ImageStorage.set).toHaveBeenCalledWith('avatar', expect.anything())
-    })
-  })
-
-  it('shows nested avatar reset failure details', async () => {
-    MockUseCacheUtils.setCacheValue('app.user.avatar', '🙂')
-    const ImageStorage = (await import('@renderer/services/ImageStorage')).default
-    vi.mocked(ImageStorage.set).mockRejectedValueOnce({
-      error: { message: 'Invalid response: 503 Service Unavailable' }
-    })
-    Object.defineProperty(window, 'toast', {
-      configurable: true,
-      value: {
-        error: vi.fn()
-      }
-    })
-
-    await renderUserPopup()
-
-    fireEvent.click(screen.getByRole('button', { name: 'common.avatar' }))
-    const resetButton = await screen.findByText('settings.general.avatar.reset')
-
-    await act(async () => {
-      fireEvent.click(resetButton)
-      await Promise.resolve()
-    })
-
-    await waitFor(() => {
-      expect(window.toast?.error).toHaveBeenCalledWith('Invalid response: 503 Service Unavailable')
-    })
   })
 })

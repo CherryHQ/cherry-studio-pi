@@ -56,7 +56,7 @@ const CherryInSettings: FC<CherryInSettingsProps> = ({ providerId }) => {
       try {
         await updateProvider({ endpointConfigs: newEndpointConfigs })
       } catch {
-        window.toast?.error(t('settings.provider.save_failed'))
+        window.toast.error(t('settings.provider.save_failed'))
       }
     },
     [provider?.endpointConfigs, t, updateProvider]

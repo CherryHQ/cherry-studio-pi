@@ -17,7 +17,9 @@
 import type { PayloadAction } from '@reduxjs/toolkit'
 import { createSlice } from '@reduxjs/toolkit'
 import { WEB_SEARCH_PROVIDERS } from '@renderer/config/webSearchProviders'
-import type { Model, WebSearchProvider } from '@renderer/types'
+import type { Model } from '@renderer/types/model'
+import type { WebSearchProvider } from '@renderer/types/webSearchProvider'
+
 export interface SubscribeSource {
   key: number
   url: string
@@ -81,12 +83,6 @@ const websearchSlice = createSlice({
   name: 'websearch',
   initialState,
   reducers: {
-    hydrateWebSearchState: (_state, action: PayloadAction<Partial<WebSearchState>>) => {
-      return {
-        ...initialState,
-        ...action.payload
-      }
-    },
     setDefaultProvider: (state, action: PayloadAction<string>) => {
       state.defaultProvider = action.payload
     },
@@ -169,7 +165,6 @@ const websearchSlice = createSlice({
 })
 
 export const {
-  hydrateWebSearchState,
   setWebSearchProviders,
   updateWebSearchProvider,
   updateWebSearchProviders,

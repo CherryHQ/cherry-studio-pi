@@ -1,7 +1,7 @@
 import { cn } from '@cherrystudio/ui/lib/utils'
 import { throttle } from 'lodash'
 import type { FC } from 'react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 export interface ScrollbarProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'onScroll'> {
   ref?: React.Ref<HTMLDivElement | null>
@@ -35,10 +35,10 @@ const Scrollbar: FC<ScrollbarProps> = ({
     }, 1500)
   }, [clearScrollingTimeout])
 
-  const throttledInternalScrollHandler = useMemo(
-    () => throttle(handleScroll, 100, { leading: true, trailing: true }),
-    [handleScroll]
-  )
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const throttledInternalScrollHandler = useCallback(throttle(handleScroll, 100, { leading: true, trailing: true }), [
+    handleScroll
+  ])
 
   // Combined scroll handler
   const combinedOnScroll = useCallback(() => {

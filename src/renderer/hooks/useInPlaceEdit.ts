@@ -1,7 +1,6 @@
 import { loggerService } from '@logger'
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-
-import { useSaveFailedToast } from './useSaveFailedToast'
+import { useCallback, useLayoutEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 const logger = loggerService.withContext('useInPlaceEdit')
 export interface UseInPlaceEditOptions {
@@ -32,22 +31,14 @@ export interface UseInPlaceEditReturn {
  */
 export function useInPlaceEdit(options: UseInPlaceEditOptions): UseInPlaceEditReturn {
   const { onSave, onCancel, onError, autoSelectOnStart = true, trimOnSave = true } = options
-  const showSaveFailedToast = useSaveFailedToast()
+  const { t } = useTranslation()
 
   const [isSaving, setIsSaving] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [editValue, setEditValue] = useState('')
-  const mountedRef = useRef(true)
   const originalValueRef = useRef('')
+  const isSavingRef = useRef(false)
   const inputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
 
   const startEdit = useCallback((initialValue: string) => {
     setIsEditing(true)
@@ -65,7 +56,7 @@ export function useInPlaceEdit(options: UseInPlaceEditOptions): UseInPlaceEditRe
   }, [autoSelectOnStart, isEditing])
 
   const saveEdit = useCallback(async () => {
-    if (isSaving) return
+    if (isSavingRef.current) return
 
     const finalValue = trimOnSave ? editValue.trim() : editValue
     if (finalValue === originalValueRef.current) {
@@ -73,32 +64,27 @@ export function useInPlaceEdit(options: UseInPlaceEditOptions): UseInPlaceEditRe
       return
     }
 
+    isSavingRef.current = true
     setIsSaving(true)
 
     try {
       await onSave(finalValue)
-
-      if (!mountedRef.current) return
-
       setIsEditing(false)
       setEditValue('')
     } catch (error) {
       logger.error('Error saving in-place edit', { error })
 
-      if (!mountedRef.current) return
-
       // Call custom error handler if provided, otherwise show default toast
       if (onError) {
         onError(error)
       } else {
-        showSaveFailedToast(error)
+        window.toast.error(t('common.save_failed') || 'Failed to save')
       }
     } finally {
-      if (mountedRef.current) {
-        setIsSaving(false)
-      }
+      setIsSaving(false)
+      isSavingRef.current = false
     }
-  }, [isSaving, trimOnSave, editValue, onSave, onError, showSaveFailedToast])
+  }, [trimOnSave, editValue, onSave, onError, t])
 
   const cancelEdit = useCallback(() => {
     setIsEditing(false)
@@ -116,6 +102,8 @@ export function useInPlaceEdit(options: UseInPlaceEditOptions): UseInPlaceEditRe
         e.preventDefault()
         e.stopPropagation()
         cancelEdit()
+      } else if (e.key === ' ' || e.key === 'Spacebar') {
+        e.stopPropagation()
       }
     },
     [saveEdit, cancelEdit]
@@ -130,10 +118,10 @@ export function useInPlaceEdit(options: UseInPlaceEditOptions): UseInPlaceEditRe
     // 如果点击了“取消”按钮，可能会先触发 Blur 保存。
     // 通常 InPlaceEdit 的逻辑是 Blur 即 Save。
     // 如果不想 Blur 保存，可以去掉这一行，或者判断 relatedTarget。
-    if (!isSaving) {
+    if (!isSavingRef.current) {
       void saveEdit()
     }
-  }, [saveEdit, isSaving])
+  }, [saveEdit])
 
   return {
     isEditing,

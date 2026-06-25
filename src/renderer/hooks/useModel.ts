@@ -9,19 +9,14 @@ import type {
   UpdateModelDto
 } from '@shared/data/api/schemas/models'
 import type { Model, UniqueModelId } from '@shared/data/types/model'
-import { createUniqueModelId, isUniqueModelId } from '@shared/data/types/model'
-import { isNonChatModel } from '@shared/utils/model'
+import { createUniqueModelId } from '@shared/data/types/model'
 import { isUndefined, omitBy } from 'lodash'
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback } from 'react'
 import type { SWRConfiguration } from 'swr'
 
 const logger = loggerService.withContext('useModels')
 
 const EMPTY_MODELS: readonly Model[] = Object.freeze([])
-
-function normalizeModelPreferenceId(value: unknown): UniqueModelId | null {
-  return typeof value === 'string' && isUniqueModelId(value) ? value : null
-}
 
 /**
  * Reactive read of the user's default / quick / translate models. Each id
@@ -32,36 +27,21 @@ export function useDefaultModel() {
   const [defaultModelId, setDefaultModelId] = usePreference('chat.default_model_id')
   const [quickModelId, setQuickModelId] = usePreference('feature.quick_assistant.model_id')
   const [translateModelId, setTranslateModelId] = usePreference('feature.translate.model_id')
-  const normalizedDefaultModelId = normalizeModelPreferenceId(defaultModelId)
-  const normalizedQuickModelId = normalizeModelPreferenceId(quickModelId)
-  const normalizedTranslateModelId = normalizeModelPreferenceId(translateModelId)
-  const { models: enabledModels } = useModels({ enabled: true })
-  const fallbackChatModel = useMemo(
-    () => enabledModels.find((model) => !isNonChatModel(model)) ?? null,
-    [enabledModels]
-  )
-  const effectiveDefaultModelId = normalizedDefaultModelId ?? fallbackChatModel?.id ?? null
 
-  useEffect(() => {
-    if (normalizedDefaultModelId || !fallbackChatModel?.id) {
-      return
-    }
-
-    setDefaultModelId(fallbackChatModel.id).catch((error) => {
-      logger.error('Failed to initialize default model preference', { modelId: fallbackChatModel.id, error })
-    })
-  }, [fallbackChatModel?.id, normalizedDefaultModelId, setDefaultModelId])
-
-  const { model: defaultModel } = useModelById(effectiveDefaultModelId)
-  const { model: quickModel } = useModelById(normalizedQuickModelId ?? effectiveDefaultModelId)
-  const { model: translateModel } = useModelById(normalizedTranslateModelId ?? effectiveDefaultModelId)
+  const { model: defaultModel } = useModelById(defaultModelId as UniqueModelId)
+  const { model: quickModel } = useModelById((quickModelId as UniqueModelId) ?? defaultModelId)
+  const { model: translateModel } = useModelById((translateModelId as UniqueModelId) ?? defaultModelId)
 
   return {
     defaultModel,
     quickModel,
     translateModel,
     // v2 Model.id is already the UniqueModelId — store it directly.
-    setDefaultModel: (next: { id: UniqueModelId }) => setDefaultModelId(next.id),
+    setDefaultModel: async (next: { id: UniqueModelId }) => {
+      await setDefaultModelId(next.id)
+      if (!quickModelId) await setQuickModelId(next.id)
+      if (!translateModelId) await setTranslateModelId(next.id)
+    },
     setQuickModel: (next: { id: UniqueModelId }) => setQuickModelId(next.id),
     setTranslateModel: (next: { id: UniqueModelId }) => setTranslateModelId(next.id)
   }
@@ -109,7 +89,13 @@ export function useModelMutations() {
     trigger: deleteTrigger,
     isLoading: isDeleting,
     error: deleteError
-  } = useMutation('DELETE', '/models/:uniqueModelId*', { refresh: ['/models', '/pins'] })
+  } = useMutation('DELETE', '/models/:uniqueModelId*', { refresh: ['/models'] })
+
+  const {
+    trigger: bulkDeleteTrigger,
+    isLoading: isBulkDeleting,
+    error: bulkDeleteError
+  } = useMutation('DELETE', '/models', { refresh: ['/models'] })
 
   const {
     trigger: updateTrigger,
@@ -164,6 +150,18 @@ export function useModelMutations() {
     [deleteTrigger]
   )
 
+  const deleteModels = useCallback(
+    async (uniqueModelIds: UniqueModelId[]) => {
+      try {
+        await bulkDeleteTrigger({ query: { ids: uniqueModelIds } })
+      } catch (error) {
+        logger.error('Failed to bulk delete models', { count: uniqueModelIds.length, error })
+        throw error
+      }
+    },
+    [bulkDeleteTrigger]
+  )
+
   const updateModel = useCallback(
     async (providerId: string, modelId: string, updates: UpdateModelDto) => {
       try {
@@ -205,6 +203,9 @@ export function useModelMutations() {
     deleteModel,
     isDeleting,
     deleteError,
+    deleteModels,
+    isBulkDeleting,
+    bulkDeleteError,
     updateModel,
     isUpdating,
     updateError,
@@ -222,7 +223,7 @@ export function useModelMutations() {
  * should use `parseUniqueModelId(model.id)`.
  */
 export function useModelById(uniqueModelId: UniqueModelId | null | undefined) {
-  const modelKey = typeof uniqueModelId === 'string' && isUniqueModelId(uniqueModelId) ? uniqueModelId : ''
+  const modelKey = uniqueModelId ?? ''
   const { data, isLoading, error, refetch, mutate } = useQuery(`/models/${modelKey}`, {
     enabled: !!modelKey,
     swrOptions: { keepPreviousData: false }

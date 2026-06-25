@@ -1,66 +1,11 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import TranslateButton from '../TranslateButton'
 
 const mocks = vi.hoisted(() => ({
-  clipboardWriteText: vi.fn(),
-  loggerWarn: vi.fn(),
-  modalConfirm: vi.fn(),
-  toastError: vi.fn(),
-  translateText: vi.fn()
-}))
-
-function deferred<T = void>() {
-  let resolve!: (value: T | PromiseLike<T>) => void
-  let reject!: (reason?: unknown) => void
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise
-    reject = rejectPromise
-  })
-  return { promise, resolve, reject }
-}
-
-vi.mock('@cherrystudio/ui', () => ({
-  Button: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
-    <button type="button" {...props}>
-      {children}
-    </button>
-  ),
-  Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>
-}))
-
-vi.mock('@data/hooks/usePreference', () => ({
-  usePreference: (key: string) => {
-    if (key === 'chat.input.translate.target_language') return ['en-us']
-    if (key === 'chat.input.translate.show_confirm') return [false]
-    return [undefined]
-  }
-}))
-
-vi.mock('@logger', () => ({
-  loggerService: {
-    withContext: () => ({
-      error: vi.fn(),
-      warn: mocks.loggerWarn
-    })
-  }
-}))
-
-vi.mock('@renderer/hooks/translate/useTranslateLanguages', () => ({
-  useLanguages: () => ({
-    getLabel: () => 'English',
-    languages: [{ langCode: 'en-us', label: 'English' }]
-  })
-}))
-
-vi.mock('@renderer/services/TranslateService', () => ({
-  translateText: mocks.translateText
-}))
-
-vi.mock('lucide-react', () => ({
-  Languages: () => <span data-testid="languages-icon" />,
-  Loader2: () => <span data-testid="loader-icon" />
+  getLabel: vi.fn(),
+  translateInputText: vi.fn()
 }))
 
 vi.mock('react-i18next', () => ({
@@ -69,85 +14,67 @@ vi.mock('react-i18next', () => ({
   })
 }))
 
+vi.mock('@renderer/hooks/translate/useTranslateLanguages', () => ({
+  useLanguages: () => ({
+    getLabel: mocks.getLabel,
+    languages: [{ langCode: 'en-us', value: 'English', emoji: 'US' }]
+  })
+}))
+
+vi.mock('@renderer/utils/translate', () => ({
+  translateInputText: mocks.translateInputText
+}))
+
 describe('TranslateButton', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    Object.defineProperty(navigator, 'clipboard', {
-      configurable: true,
-      value: {
-        writeText: mocks.clipboardWriteText
-      }
-    })
-    Object.defineProperty(window, 'modal', {
-      configurable: true,
-      value: {
-        confirm: mocks.modalConfirm
-      }
-    })
-    Object.defineProperty(window, 'toast', {
-      configurable: true,
-      value: {
-        error: mocks.toastError
-      }
-    })
+    mocks.getLabel.mockReturnValue('English')
   })
 
-  it('continues translating when copying source text to clipboard fails', async () => {
-    mocks.clipboardWriteText.mockRejectedValueOnce(new Error('clipboard unavailable'))
-    mocks.translateText.mockResolvedValueOnce('translated text')
-    const onTranslated = vi.fn()
-
-    render(<TranslateButton text="source text" onTranslated={onTranslated} />)
-
-    fireEvent.click(screen.getByRole('button'))
-
-    await waitFor(() => {
-      expect(onTranslated).toHaveBeenCalledWith('translated text')
+  it('keeps its own translation busy state when external loading clears', async () => {
+    let resolveTranslation: (value: string) => void = () => {}
+    mocks.translateInputText.mockImplementation(({ onConfirmed }) => {
+      onConfirmed?.()
+      return new Promise<string>((resolve) => {
+        resolveTranslation = resolve
+      })
     })
-    expect(mocks.translateText).toHaveBeenCalledWith('source text', { langCode: 'en-us', label: 'English' })
-    expect(mocks.loggerWarn).toHaveBeenCalled()
-    expect(mocks.toastError).not.toHaveBeenCalled()
-  })
 
-  it('ignores translated text after unmount', async () => {
-    const translation = deferred<string>()
-    mocks.translateText.mockReturnValueOnce(translation.promise)
     const onTranslated = vi.fn()
+    const { rerender } = render(<TranslateButton text="hello" onTranslated={onTranslated} isLoading={false} />)
 
-    const { unmount } = render(<TranslateButton text="source text" onTranslated={onTranslated} />)
+    const button = screen.getByRole('button')
+    fireEvent.click(button)
 
-    fireEvent.click(screen.getByRole('button'))
+    expect(button).toBeDisabled()
+    expect(button.querySelector('.animate-spin')).toBeInTheDocument()
 
-    await waitFor(() => expect(mocks.translateText).toHaveBeenCalled())
-    unmount()
+    rerender(<TranslateButton text="hello" onTranslated={onTranslated} isLoading />)
+    rerender(<TranslateButton text="hello" onTranslated={onTranslated} isLoading={false} />)
+
+    expect(button).toBeDisabled()
+    expect(button.querySelector('.animate-spin')).toBeInTheDocument()
 
     await act(async () => {
-      translation.resolve('translated after unmount')
-      await translation.promise
+      resolveTranslation('bonjour')
     })
 
-    expect(onTranslated).not.toHaveBeenCalled()
-    expect(mocks.toastError).not.toHaveBeenCalled()
+    await vi.waitFor(() => {
+      expect(onTranslated).toHaveBeenCalledWith('bonjour')
+    })
+    expect(button).not.toBeDisabled()
   })
 
-  it('ignores translation failures after unmount', async () => {
-    const translation = deferred<string>()
-    mocks.translateText.mockReturnValueOnce(translation.promise)
-    const onTranslated = vi.fn()
+  it('derives disabled and spinner state from external loading', () => {
+    const { rerender } = render(<TranslateButton text="hello" onTranslated={vi.fn()} isLoading />)
 
-    const { unmount } = render(<TranslateButton text="source text" onTranslated={onTranslated} />)
+    const button = screen.getByRole('button')
+    expect(button).toBeDisabled()
+    expect(button.querySelector('.animate-spin')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button'))
+    rerender(<TranslateButton text="hello" onTranslated={vi.fn()} isLoading={false} />)
 
-    await waitFor(() => expect(mocks.translateText).toHaveBeenCalled())
-    unmount()
-
-    await act(async () => {
-      translation.reject(new Error('translation failed after unmount'))
-      await translation.promise.catch(() => undefined)
-    })
-
-    expect(onTranslated).not.toHaveBeenCalled()
-    expect(mocks.toastError).not.toHaveBeenCalled()
+    expect(button).not.toBeDisabled()
+    expect(button.querySelector('.animate-spin')).not.toBeInTheDocument()
   })
 })

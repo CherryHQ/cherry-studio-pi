@@ -18,9 +18,10 @@ import type { PayloadAction } from '@reduxjs/toolkit'
 import { createSlice } from '@reduxjs/toolkit'
 import { isMac } from '@renderer/config/constant'
 import { API_SERVER_DEFAULTS, DEFAULT_STREAM_OPTIONS_INCLUDE_USAGE } from '@renderer/config/constant'
-import type { ApiGatewayConfig, CodeStyleVarious, MathEngine, OpenAIServiceTier, S3Config } from '@renderer/types'
+import type { ApiGatewayConfig } from '@renderer/types/apiGateway'
+import type { CodeStyleVarious, MathEngine } from '@renderer/types/app'
+import type { OpenAIServiceTier } from '@renderer/types/provider'
 import { TRANSLATE_PROMPT } from '@shared/ai/prompts'
-import { DefaultPreferences } from '@shared/data/preference/preferenceSchemas'
 import type {
   AssistantIconType,
   AssistantTabSortType,
@@ -33,6 +34,7 @@ import type {
 import { parseTranslateLangCode, ThemeMode, UpgradeChannel } from '@shared/data/preference/preferenceTypes'
 import type { MiniAppRegionFilter } from '@shared/data/types/miniApp'
 import type { OpenAICompletionsStreamOptions, OpenAIReasoningSummary, OpenAIVerbosity } from '@shared/types/aiSdk'
+import type { S3Config } from '@shared/types/backup'
 import { v4 as uuid } from 'uuid'
 
 import type { RemoteSyncState } from './backup'
@@ -41,6 +43,18 @@ import type { RemoteSyncState } from './backup'
 
 // Re-export for backward compatibility
 // export { DEFAULT_SIDEBAR_ICONS }
+
+const DEFAULT_LEGACY_SIDEBAR_ICONS = [
+  'assistants',
+  'store',
+  'paintings',
+  'translate',
+  'mini_app',
+  'knowledge',
+  'files',
+  'code_tools',
+  'notes'
+]
 
 export interface NutstoreSyncRuntime extends RemoteSyncState {}
 
@@ -134,12 +148,6 @@ export interface SettingsState {
   webdavMaxBackups: number
   webdavSkipBackupFile: boolean
   webdavDisableStream: boolean
-  dataSyncWebdavHost: string
-  dataSyncWebdavUser: string
-  dataSyncWebdavPass: string
-  dataSyncWebdavPath: string
-  dataSyncAutoSync: boolean
-  dataSyncSyncInterval: number
   translateModelPrompt: string
   autoTranslateWithSpace: boolean
   showTranslateConfirm: boolean
@@ -286,7 +294,7 @@ export const initialState: SettingsState = {
   assistantIconType: 'emoji',
   pasteLongTextAsFile: false,
   pasteLongTextThreshold: 1500,
-  clickAssistantToShowTopic: false,
+  clickAssistantToShowTopic: true,
   autoCheckUpdate: true,
   testPlan: false,
   testChannel: UpgradeChannel.LATEST,
@@ -329,18 +337,12 @@ export const initialState: SettingsState = {
   webdavHost: '',
   webdavUser: '',
   webdavPass: '',
-  webdavPath: '/cherry-studio-pi',
+  webdavPath: '/cherry-studio',
   webdavAutoSync: false,
   webdavSyncInterval: 0,
   webdavMaxBackups: 0,
   webdavSkipBackupFile: false,
   webdavDisableStream: false,
-  dataSyncWebdavHost: '',
-  dataSyncWebdavUser: '',
-  dataSyncWebdavPass: '',
-  dataSyncWebdavPath: '/cherry-studio-pi',
-  dataSyncAutoSync: false,
-  dataSyncSyncInterval: 0,
   translateModelPrompt: TRANSLATE_PROMPT,
   autoTranslateWithSpace: false,
   showTranslateConfirm: true,
@@ -348,7 +350,8 @@ export const initialState: SettingsState = {
   customCss: '',
   topicNamingPrompt: '',
   sidebarIcons: {
-    visible: DefaultPreferences.default['ui.sidebar.icons.visible'],
+    // @ts-ignore eslint-disable-next-line
+    visible: DEFAULT_LEGACY_SIDEBAR_ICONS,
     disabled: []
   },
   narrowMode: false,
@@ -462,78 +465,6 @@ const settingsSlice = createSlice({
   name: 'settings',
   initialState,
   reducers: {
-    hydrateSettingsState: (_state, action: PayloadAction<Partial<SettingsState>>) => {
-      return {
-        ...initialState,
-        ...action.payload,
-        userTheme: {
-          ...initialState.userTheme,
-          ...action.payload.userTheme
-        },
-        codeExecution: {
-          ...initialState.codeExecution,
-          ...action.payload.codeExecution
-        },
-        codeEditor: {
-          ...initialState.codeEditor,
-          ...action.payload.codeEditor
-        },
-        codePreview: {
-          ...initialState.codePreview,
-          ...action.payload.codePreview
-        },
-        codeViewer: {
-          ...initialState.codeViewer,
-          ...action.payload.codeViewer
-        },
-        sidebarIcons: {
-          ...initialState.sidebarIcons,
-          ...action.payload.sidebarIcons
-        },
-        exportMenuOptions: {
-          ...initialState.exportMenuOptions,
-          ...action.payload.exportMenuOptions
-        },
-        openAI: {
-          ...initialState.openAI,
-          ...action.payload.openAI,
-          streamOptions: {
-            ...initialState.openAI.streamOptions,
-            ...action.payload.openAI?.streamOptions
-          }
-        },
-        notification: {
-          ...initialState.notification,
-          ...action.payload.notification
-        },
-        s3: {
-          ...initialState.s3,
-          ...action.payload.s3
-        },
-        apiServer: {
-          ...initialState.apiServer,
-          ...action.payload.apiServer
-        }
-      }
-    },
-    setDataSyncWebdavHost: (state, action: PayloadAction<string>) => {
-      state.dataSyncWebdavHost = action.payload
-    },
-    setDataSyncWebdavUser: (state, action: PayloadAction<string>) => {
-      state.dataSyncWebdavUser = action.payload
-    },
-    setDataSyncWebdavPass: (state, action: PayloadAction<string>) => {
-      state.dataSyncWebdavPass = action.payload
-    },
-    setDataSyncWebdavPath: (state, action: PayloadAction<string>) => {
-      state.dataSyncWebdavPath = action.payload
-    },
-    setDataSyncAutoSync: (state, action: PayloadAction<boolean>) => {
-      state.dataSyncAutoSync = action.payload
-    },
-    setDataSyncSyncInterval: (state, action: PayloadAction<number>) => {
-      state.dataSyncSyncInterval = action.payload
-    },
     // setShowAssistants: (state, action: PayloadAction<boolean>) => {
     //   state.showAssistants = action.payload
     // },
@@ -982,13 +913,6 @@ const settingsSlice = createSlice({
 })
 
 export const {
-  hydrateSettingsState,
-  setDataSyncWebdavHost,
-  setDataSyncWebdavUser,
-  setDataSyncWebdavPass,
-  setDataSyncWebdavPath,
-  setDataSyncAutoSync,
-  setDataSyncSyncInterval,
   // setShowModelNameInMarkdown,
   // setShowModelProviderInMarkdown,
   // setShowAssistants,
@@ -1120,9 +1044,5 @@ export const {
   setApiServerPort,
   setApiServerApiKey
 } = settingsSlice.actions
-
-export const settingsActionTypes: ReadonlySet<string> = new Set(
-  Object.values(settingsSlice.actions).map((actionCreator) => actionCreator.type)
-)
 
 export default settingsSlice.reducer

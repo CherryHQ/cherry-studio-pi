@@ -1,22 +1,17 @@
 import { Button, RadioGroup, RadioGroupItem, Slider, Switch, Tooltip } from '@cherrystudio/ui'
 import { usePreference } from '@data/hooks/usePreference'
-import { loggerService } from '@logger'
 import { isLinux, isMac, isWin } from '@renderer/config/constant'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { getSelectionDescriptionLabelKey } from '@renderer/i18n/label'
-import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
+import { ipcApi } from '@renderer/ipc'
 import { cn } from '@renderer/utils/style'
 import SelectionToolbar from '@renderer/windows/selection/toolbar/SelectionToolbar'
-import type {
-  SelectionActionItem,
-  SelectionFilterMode,
-  SelectionTriggerMode
-} from '@shared/data/preference/preferenceTypes'
+import type { SelectionFilterMode, SelectionTriggerMode } from '@shared/data/preference/preferenceTypes'
 import { Link } from '@tanstack/react-router'
 import { CircleCheck, CircleHelp, CircleX, Edit2, TriangleAlert } from 'lucide-react'
 import type React from 'react'
 import type { FC } from 'react'
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -31,8 +26,6 @@ import {
 import MacProcessTrustHintModal from './components/MacProcessTrustHintModal'
 import SelectionActionsList from './components/SelectionActionsList'
 import SelectionFilterListModal from './components/SelectionFilterListModal'
-
-const logger = loggerService.withContext('SelectionAssistantSettings')
 
 const SelectionAssistantSettings: FC = () => {
   const { theme } = useTheme()
@@ -62,102 +55,42 @@ const SelectionAssistantSettings: FC = () => {
     isLinuxCompositorCompatible: boolean
   } | null>(null)
 
-  const showSaveFailed = useCallback(
-    (error: unknown) => {
-      window.toast?.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
-    },
-    [t]
-  )
-
-  const showOperationFailed = useCallback(
-    (error: unknown) => {
-      window.toast?.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
-    },
-    [t]
-  )
-
-  const persistPreference = useCallback(
-    (operation: () => Promise<unknown>) => {
-      try {
-        void operation().catch(showSaveFailed)
-      } catch (error) {
-        showSaveFailed(error)
-      }
-    },
-    [showSaveFailed]
-  )
-
   // force disable selection assistant on non-windows systems
   useEffect(() => {
     const checkMacProcessTrust = async () => {
-      try {
-        const isTrusted = await window.api.mac.isProcessTrusted()
-        if (!isTrusted) {
-          await setSelectionEnabled(false)
-        }
-      } catch (error) {
-        showSaveFailed(error)
+      const isTrusted = await window.api.mac.isProcessTrusted()
+      if (!isTrusted) {
+        void setSelectionEnabled(false)
       }
     }
 
     if (!isSupportedOS && selectionEnabled) {
-      persistPreference(() => setSelectionEnabled(false))
+      void setSelectionEnabled(false)
       return
     } else if (isMac && selectionEnabled) {
       void checkMacProcessTrust()
     }
-  }, [isSupportedOS, persistPreference, selectionEnabled, setSelectionEnabled, showSaveFailed])
+  }, [isSupportedOS, selectionEnabled, setSelectionEnabled])
 
   useEffect(() => {
     if (isLinux) {
-      let cancelled = false
-      void window.api.selection
-        .getLinuxEnvInfo()
-        .then((info) => {
-          if (!cancelled) setLinuxEnvInfo(info)
-        })
-        .catch((error) => {
-          logger.warn('Failed to read Linux selection environment info', error as Error)
-        })
-      return () => {
-        cancelled = true
-      }
+      void ipcApi.request('selection.get_linux_env_info').then(setLinuxEnvInfo)
     }
-
-    return undefined
   }, [])
 
   const handleEnableCheckboxChange = async (checked: boolean) => {
     if (!isSupportedOS) return
 
-    try {
-      if (isMac && checked) {
-        const isTrusted = await window.api.mac.isProcessTrusted()
-        if (!isTrusted) {
-          setIsMacTrustModalOpen(true)
-          return
-        }
+    if (isMac && checked) {
+      const isTrusted = await window.api.mac.isProcessTrusted()
+      if (!isTrusted) {
+        setIsMacTrustModalOpen(true)
+        return
       }
-
-      await setSelectionEnabled(checked)
-    } catch (error) {
-      showSaveFailed(error)
     }
+
+    void setSelectionEnabled(checked)
   }
-
-  const handleActionItemsChange = useCallback(
-    (items: SelectionActionItem[]) => {
-      persistPreference(() => setActionItems(items))
-    },
-    [persistPreference, setActionItems]
-  )
-
-  const handleFilterListSave = useCallback(
-    (list: string[]) => {
-      persistPreference(() => setFilterList(list))
-    },
-    [persistPreference, setFilterList]
-  )
 
   return (
     <SettingsContentColumn theme={theme}>
@@ -168,11 +101,7 @@ const SelectionAssistantSettings: FC = () => {
             <button
               type="button"
               className="cursor-pointer border-0 bg-transparent p-0 font-normal text-link text-xs hover:text-link-hover hover:underline"
-              onClick={() =>
-                void window.api
-                  .openWebsite('https://github.com/CherryHQ/cherry-studio/issues/6505')
-                  .catch(showOperationFailed)
-              }>
+              onClick={() => window.api.openWebsite('https://github.com/CherryHQ/cherry-studio/issues/6505')}>
               {'FAQ & ' + t('settings.about.feedback.button')}
             </button>
           </div>
@@ -269,7 +198,7 @@ const SelectionAssistantSettings: FC = () => {
               </SettingLabel>
               <RadioGroup
                 value={triggerMode}
-                onValueChange={(value) => persistPreference(() => setTriggerMode(value as SelectionTriggerMode))}
+                onValueChange={(value) => setTriggerMode(value as SelectionTriggerMode)}
                 className="flex flex-wrap gap-3">
                 <Tooltip content={t('selection.settings.toolbar.trigger_mode.selected_note')}>
                   <label className="flex cursor-pointer items-center gap-2 text-sm">
@@ -308,10 +237,7 @@ const SelectionAssistantSettings: FC = () => {
                 <SettingRowTitle>{t('selection.settings.toolbar.compact_mode.title')}</SettingRowTitle>
                 <SettingDescription>{t('selection.settings.toolbar.compact_mode.description')}</SettingDescription>
               </SettingLabel>
-              <Switch
-                checked={isCompact}
-                onCheckedChange={(checked) => persistPreference(() => setIsCompact(checked))}
-              />
+              <Switch checked={isCompact} onCheckedChange={setIsCompact} />
             </SettingRow>
           </SettingGroup>
 
@@ -323,10 +249,7 @@ const SelectionAssistantSettings: FC = () => {
                 <SettingRowTitle>{t('selection.settings.window.follow_toolbar.title')}</SettingRowTitle>
                 <SettingDescription>{t('selection.settings.window.follow_toolbar.description')}</SettingDescription>
               </SettingLabel>
-              <Switch
-                checked={isFollowToolbar}
-                onCheckedChange={(checked) => persistPreference(() => setIsFollowToolbar(checked))}
-              />
+              <Switch checked={isFollowToolbar} onCheckedChange={setIsFollowToolbar} />
             </SettingRow>
             <SettingDivider />
             <SettingRow>
@@ -334,10 +257,7 @@ const SelectionAssistantSettings: FC = () => {
                 <SettingRowTitle>{t('selection.settings.window.remember_size.title')}</SettingRowTitle>
                 <SettingDescription>{t('selection.settings.window.remember_size.description')}</SettingDescription>
               </SettingLabel>
-              <Switch
-                checked={isRemeberWinSize}
-                onCheckedChange={(checked) => persistPreference(() => setIsRemeberWinSize(checked))}
-              />
+              <Switch checked={isRemeberWinSize} onCheckedChange={setIsRemeberWinSize} />
             </SettingRow>
             <SettingDivider />
             <SettingRow>
@@ -345,10 +265,7 @@ const SelectionAssistantSettings: FC = () => {
                 <SettingRowTitle>{t('selection.settings.window.auto_close.title')}</SettingRowTitle>
                 <SettingDescription>{t('selection.settings.window.auto_close.description')}</SettingDescription>
               </SettingLabel>
-              <Switch
-                checked={isAutoClose}
-                onCheckedChange={(checked) => persistPreference(() => setIsAutoClose(checked))}
-              />
+              <Switch checked={isAutoClose} onCheckedChange={setIsAutoClose} />
             </SettingRow>
             <SettingDivider />
             <SettingRow>
@@ -356,10 +273,7 @@ const SelectionAssistantSettings: FC = () => {
                 <SettingRowTitle>{t('selection.settings.window.auto_pin.title')}</SettingRowTitle>
                 <SettingDescription>{t('selection.settings.window.auto_pin.description')}</SettingDescription>
               </SettingLabel>
-              <Switch
-                checked={isAutoPin}
-                onCheckedChange={(checked) => persistPreference(() => setIsAutoPin(checked))}
-              />
+              <Switch checked={isAutoPin} onCheckedChange={setIsAutoPin} />
             </SettingRow>
             <SettingDivider />
             <SettingRow>
@@ -375,12 +289,12 @@ const SelectionAssistantSettings: FC = () => {
                 inverted
                 value={[opacityValue]}
                 onValueChange={(value) => setOpacityValue(value[0])}
-                onValueCommit={(value) => persistPreference(() => setActionWindowOpacity(value[0]))}
+                onValueCommit={(value) => setActionWindowOpacity(value[0])}
               />
             </SettingRow>
           </SettingGroup>
 
-          <SelectionActionsList actionItems={actionItems} setActionItems={handleActionItemsChange} />
+          <SelectionActionsList actionItems={actionItems} setActionItems={setActionItems} />
 
           <SettingGroup theme={theme}>
             <SettingTitle>{t('selection.settings.advanced.title')}</SettingTitle>
@@ -400,7 +314,7 @@ const SelectionAssistantSettings: FC = () => {
               </SettingLabel>
               <RadioGroup
                 value={filterMode ?? 'default'}
-                onValueChange={(value) => persistPreference(() => setFilterMode(value as SelectionFilterMode))}
+                onValueChange={(value) => setFilterMode(value as SelectionFilterMode)}
                 className="flex flex-wrap gap-3">
                 <label className="flex cursor-pointer items-center gap-2 text-sm">
                   <RadioGroupItem size="sm" value="default" />
@@ -434,7 +348,7 @@ const SelectionAssistantSettings: FC = () => {
                   open={isFilterListModalOpen}
                   onClose={() => setIsFilterListModalOpen(false)}
                   filterList={filterList}
-                  onSave={handleFilterListSave}
+                  onSave={setFilterList}
                 />
               </>
             )}

@@ -86,7 +86,7 @@ export function ResourceCardMenu({
         // The inline error text only renders while the popup is open. Toast +
         // log so the failure stays visible after menu close and lands in
         // diagnostics either way.
-        window.toast?.error(message)
+        window.toast.error(message)
         logger.error('Failed to sync resource tags', e instanceof Error ? e : new Error(String(e)), {
           resourceId: resource.id,
           type: resource.type

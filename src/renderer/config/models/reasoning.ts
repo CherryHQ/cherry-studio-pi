@@ -1,18 +1,10 @@
-/**
- * Reasoning / thinking-mode model checks and reasoning-effort configuration.
- *
- * Pure family/variant checks delegate to `@shared/utils/model`. Renderer-only
- * concerns (`ThinkingOptionConfig` mapping, `getThinkModelType`) stay here.
- * v2 `Model.capabilities` is authoritative (registry inference + baked-in
- * user overrides merged by `ModelService`).
- */
 import type {
   ReasoningEffortConfig,
   ReasoningEffortOption,
   ThinkingModelType,
   ThinkingOptionConfig
-} from '@renderer/types'
-import { getLowerBaseModelName } from '@renderer/utils'
+} from '@renderer/types/reasoning'
+import { getLowerBaseModelName } from '@renderer/utils/naming'
 import type { Model } from '@shared/data/types/model'
 import {
   DOUBAO_THINKING_AUTO_MODEL_REGEX as SHARED_DOUBAO_THINKING_AUTO_MODEL_REGEX,
@@ -33,11 +25,9 @@ import {
   isGrokReasoningModel as sharedIsGrokReasoningModel,
   isHostedGemma4ThinkingModel as sharedIsHostedGemma4ThinkingModel,
   isHunyuanReasoningModel as sharedIsHunyuanReasoningModel,
-  isKimiK27CodeModel as sharedIsKimiK27CodeModel,
   isKimiReasoningModel as sharedIsKimiReasoningModel,
   isLingReasoningModel as sharedIsLingReasoningModel,
   isMiMoReasoningModel as sharedIsMiMoReasoningModel,
-  isMiniMaxM3Model as sharedIsMiniMaxM3Model,
   isMiniMaxReasoningModel as sharedIsMiniMaxReasoningModel,
   isMistralReasoningModel as sharedIsMistralReasoningModel,
   isPerplexityReasoningModel as sharedIsPerplexityReasoningModel,
@@ -45,7 +35,6 @@ import {
   isQwenReasoningModel as sharedIsQwenReasoningModel,
   isReasoningModel as sharedIsReasoningModel,
   isStepReasoningModel as sharedIsStepReasoningModel,
-  isSupportAdaptiveThinkingClaudeModel as sharedIsSupportAdaptiveThinkingClaudeModel,
   isSupportedReasoningEffortGrokModel as sharedIsSupportedReasoningEffortGrokModel,
   isSupportedReasoningEffortPerplexityModel as sharedIsSupportedReasoningEffortPerplexityModel,
   isSupportedThinkingTokenDeepSeekModel as sharedIsSupportedThinkingTokenDeepSeekModel,
@@ -75,6 +64,7 @@ import {
   GEMINI_FLASH_MODEL_REGEX,
   getRawModelId,
   isClaude46SeriesModel,
+  isClaude47SeriesModel,
   isGemini3FlashModel,
   isGemini3ProModel,
   isGemini31FlashLiteModel,
@@ -121,7 +111,6 @@ export const MODEL_SUPPORTED_REASONING_EFFORT = {
   doubao: ['auto', 'high'] as const,
   doubao_no_auto: ['high'] as const,
   doubao_after_251015: ['minimal', 'low', 'medium', 'high'] as const,
-  minimax_m3: ['auto'] as const,
   hunyuan: ['auto'] as const,
   mimo: ['auto'] as const,
   zhipu: ['auto'] as const,
@@ -129,7 +118,6 @@ export const MODEL_SUPPORTED_REASONING_EFFORT = {
   deepseek_hybrid: ['auto'] as const,
   deepseek_v4: ['high', 'xhigh'] as const,
   kimi_k2_5: ['none', 'auto'] as const,
-  kimi_always_think: ['auto'] as const,
   claude: ['low', 'medium', 'high'] as const,
   claude46: ['low', 'medium', 'high', 'xhigh'] as const,
   mistral: ['high'] as const
@@ -163,7 +151,6 @@ export const MODEL_SUPPORTED_OPTIONS: ThinkingOptionConfig = {
   doubao: ['default', 'none', ...MODEL_SUPPORTED_REASONING_EFFORT.doubao] as const,
   doubao_no_auto: ['default', 'none', ...MODEL_SUPPORTED_REASONING_EFFORT.doubao_no_auto] as const,
   doubao_after_251015: ['default', ...MODEL_SUPPORTED_REASONING_EFFORT.doubao_after_251015] as const,
-  minimax_m3: ['default', 'none', ...MODEL_SUPPORTED_REASONING_EFFORT.minimax_m3] as const,
   mimo: ['default', 'none', ...MODEL_SUPPORTED_REASONING_EFFORT.mimo] as const,
   hunyuan: ['default', 'none', ...MODEL_SUPPORTED_REASONING_EFFORT.hunyuan] as const,
   zhipu: ['default', 'none', ...MODEL_SUPPORTED_REASONING_EFFORT.zhipu] as const,
@@ -171,7 +158,6 @@ export const MODEL_SUPPORTED_OPTIONS: ThinkingOptionConfig = {
   deepseek_hybrid: ['default', 'none', ...MODEL_SUPPORTED_REASONING_EFFORT.deepseek_hybrid] as const,
   deepseek_v4: ['default', 'none', ...MODEL_SUPPORTED_REASONING_EFFORT.deepseek_v4] as const,
   kimi_k2_5: ['default', ...MODEL_SUPPORTED_REASONING_EFFORT.kimi_k2_5] as const,
-  kimi_always_think: ['default', ...MODEL_SUPPORTED_REASONING_EFFORT.kimi_always_think] as const,
   claude: ['default', 'none', ...MODEL_SUPPORTED_REASONING_EFFORT.claude] as const,
   claude46: ['default', 'none', ...MODEL_SUPPORTED_REASONING_EFFORT.claude46] as const,
   mistral: ['default', 'none', ...MODEL_SUPPORTED_REASONING_EFFORT.mistral] as const
@@ -186,9 +172,6 @@ export const isClaude4SeriesModel = (model: Model): boolean => sharedIsClaude4Se
 export const isClaudeReasoningModel = (model?: Model): boolean => (model ? sharedIsClaudeReasoningModel(model) : false)
 
 export const isSupportedThinkingTokenClaudeModel = isClaudeReasoningModel
-
-const isSupportAdaptiveThinkingClaudeModel = (model?: Model): boolean =>
-  model ? sharedIsSupportAdaptiveThinkingClaudeModel(model) : false
 
 export const isGeminiReasoningModel = (model?: Model): boolean => (model ? sharedIsGeminiReasoningModel(model) : false)
 
@@ -255,8 +238,6 @@ export const isSupportedThinkingTokenKimiModel = (model: Model): boolean =>
 
 export const isKimiReasoningModel = (model?: Model): boolean => (model ? sharedIsKimiReasoningModel(model) : false)
 
-export const isKimiK27CodeModel = (model?: Model): boolean => (model ? sharedIsKimiK27CodeModel(model) : false)
-
 export const isDeepSeekHybridInferenceModel = (model: Model): boolean => sharedIsDeepSeekHybridInferenceModel(model)
 
 export const isDeepSeekV4PlusModel = (model: Model): boolean => sharedIsDeepSeekV4PlusModel(model)
@@ -270,8 +251,6 @@ export const isStepReasoningModel = (model?: Model): boolean => (model ? sharedI
 
 export const isMiniMaxReasoningModel = (model?: Model): boolean =>
   model ? sharedIsMiniMaxReasoningModel(model) : false
-
-export const isMiniMaxM3Model = (model?: Model): boolean => (model ? sharedIsMiniMaxM3Model(model) : false)
 
 export const isBaichuanReasoningModel = (model?: Model): boolean =>
   model ? sharedIsBaichuanReasoningModel(model) : false
@@ -306,7 +285,6 @@ function _isSupportedThinkingTokenModel(model: Model): boolean {
     isSupportedThinkingTokenHunyuanModel(model) ||
     isSupportedThinkingTokenZhipuModel(model) ||
     isSupportedThinkingTokenMiMoModel(model) ||
-    isMiniMaxM3Model(model) ||
     isSupportedThinkingTokenKimiModel(model) ||
     isSupportedThinkingTokenDeepSeekModel(model)
   )
@@ -337,7 +315,7 @@ const _getThinkModelType = (model: Model): ThinkingModelType => {
     thinkingModelType = 'claude'
     // 4.7 reuses the 4.6 effort list (low/medium/high/xhigh); provider-level
     // mapping still distinguishes them (4.7 sends native 'xhigh', 4.6 sends 'max').
-    if (isClaude46SeriesModel(model) || isSupportAdaptiveThinkingClaudeModel(model)) {
+    if (isClaude46SeriesModel(model) || isClaude47SeriesModel(model)) {
       thinkingModelType = 'claude46'
     }
   } else if (isOpenAIDeepResearchModel(model)) {
@@ -388,13 +366,12 @@ const _getThinkModelType = (model: Model): ThinkingModelType => {
   } else if (isSupportedReasoningEffortGrokModel(model)) {
     thinkingModelType = 'grok'
   } else if (isSupportedThinkingTokenQwenModel(model)) {
-    thinkingModelType = isQwenAlwaysThinkModel(model) ? 'qwen_thinking' : 'qwen'
+    if (isQwenAlwaysThinkModel(model)) thinkingModelType = 'qwen_thinking'
+    thinkingModelType = 'qwen'
   } else if (isSupportedThinkingTokenDoubaoModel(model)) {
     if (isDoubaoThinkingAutoModel(model)) thinkingModelType = 'doubao'
     else if (isDoubaoSeedAfter251015(model) || isDoubaoSeed18Model(model)) thinkingModelType = 'doubao_after_251015'
     else thinkingModelType = 'doubao_no_auto'
-  } else if (isMiniMaxM3Model(model)) {
-    thinkingModelType = 'minimax_m3'
   } else if (isSupportedThinkingTokenHunyuanModel(model)) {
     thinkingModelType = 'hunyuan'
   } else if (isSupportedReasoningEffortPerplexityModel(model)) {
@@ -408,7 +385,7 @@ const _getThinkModelType = (model: Model): ThinkingModelType => {
   } else if (isSupportedThinkingTokenMiMoModel(model)) {
     thinkingModelType = 'mimo'
   } else if (isSupportedThinkingTokenKimiModel(model)) {
-    thinkingModelType = isKimiK27CodeModel(model) ? 'kimi_always_think' : 'kimi_k2_5'
+    thinkingModelType = 'kimi_k2_5'
   } else if (isMistralReasoningModel(model)) {
     thinkingModelType = 'mistral'
   }

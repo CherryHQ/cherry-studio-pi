@@ -25,8 +25,8 @@ vi.mock('@cherrystudio/ui', async (importOriginal) => {
         {children}
       </button>
     ),
-    MenuItem: ({ active, icon, label, onClick, suffix, ...props }: any) => (
-      <button type="button" data-active={active || undefined} onClick={onClick} {...props}>
+    MenuItem: ({ icon, label, onClick, suffix, ...props }: any) => (
+      <button type="button" onClick={onClick} {...props}>
         {icon}
         <span>{label}</span>
         {suffix}

@@ -4,17 +4,17 @@ import {
   DEFAULT_MESSAGE_MENUBAR_BUTTON_IDS,
   type MessageMenuBarButtonId,
   STREAMING_DISABLED_BUTTON_IDS
-} from '@renderer/config/registry/messageMenuBarConfig'
+} from '@renderer/config/registry/messageMenuBar'
 import { getMessageTitle } from '@renderer/services/MessagesService'
-import type { TranslateLanguage } from '@renderer/types'
 import type { MessageExportView } from '@renderer/types/messageExport'
 import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { messageToMarkdown, messageToPlainText } from '@renderer/utils/export'
 import { captureScrollableAsBlob, captureScrollableAsDataURL } from '@renderer/utils/image'
 import { removeTrailingDoubleSpaces } from '@renderer/utils/markdown'
-import { createComposerRichClipboardContentFromParts } from '@renderer/utils/messageUtils/composerClipboard'
-import { getTranslationFromParts } from '@renderer/utils/messageUtils/partsHelpers'
+import { createComposerRichClipboardContentFromParts } from '@renderer/utils/message/composerClipboard'
+import { getTranslationFromParts } from '@renderer/utils/message/partsHelpers'
 import type { CherryMessagePart } from '@shared/data/types/message'
+import type { TranslateLanguage } from '@shared/data/types/translate'
 import dayjs from 'dayjs'
 import type { TFunction } from 'i18next'
 import {

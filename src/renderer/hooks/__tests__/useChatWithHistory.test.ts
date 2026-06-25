@@ -108,32 +108,6 @@ describe('useChatWithHistory', () => {
     vi.clearAllMocks()
   })
 
-  it('recreates the chat instance when the topic changes', () => {
-    const refresh = vi.fn().mockResolvedValue(refreshedMessages)
-    const firstMessages = [] as CherryUIMessage[]
-    const updatedMessages = [{ id: 'assistant-1', role: 'assistant', parts: [] }] as unknown as CherryUIMessage[]
-
-    const { rerender } = renderHook(({ topicId, messages }) => useChatWithHistory(topicId, messages, refresh), {
-      initialProps: { topicId: 'topic-a', messages: firstMessages }
-    })
-
-    const getLastChat = () => {
-      const call = mockUseChat.mock.calls[mockUseChat.mock.calls.length - 1]
-      return (call[0] as { chat: { id: string } }).chat
-    }
-
-    const firstChat = getLastChat()
-    expect(firstChat.id).toBe('topic-a')
-
-    rerender({ topicId: 'topic-a', messages: updatedMessages })
-    expect(getLastChat()).toBe(firstChat)
-
-    rerender({ topicId: 'topic-b', messages: updatedMessages })
-    const secondChat = getLastChat()
-    expect(secondChat.id).toBe('topic-b')
-    expect(secondChat).not.toBe(firstChat)
-  })
-
   it('refreshes history before resuming the matching topic when another window starts streaming', async () => {
     const refresh = vi.fn().mockResolvedValue(refreshedMessages)
 

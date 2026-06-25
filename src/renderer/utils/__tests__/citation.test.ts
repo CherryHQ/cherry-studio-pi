@@ -1,6 +1,6 @@
 import type { GroundingSupport } from '@google/genai'
-import type { Citation } from '@renderer/types'
-import { WEB_SEARCH_SOURCE } from '@renderer/types'
+import type { Citation } from '@renderer/types/message'
+import { WEB_SEARCH_SOURCE } from '@renderer/types/webSearchProvider'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
@@ -220,6 +220,7 @@ Numbered list:
 1. item with [2]`
 
       const result = normalizeCitationMarks(content, citationMap)
+      console.log(result)
 
       expect(result).toContain('citation [cite:1]')
       expect(result).toContain('blockquote with [cite:2]')
@@ -600,19 +601,6 @@ Numbered list:
       // The | in URL must be percent-encoded as %7C
       expect(result).toContain('%7C')
       expect(result).not.toMatch(/\]\(https:\/\/example\.com\/path\?a=1\|/)
-    })
-
-    it('should not emit markdown links for unsupported http-like URL schemes', () => {
-      const citation: Citation = {
-        number: 1,
-        url: 'httpx://example.com/path',
-        title: 'Unsupported URL'
-      }
-
-      const result = generateCitationTag(citation)
-
-      expect(result).toContain('1</sup>]()')
-      expect(result).not.toContain('](httpx://example.com/path)')
     })
 
     it('should truncate content to 200 characters in data-citation', () => {

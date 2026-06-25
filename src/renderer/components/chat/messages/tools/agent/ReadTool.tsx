@@ -1,6 +1,6 @@
 import CodeViewer from '@renderer/components/CodeViewer'
 import { getLanguageByFilePath } from '@renderer/utils/codeLanguage'
-import { formatFileSize, getFileName } from '@renderer/utils/file'
+import { formatFileSize } from '@renderer/utils/file'
 import { useTranslation } from 'react-i18next'
 
 import type { ToolDisclosureItem } from '../shared/ToolDisclosure'
@@ -66,7 +66,7 @@ export function ReadTool({
   const { t } = useTranslation()
   const outputString = normalizeOutputString(output)
   const stats = getOutputStats(outputString)
-  const filename = input?.file_path ? getFileName(input.file_path) : undefined
+  const filename = input?.file_path?.split('/').pop()
   const language = getLanguageByFilePath(input?.file_path ?? '')
   const { data: truncatedOutput, isTruncated, originalLength } = truncateOutput(outputString)
   const strippedOutput = truncatedOutput ? stripLineNumbers(truncatedOutput) : null

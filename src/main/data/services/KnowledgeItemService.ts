@@ -10,9 +10,8 @@ import { knowledgeItemTable } from '@data/db/schemas/knowledge'
 import { type SqliteErrorHandlers, withSqliteErrors } from '@data/db/sqliteErrors'
 import type { DbType } from '@data/db/types'
 import { loggerService } from '@logger'
-import type { OffsetPaginationResponse } from '@shared/data/api'
 import { DataApiErrorFactory } from '@shared/data/api'
-import type { ListKnowledgeItemsQuery } from '@shared/data/api/schemas/knowledges'
+import type { KnowledgeItemListResponse, ListKnowledgeItemsQuery } from '@shared/data/api/schemas/knowledges'
 import { type FileEntryId, FileEntryIdSchema } from '@shared/data/types/file'
 import { type KnowledgeItemFileRefRole, knowledgeItemSourceType } from '@shared/data/types/file/ref'
 import {
@@ -26,10 +25,11 @@ import {
   NoteItemDataSchema,
   UrlItemDataSchema
 } from '@shared/data/types/knowledge'
-import { and, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNull, ne, type SQL, sql } from 'drizzle-orm'
 import { v4 as uuidv4 } from 'uuid'
 
 import { knowledgeBaseService } from './KnowledgeBaseService'
+import { asNumericKey, decodeListCursor, encodeCursor, keysetOrdering } from './utils/keysetCursor'
 import { timestampToISO } from './utils/rowMappers'
 
 const logger = loggerService.withContext('DataApi:KnowledgeItemService')
@@ -140,35 +140,48 @@ export class KnowledgeItemService {
     return dbService.getDb()
   }
 
-  async list(baseId: string, query: ListKnowledgeItemsQuery): Promise<OffsetPaginationResponse<KnowledgeItem>> {
+  async list(baseId: string, query: ListKnowledgeItemsQuery): Promise<KnowledgeItemListResponse> {
     await knowledgeBaseService.getById(baseId)
-    const { page, limit, type, groupId } = query
-    const offset = (page - 1) * limit
-    const conditions = [eq(knowledgeItemTable.baseId, baseId), ne(knowledgeItemTable.status, 'deleting')]
+    const { limit, type, groupId } = query
+    const filterConditions: SQL[] = [eq(knowledgeItemTable.baseId, baseId), ne(knowledgeItemTable.status, 'deleting')]
 
     if (type !== undefined) {
-      conditions.push(eq(knowledgeItemTable.type, type))
+      filterConditions.push(eq(knowledgeItemTable.type, type))
     }
     if (groupId !== undefined) {
-      conditions.push(groupId === null ? isNull(knowledgeItemTable.groupId) : eq(knowledgeItemTable.groupId, groupId))
+      filterConditions.push(
+        groupId === null ? isNull(knowledgeItemTable.groupId) : eq(knowledgeItemTable.groupId, groupId)
+      )
     }
 
-    const where = and(...conditions)
+    const ordering = keysetOrdering(knowledgeItemTable.createdAt, knowledgeItemTable.id, { major: 'desc', tie: 'asc' })
+    const conditions = [...filterConditions]
+    const cursor = decodeListCursor(query.cursor, asNumericKey, 'knowledge-item')
+    if (cursor) {
+      conditions.push(ordering.where(cursor))
+    }
+
     const [rows, [{ count }]] = await Promise.all([
       this.db
         .select(knowledgeItemEntitySelection)
         .from(knowledgeItemTable)
-        .where(where)
-        .orderBy(desc(knowledgeItemTable.createdAt), desc(knowledgeItemTable.id))
-        .limit(limit)
-        .offset(offset),
-      this.db.select({ count: sql<number>`count(*)` }).from(knowledgeItemTable).where(where)
+        .where(and(...conditions))
+        .orderBy(...ordering.orderBy)
+        .limit(limit + 1),
+      this.db
+        .select({ count: sql<number>`count(*)` })
+        .from(knowledgeItemTable)
+        .where(and(...filterConditions))
     ])
+    const pageRows = rows.slice(0, limit)
 
     return {
-      items: rows.map((row) => rowToKnowledgeItem(row)),
+      items: pageRows.map((row) => rowToKnowledgeItem(row)),
       total: count,
-      page: query.page
+      nextCursor:
+        rows.length > limit
+          ? encodeCursor(pageRows[pageRows.length - 1].createdAt, pageRows[pageRows.length - 1].id)
+          : undefined
     }
   }
 

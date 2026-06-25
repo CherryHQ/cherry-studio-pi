@@ -1,12 +1,5 @@
 import { Checkbox, CustomTag, EmptyState, type EmptyStatePreset } from '@cherrystudio/ui'
 import { cn } from '@cherrystudio/ui/lib/utils'
-import {
-  getActiveModalSurfaceElements,
-  getResourceSelectorForceCloseSource,
-  requestCloseResourceSelectors,
-  RESOURCE_SELECTOR_FORCE_CLOSE_EVENT,
-  scheduleCloseTransientResourceSelectors
-} from '@renderer/components/ResourceSelector/resourceSelectorEvents'
 import Scrollbar from '@renderer/components/Scrollbar'
 import {
   MODEL_SELECTOR_ROW_CHECKBOX_CLASS,
@@ -31,7 +24,6 @@ import {
   useRef,
   useState
 } from 'react'
-import { flushSync } from 'react-dom'
 
 export type ResourceSelectorShellItem = {
   id: string
@@ -247,92 +239,15 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
   const isItemType = 'selectionType' in props && props.selectionType === 'item'
 
   const [internalOpen, setInternalOpen] = useState(false)
-  const [forceClosed, setForceClosed] = useState(false)
   const [shellKey, setShellKey] = useState(0)
-  const selectorId = useId()
-  const requestedOpen = openProp ?? internalOpen
-  const open = requestedOpen && !forceClosed
-  const openRef = useRef(open)
-  openRef.current = open
-  const mountedRef = useRef(true)
-
-  useEffect(() => {
-    return () => {
-      mountedRef.current = false
-      requestCloseResourceSelectors(selectorId)
-    }
-  }, [selectorId])
-
-  useEffect(() => {
-    if (!requestedOpen && forceClosed) {
-      setForceClosed(false)
-    }
-  }, [forceClosed, requestedOpen])
-
-  const forceClose = useCallback(() => {
-    if (!mountedRef.current) return
-    if (!openRef.current) return
-    openRef.current = false
-    setForceClosed(true)
-    setShellKey((key) => key + 1)
-    if (openProp === undefined) setInternalOpen(false)
-    onOpenChangeProp?.(false)
-  }, [openProp, onOpenChangeProp])
-
+  const open = openProp ?? internalOpen
   const handleOpenChange = useCallback(
     (next: boolean) => {
-      if (next) {
-        requestCloseResourceSelectors(selectorId)
-        setForceClosed(false)
-      } else {
-        setForceClosed(false)
-        if (mountStrategy !== 'lazy-keep') {
-          setShellKey((key) => key + 1)
-        }
-      }
       if (openProp === undefined) setInternalOpen(next)
       onOpenChangeProp?.(next)
     },
-    [mountStrategy, openProp, onOpenChangeProp, selectorId]
+    [openProp, onOpenChangeProp]
   )
-
-  useEffect(() => {
-    const handleForceClose = (event: Event) => {
-      if (getResourceSelectorForceCloseSource(event) === selectorId) return
-      forceClose()
-    }
-    window.addEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, handleForceClose)
-    return () => window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, handleForceClose)
-  }, [forceClose, selectorId])
-
-  useEffect(() => {
-    if (!open) return undefined
-
-    const getExternalModalSurfaces = () =>
-      getActiveModalSurfaceElements().filter((element) => !element.closest('[data-selector-shell-root="true"]'))
-    const knownSurfaces = new WeakSet(getExternalModalSurfaces())
-    let closed = false
-    const closeIfNewModalSurfaceAppears = () => {
-      if (closed) return
-      const hasNewModalSurface = getExternalModalSurfaces().some((element) => !knownSurfaces.has(element))
-      if (!hasNewModalSurface) return
-
-      closed = true
-      forceClose()
-    }
-    const observer = new MutationObserver(closeIfNewModalSurfaceAppears)
-    observer.observe(document.body, {
-      subtree: true,
-      childList: true,
-      attributes: true,
-      attributeFilter: ['aria-hidden', 'aria-modal', 'class', 'data-slot', 'data-state', 'hidden', 'role', 'style']
-    })
-    window.queueMicrotask(closeIfNewModalSurfaceAppears)
-    return () => {
-      closed = true
-      observer.disconnect()
-    }
-  }, [forceClose, open])
 
   const pendingCloseActionRef = useRef<(() => void) | null>(null)
   const runPendingCloseAction = useCallback(() => {
@@ -346,20 +261,15 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
     (action: () => void) => {
       pendingCloseActionRef.current = action
       if (!open) {
-        requestCloseResourceSelectors(selectorId)
-        setForceClosed(false)
         setShellKey((key) => key + 1)
         runPendingCloseAction()
         return
       }
 
-      requestCloseResourceSelectors(selectorId)
-      // eslint-disable-next-line @eslint-react/dom/no-flush-sync -- prevent the selector portal from lingering above the modal/router action that follows.
-      flushSync(forceClose)
-      scheduleCloseTransientResourceSelectors(selectorId)
-      runPendingCloseAction()
+      setShellKey((key) => key + 1)
+      handleOpenChange(false)
     },
-    [forceClose, open, runPendingCloseAction, selectorId]
+    [handleOpenChange, open, runPendingCloseAction]
   )
 
   const [searchValue, setSearchValue] = useState('')

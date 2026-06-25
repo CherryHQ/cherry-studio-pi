@@ -57,60 +57,35 @@ export const useDebouncedRender = (
 
   const containerRef = useRef<HTMLDivElement>(null)
   const debouncedFunctionRef = useRef<ReturnType<typeof debounce> | null>(null)
-  const renderVersionRef = useRef(0)
-  const mountedRef = useRef(true)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-
-  useEffect(() => {
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
 
   // 包装渲染函数，添加容器检查和错误处理
   const wrappedRenderFunction = useCallback(
     async (content: string): Promise<void> => {
-      const renderVersion = ++renderVersionRef.current
-
       // 检查渲染前条件
       if ((shouldRender && !shouldRender()) || !content) {
-        if (mountedRef.current && renderVersion === renderVersionRef.current) {
-          setIsLoading(false)
-        }
         return
       }
 
       if (!containerRef.current) {
         logger.warn('Container element not available')
-        if (mountedRef.current && renderVersion === renderVersionRef.current) {
-          setError('Container element not available')
-          setIsLoading(false)
-        }
-        return
+        throw new Error('Container element not available')
       }
 
       try {
-        if (mountedRef.current && renderVersion === renderVersionRef.current) {
-          setIsLoading(true)
-        }
+        setIsLoading(true)
 
         await renderFunction(content, containerRef.current)
 
         // 渲染成功，确保清除错误状态
-        if (mountedRef.current && renderVersion === renderVersionRef.current) {
-          setError(null)
-        }
+        setError(null)
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown rendering error'
         logger.error(errorMessage)
-        if (mountedRef.current && renderVersion === renderVersionRef.current) {
-          setError(errorMessage)
-        }
+        setError(errorMessage)
       } finally {
-        if (mountedRef.current && renderVersion === renderVersionRef.current) {
-          setIsLoading(false)
-        }
+        setIsLoading(false)
       }
     },
     [renderFunction, shouldRender]
@@ -146,11 +121,8 @@ export const useDebouncedRender = (
   )
 
   const cancelRender = useCallback(() => {
-    renderVersionRef.current += 1
     debouncedRender.cancel()
-    if (mountedRef.current) {
-      setIsLoading(false)
-    }
+    setIsLoading(false)
   }, [debouncedRender])
 
   const clearError = useCallback(() => {

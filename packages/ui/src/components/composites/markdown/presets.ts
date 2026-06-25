@@ -34,7 +34,7 @@ export function withMath(opts?: WithMathOptions): PluginConfig['math'] {
 
 /** Mermaid diagram plugin. Heavy — only import where actually rendered. */
 export function withMermaid(): PluginConfig['mermaid'] {
-  return mermaid as unknown as PluginConfig['mermaid']
+  return mermaid
 }
 
 /**

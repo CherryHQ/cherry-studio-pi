@@ -4,7 +4,7 @@ import type { McpServer } from '@shared/data/types/mcpServer'
 
 const logger = loggerService.withContext('McpSettings/utils')
 
-type McpServerDraft = Omit<Partial<McpServer>, 'timeout'> & { timeout?: number | null; url?: string }
+type McpServerDraft = Partial<McpServer> & { url?: string }
 type CreateMcpServerDraft = McpServerDraft & Pick<McpServer, 'name'>
 
 const stripReadonlyMcpServerFields = (server: McpServerDraft): UpdateMcpServerDto => {

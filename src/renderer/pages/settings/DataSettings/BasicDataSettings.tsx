@@ -1,24 +1,21 @@
 import { LoadingOutlined, WifiOutlined } from '@ant-design/icons'
 import { Button, RowFlex, Switch, Tooltip } from '@cherrystudio/ui'
 import { usePreference } from '@data/hooks/usePreference'
-import { loggerService } from '@logger'
 import BackupPopup from '@renderer/components/Popups/BackupPopup'
 import LanTransferPopup from '@renderer/components/Popups/LanTransferPopup'
 import RestorePopup from '@renderer/components/Popups/RestorePopup'
+import { occupiedDirs } from '@renderer/config/constant'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { useTimer } from '@renderer/hooks/useTimer'
 import { reset } from '@renderer/services/BackupService'
-import type { AppInfo } from '@renderer/types'
-import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
+import type { AppInfo } from '@renderer/types/app'
 import { cn } from '@renderer/utils/style'
 import { FolderInput, FolderOpen, FolderOutput, SaveIcon } from 'lucide-react'
 import type React from 'react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingHelpText, SettingRow, SettingRowTitle, SettingTitle } from '..'
-
-const logger = loggerService.withContext('BasicDataSettings')
 
 const BasicDataSettings: React.FC = () => {
   const { t } = useTranslation()
@@ -27,120 +24,59 @@ const BasicDataSettings: React.FC = () => {
   const { theme } = useTheme()
   const { setTimeoutTimer } = useTimer()
   const [skipBackupFile, setSkipBackupFile] = usePreference('data.backup.general.skip_backup_file')
-  const clearCacheConfirmRef = useRef(false)
-  const clearCacheOperationRef = useRef(false)
-
-  const showOperationFailed = useCallback(
-    (error: unknown) => {
-      window.toast?.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
-    },
-    [t]
-  )
-
-  const showSaveFailed = useCallback(
-    (error: unknown) => {
-      window.toast?.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
-    },
-    [t]
-  )
-
-  const requestRelaunch = useCallback(
-    (options?: Parameters<typeof window.api.application.relaunch>[0]) => {
-      void window.api.application.relaunch(options).catch((error) => {
-        logger.error('Failed to relaunch app after data path change', error as Error)
-        showOperationFailed(error)
-      })
-    },
-    [showOperationFailed]
-  )
-
-  const releaseQuitHold = useCallback(
-    async (holdId: string) => {
-      try {
-        await window.api.application.allowQuit(holdId)
-      } catch (error) {
-        logger.error('Failed to release data migration quit hold', error as Error)
-        showOperationFailed(error)
-      }
-    },
-    [showOperationFailed]
-  )
 
   useEffect(() => {
-    let cancelled = false
-    void window.api
-      .getAppInfo()
-      .then((info) => {
-        if (!cancelled) setAppInfo(info)
-      })
-      .catch((error) => {
-        logger.warn('Failed to read app info for data settings', error as Error)
-      })
-    void window.api
-      .getCacheSize()
-      .then((size) => {
-        if (!cancelled) setCacheSize(size)
-      })
-      .catch((error) => {
-        logger.warn('Failed to read cache size', error as Error)
-      })
-    return () => {
-      cancelled = true
-    }
+    void window.api.getAppInfo().then(setAppInfo)
+    void window.api.getCacheSize().then(setCacheSize)
   }, [])
 
   const handleSelectAppDataPath = async () => {
-    try {
-      if (!appInfo || !appInfo.appDataPath) {
-        return
-      }
-
-      const newAppDataPath = await window.api.select({
-        properties: ['openDirectory', 'createDirectory'],
-        title: t('settings.data.app_data.select_title')
-      })
-
-      if (!newAppDataPath) {
-        return
-      }
-
-      // check new app data path is root path
-      const pathParts = newAppDataPath.split(/[/\\]/).filter((part: string) => part !== '')
-      if (pathParts.length <= 1) {
-        window.toast?.error(t('settings.data.app_data.select_error_root_path'))
-        return
-      }
-
-      // check new app data path is not in old app data path
-      const isInOldPath = await window.api.isPathInside(newAppDataPath, appInfo.appDataPath)
-      if (isInOldPath) {
-        window.toast?.error(t('settings.data.app_data.select_error_same_path'))
-        return
-      }
-
-      // check new app data path is not in app install path
-      const isInInstallPath = await window.api.isPathInside(newAppDataPath, appInfo.installPath)
-      if (isInInstallPath) {
-        window.toast?.error(t('settings.data.app_data.select_error_in_app_path'))
-        return
-      }
-
-      // check new app data path has write permission
-      const hasWritePermission = await window.api.hasWritePermission(newAppDataPath)
-      if (!hasWritePermission) {
-        window.toast?.error(t('settings.data.app_data.select_error_write_permission'))
-        return
-      }
-
-      const migrationTitle = (
-        <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{t('settings.data.app_data.migration_title')}</div>
-      )
-      const migrationClassName = 'migration-modal'
-      void showMigrationConfirmModal(appInfo.appDataPath, newAppDataPath, migrationTitle, migrationClassName)
-    } catch (error) {
-      logger.error('Failed to select app data path', error as Error)
-      window.toast?.error(formatErrorMessageWithPrefix(error, t('settings.data.app_data.path_change_failed')))
+    if (!appInfo || !appInfo.appDataPath) {
+      return
     }
+
+    const newAppDataPath = await window.api.select({
+      properties: ['openDirectory', 'createDirectory'],
+      title: t('settings.data.app_data.select_title')
+    })
+
+    if (!newAppDataPath) {
+      return
+    }
+
+    // check new app data path is root path
+    const pathParts = newAppDataPath.split(/[/\\]/).filter((part: string) => part !== '')
+    if (pathParts.length <= 1) {
+      window.toast.error(t('settings.data.app_data.select_error_root_path'))
+      return
+    }
+
+    // check new app data path is not in old app data path
+    const isInOldPath = await window.api.isPathInside(newAppDataPath, appInfo.appDataPath)
+    if (isInOldPath) {
+      window.toast.error(t('settings.data.app_data.select_error_same_path'))
+      return
+    }
+
+    // check new app data path is not in app install path
+    const isInInstallPath = await window.api.isPathInside(newAppDataPath, appInfo.installPath)
+    if (isInInstallPath) {
+      window.toast.error(t('settings.data.app_data.select_error_in_app_path'))
+      return
+    }
+
+    // check new app data path has write permission
+    const hasWritePermission = await window.api.hasWritePermission(newAppDataPath)
+    if (!hasWritePermission) {
+      window.toast.error(t('settings.data.app_data.select_error_write_permission'))
+      return
+    }
+
+    const migrationTitle = (
+      <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{t('settings.data.app_data.migration_title')}</div>
+    )
+    const migrationClassName = 'migration-modal'
+    void showMigrationConfirmModal(appInfo.appDataPath, newAppDataPath, migrationTitle, migrationClassName)
   }
 
   const doubleConfirmModalBeforeCopyData = (newPath: string) => {
@@ -151,14 +87,14 @@ const BasicDataSettings: React.FC = () => {
       okText: t('common.confirm'),
       cancelText: t('common.cancel'),
       onOk: () => {
-        window.toast?.info({
+        window.toast.info({
           title: t('settings.data.app_data.restart_notice'),
           timeout: 2000
         })
         setTimeoutTimer(
           'doubleConfirmModalBeforeCopyData',
           () => {
-            requestRelaunch({
+            void window.api.application.relaunch({
               args: ['--new-data-path=' + newPath]
             })
           },
@@ -236,14 +172,14 @@ const BasicDataSettings: React.FC = () => {
               return
             }
 
-            window.toast?.info({
+            window.toast.info({
               title: t('settings.data.app_data.restart_notice'),
               timeout: 3000
             })
             setTimeoutTimer(
               'showMigrationConfirmModal_1',
               () => {
-                requestRelaunch({
+                void window.api.application.relaunch({
                   args: ['--new-data-path=' + newPath]
                 })
               },
@@ -252,20 +188,20 @@ const BasicDataSettings: React.FC = () => {
             return
           }
           await window.api.setAppDataPath(newPath)
-          window.toast?.success(t('settings.data.app_data.path_changed_without_copy'))
+          window.toast.success(t('settings.data.app_data.path_changed_without_copy'))
 
           setAppInfo(await window.api.getAppInfo())
 
           setTimeoutTimer(
             'showMigrationConfirmModal_2',
             () => {
-              window.toast?.success(t('settings.data.app_data.select_success'))
-              requestRelaunch()
+              window.toast.success(t('settings.data.app_data.select_success'))
+              void window.api.application.relaunch()
             },
             500
           )
         } catch (error) {
-          window.toast?.error({
+          window.toast.error({
             title: t('settings.data.app_data.path_change_failed') + ': ' + error,
             timeout: 5000
           })
@@ -348,17 +284,36 @@ const BasicDataSettings: React.FC = () => {
 
     await new Promise((resolve) => setTimeoutTimer('startMigration_1', resolve, 2000))
 
-    const copyResult = await window.api.copy(originalPath, newPath)
+    const copyResult = await window.api.copy(
+      originalPath,
+      newPath,
+      occupiedDirs.map((dir) => originalPath + '/' + dir)
+    )
 
     if (progressInterval) {
       clearInterval(progressInterval)
     }
 
+    updateProgress(100, 'success')
+
     if (!copyResult.success) {
+      await new Promise<void>((resolve) => {
+        setTimeoutTimer(
+          'startMigration_2',
+          () => {
+            loadingModal.destroy()
+            window.toast.error({
+              title: t('settings.data.app_data.copy_failed') + ': ' + copyResult.error,
+              timeout: 5000
+            })
+            resolve()
+          },
+          500
+        )
+      })
+
       throw new Error(copyResult.error || 'Unknown error during copy')
     }
-
-    updateProgress(100, 'success')
 
     await window.api.setAppDataPath(newPath)
 
@@ -366,7 +321,7 @@ const BasicDataSettings: React.FC = () => {
 
     loadingModal.destroy()
 
-    window.toast?.success({
+    window.toast.success({
       title: t('settings.data.app_data.copy_success'),
       timeout: 2000
     })
@@ -399,29 +354,26 @@ const BasicDataSettings: React.FC = () => {
       )
 
       const { loadingModal, progressInterval, updateProgress } = showProgressModal(title, className, PathsContent)
-      let holdId: string | null = null
-      let quitHoldReleased = false
-      const releaseQuitHoldOnce = async () => {
-        if (!holdId || quitHoldReleased) return
-
-        quitHoldReleased = true
-        await releaseQuitHold(holdId)
-      }
-
+      const holdId = await window.api.application.preventQuit(t('settings.data.app_data.stop_quit_app_reason'))
       try {
-        holdId = await window.api.application.preventQuit(t('settings.data.app_data.stop_quit_app_reason'))
         await startMigration(originalPath, newDataPath, progressInterval, updateProgress, loadingModal)
 
         setAppInfo(await window.api.getAppInfo())
 
-        window.toast?.success(t('settings.data.app_data.select_success'))
-        await releaseQuitHoldOnce()
-        requestRelaunch({
-          args: ['--user-data-dir=' + newDataPath]
-        })
+        setTimeoutTimer(
+          'handleDataMigration',
+          () => {
+            window.toast.success(t('settings.data.app_data.select_success'))
+            void window.api.application.allowQuit(holdId)
+            void window.api.application.relaunch({
+              args: ['--user-data-dir=' + newDataPath]
+            })
+          },
+          1000
+        )
       } catch (error) {
-        await releaseQuitHoldOnce()
-        window.toast?.error({
+        void window.api.application.allowQuit(holdId)
+        window.toast.error({
           title: t('settings.data.app_data.copy_failed') + ': ' + error,
           timeout: 5000
         })
@@ -441,23 +393,13 @@ const BasicDataSettings: React.FC = () => {
     if (!path) return
     if (path?.endsWith('log')) {
       const dirPath = path.split(/[/\\]/).slice(0, -1).join('/')
-      void window.api.openPath(dirPath).catch(showOperationFailed)
+      void window.api.openPath(dirPath)
     } else {
-      void window.api.openPath(path).catch(showOperationFailed)
+      void window.api.openPath(path)
     }
   }
 
   const handleClearCache = () => {
-    if (clearCacheConfirmRef.current || clearCacheOperationRef.current) {
-      return
-    }
-
-    const clearCacheGuard = () => {
-      if (clearCacheOperationRef.current) return
-      clearCacheConfirmRef.current = false
-    }
-
-    clearCacheConfirmRef.current = true
     window.modal.confirm({
       title: t('settings.data.clear_cache.title'),
       content: t('settings.data.clear_cache.confirm'),
@@ -466,30 +408,21 @@ const BasicDataSettings: React.FC = () => {
       okButtonProps: {
         danger: true
       },
-      onCancel: clearCacheGuard,
       onOk: async () => {
-        if (clearCacheOperationRef.current) {
-          return
-        }
-
-        clearCacheOperationRef.current = true
         try {
           await window.api.clearCache()
           await window.api.trace.cleanLocalData()
           await window.api.getCacheSize().then(setCacheSize)
-          window.toast?.success(t('settings.data.clear_cache.success'))
+          window.toast.success(t('settings.data.clear_cache.success'))
         } catch (error) {
-          window.toast?.error(t('settings.data.clear_cache.error'))
-        } finally {
-          clearCacheOperationRef.current = false
-          clearCacheConfirmRef.current = false
+          window.toast.error(t('settings.data.clear_cache.error'))
         }
       }
     })
   }
 
   const onSkipBackupFilesChange = (value: boolean) => {
-    void setSkipBackupFile(value).catch(showSaveFailed)
+    void setSkipBackupFile(value)
   }
 
   return (

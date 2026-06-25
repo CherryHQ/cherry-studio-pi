@@ -5,16 +5,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useShowWorkspace } from '../useShowWorkspace'
 
-function deferred<T = void>() {
-  let resolve!: (value: T | PromiseLike<T>) => void
-  let reject!: (reason?: unknown) => void
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise
-    reject = rejectPromise
-  })
-  return { promise, resolve, reject }
-}
-
 vi.mock('react-i18next', async (importOriginal) => {
   const actual = await importOriginal<typeof ReactI18next>()
 
@@ -66,32 +56,7 @@ describe('useShowWorkspace', () => {
     })
 
     await waitFor(() => {
-      expect(toastErrorMock).toHaveBeenCalledWith('notes.settings.save_failed: persist failed')
+      expect(toastErrorMock).toHaveBeenCalledWith('notes.settings.save_failed')
     })
-  })
-
-  it('ignores stale workspace visibility persistence failures after unmount', async () => {
-    const save = deferred()
-    MockUsePreferenceUtils.mockPreferenceReturn(
-      'feature.notes.show_workspace',
-      false,
-      vi.fn().mockReturnValue(save.promise)
-    )
-
-    const { result, unmount } = renderHook(() => useShowWorkspace())
-
-    act(() => {
-      result.current.toggleShowWorkspace()
-    })
-
-    unmount()
-
-    await act(async () => {
-      save.reject(new Error('late failure'))
-      await save.promise.catch(() => undefined)
-      await Promise.resolve()
-    })
-
-    expect(toastErrorMock).not.toHaveBeenCalled()
   })
 })

@@ -38,17 +38,8 @@ async function getCherryAiFreeModel(): Promise<Model | undefined> {
   }
 }
 
-async function getDefaultDiagnosisModel(): Promise<Model | undefined> {
-  try {
-    return await readDefaultModel()
-  } catch (error) {
-    logger.warn('Failed to read default diagnosis model', error as Error)
-    return undefined
-  }
-}
-
 async function buildModelsToTry(context?: DiagnosisContext): Promise<Model[]> {
-  const defaultModel = await getDefaultDiagnosisModel()
+  const defaultModel = await readDefaultModel()
   const models: Model[] = []
 
   // CherryAI free model as primary diagnosis model
@@ -79,7 +70,7 @@ function buildContextHint(errorInfo: Record<string, unknown>, context?: Diagnosi
     msg.includes('forbidden')
   ) {
     const provider = errorInfo.provider || context?.providerName || 'the provider'
-    return `## Context\nThe user is calling ${provider} API and got an authentication error. Cherry Studio Pi lets users configure API keys per provider in provider settings.\n`
+    return `## Context\nThe user is calling ${provider} API and got an authentication error. Cherry Studio lets users configure API keys per provider in provider settings.\n`
   }
 
   // Quota / rate limit
@@ -102,7 +93,7 @@ function buildContextHint(errorInfo: Record<string, unknown>, context?: Diagnosi
     msg.includes('proxy') ||
     msg.includes('certificate')
   ) {
-    return `## Context\nNetwork or proxy error. Cherry Studio Pi supports HTTP/SOCKS proxy configuration in general settings. The user may be behind a firewall or using a custom API endpoint.\n`
+    return `## Context\nNetwork or proxy error. Cherry Studio supports HTTP/SOCKS proxy configuration in general settings. The user may be behind a firewall or using a custom API endpoint.\n`
   }
 
   // MCP
@@ -116,7 +107,7 @@ function buildContextHint(errorInfo: Record<string, unknown>, context?: Diagnosi
   }
 
   // Generic
-  return `## Context\nCherry Studio Pi is an AI chat app connecting to LLM providers (OpenAI, Anthropic, Google, Ollama, etc.) with API keys. Error occurred during ${source || 'chat'}.\n`
+  return `## Context\nCherry Studio is an AI chat app connecting to LLM providers (OpenAI, Anthropic, Google, Ollama, etc.) with API keys. Error occurred during ${source || 'chat'}.\n`
 }
 
 function parseResponse(raw: string): DiagnosisResult {
@@ -131,45 +122,17 @@ function parseResponse(raw: string): DiagnosisResult {
     }
   }
 
-  let parsed: DiagnosisResult
-  try {
-    parsed = JSON.parse(cleaned) as DiagnosisResult
-  } catch {
-    const fallbackText = cleaned.trim().replace(/\s+/g, ' ').slice(0, 300)
-    if (!fallbackText) {
-      throw new Error('Invalid diagnosis response format')
-    }
-
-    return {
-      summary: fallbackText,
-      category: 'unknown',
-      explanation: fallbackText,
-      steps: []
-    }
-  }
+  const parsed = JSON.parse(cleaned) as DiagnosisResult
 
   if (!parsed.summary || !Array.isArray(parsed.steps)) {
     throw new Error('Invalid diagnosis response format')
   }
 
-  const rawSteps = parsed.steps as unknown[]
-  const steps = rawSteps
-    .map((step) => {
-      if (typeof step === 'string') return step
-      if (step && typeof step === 'object') {
-        const text = (step as Partial<DiagnosisStep>).text
-        return typeof text === 'string' ? text : ''
-      }
-      return ''
-    })
-    .map((text) => text.trim())
-    .filter(Boolean)
-
   return {
     summary: parsed.summary,
     category: parsed.category || 'unknown',
     explanation: parsed.explanation || parsed.summary,
-    steps: steps.map((text) => ({ text }))
+    steps: parsed.steps.map((s) => ({ text: typeof s === 'string' ? s : s.text }))
   }
 }
 
@@ -209,7 +172,7 @@ export async function diagnoseError(
   // Build context hint based on error source
   const contextHint = buildContextHint(errorInfo, context)
 
-  const prompt = `You are an error diagnosis assistant for Cherry Studio Pi, an AI chat desktop app.
+  const prompt = `You are an error diagnosis assistant for Cherry Studio, an AI chat desktop app.
 Analyze the error and return a JSON diagnosis in ${language}.
 
 ${contextHint}
@@ -255,7 +218,7 @@ Output: {"summary":"OpenAI API key is invalid or expired","category":"auth","exp
  * Returns a one-line summary in the user's language, or empty string on failure.
  */
 export async function classifyErrorByAI(error: SerializedError, language: string): Promise<string> {
-  const prompt = `You are an error diagnosis assistant for Cherry Studio Pi. Summarize this error in one sentence (max 30 words) in ${language}. Return ONLY the summary text, no JSON, no markdown, no quotes.`
+  const prompt = `You are an error diagnosis assistant for Cherry Studio. Summarize this error in one sentence (max 30 words) in ${language}. Return ONLY the summary text, no JSON, no markdown, no quotes.`
   const content = `Error: ${error.name}: ${error.message}`
 
   const modelsToTry = await buildModelsToTry()

@@ -1,62 +1,48 @@
 import { Avatar, AvatarFallback, Button, RowFlex, Switch, Tooltip } from '@cherrystudio/ui'
 import { getModelLogo } from '@renderer/config/models'
-import { cn } from '@renderer/utils'
-import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
+import { cn } from '@renderer/utils/style'
 import type { Model } from '@shared/data/types/model'
-import { Settings } from 'lucide-react'
-import React, { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { Settings, Trash2 } from 'lucide-react'
+import React, { memo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { FreeTrialModelTag } from '../components/FreeTrialModelTag'
 import ModelTagsWithLabel from '../components/ModelTagsWithLabel'
 import { modelListClasses } from '../primitives/ProviderSettingsPrimitives'
+import { getModelOperationErrorMessage } from './errorMessage'
 
 interface ModelListItemProps {
   ref?: React.RefObject<HTMLDivElement>
   model: Model
   disabled?: boolean
   onEdit: (model: Model) => void
+  onDelete: (model: Model) => Promise<void>
   onToggleEnabled: (model: Model, enabled: boolean) => Promise<void>
 }
 
-const ModelListItem: React.FC<ModelListItemProps> = ({ ref, model, disabled, onEdit, onToggleEnabled }) => {
+const ModelListItem: React.FC<ModelListItemProps> = ({ ref, model, disabled, onEdit, onDelete, onToggleEnabled }) => {
   const { t } = useTranslation()
-  const [toggling, setToggling] = useState(false)
-  const togglingRef = useRef(false)
-  const mountedRef = useRef(true)
-
-  useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
 
   const handleEdit = useCallback(() => {
     onEdit(model)
   }, [model, onEdit])
 
-  const handleToggleEnabled = useCallback(
-    async (enabled: boolean) => {
-      if (togglingRef.current) {
-        return
-      }
+  const handleDelete = useCallback(() => {
+    void onDelete(model).catch((error) => {
+      window.toast.error(
+        getModelOperationErrorMessage(error, {
+          fallback: t('settings.models.manage.operation_failed'),
+          modelInUseByKnowledgeBase: t('settings.models.manage.model_in_use_by_knowledge_base')
+        })
+      )
+    })
+  }, [model, onDelete, t])
 
-      togglingRef.current = true
-      setToggling(true)
-      try {
-        await onToggleEnabled(model, enabled)
-      } catch (error) {
-        if (mountedRef.current) {
-          window.toast?.error(formatErrorMessageWithPrefix(error, t('settings.models.manage.operation_failed')))
-        }
-      } finally {
-        togglingRef.current = false
-        if (mountedRef.current) {
-          setToggling(false)
-        }
-      }
+  const handleToggleEnabled = useCallback(
+    (enabled: boolean) => {
+      void onToggleEnabled(model, enabled).catch(() => {
+        window.toast.error(t('settings.models.manage.operation_failed'))
+      })
     },
     [model, onToggleEnabled, t]
   )
@@ -96,6 +82,18 @@ const ModelListItem: React.FC<ModelListItemProps> = ({ ref, model, disabled, onE
                 <Settings className="size-3" />
               </Button>
             </Tooltip>
+            <Tooltip content={t('settings.models.manage.remove_model')} placement="top">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="inline-flex size-5 shrink-0 items-center justify-center rounded-md p-0 text-muted-foreground/35 opacity-0 shadow-none transition-opacity hover:bg-accent/50 hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
+                aria-label={t('settings.models.manage.remove_model')}
+                disabled={disabled}
+                onClick={handleDelete}>
+                <Trash2 className="size-3" />
+              </Button>
+            </Tooltip>
           </div>
         </div>
       </RowFlex>
@@ -110,10 +108,10 @@ const ModelListItem: React.FC<ModelListItemProps> = ({ ref, model, disabled, onE
           <div className="flex h-7 items-center" onClick={(event) => event.stopPropagation()}>
             <Switch
               checked={model.isEnabled}
-              disabled={disabled || toggling}
+              disabled={disabled}
               size="xs"
               aria-label={t('common.enabled')}
-              onCheckedChange={(enabled) => void handleToggleEnabled(enabled)}
+              onCheckedChange={handleToggleEnabled}
             />
           </div>
         </div>

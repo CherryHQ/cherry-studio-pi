@@ -11,9 +11,8 @@ import { usePreference } from '@data/hooks/usePreference'
 import { loggerService } from '@logger'
 import { getBackupProgressLabelKey } from '@renderer/i18n/label'
 import { backup, backupToLanTransfer } from '@renderer/services/BackupService'
-import { getErrorMessage } from '@renderer/utils/error'
 import { IpcChannel } from '@shared/IpcChannel'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { TopView } from '../TopView'
@@ -37,78 +36,32 @@ interface ProgressData {
 const PopupContainer: React.FC<Props> = ({ resolve, backupType = 'direct' }) => {
   const [open, setOpen] = useState(true)
   const [progressData, setProgressData] = useState<ProgressData>()
-  const [running, setRunning] = useState(false)
-  const mountedRef = useRef(true)
-  const operationSeqRef = useRef(0)
-  const runningRef = useRef(false)
   const { t } = useTranslation()
   const [skipBackupFile] = usePreference('data.backup.general.skip_backup_file')
   const close = useTopViewClose({ resolve, setOpen, topViewKey: TopViewKey })
 
   useEffect(() => {
-    mountedRef.current = true
-
     const removeListener = window.electron.ipcRenderer.on(IpcChannel.BackupProgress, (_, data: ProgressData) => {
-      if (mountedRef.current) {
-        setProgressData(data)
-      }
+      setProgressData(data)
     })
 
     return () => {
-      mountedRef.current = false
-      operationSeqRef.current += 1
-      runningRef.current = false
       removeListener()
     }
   }, [])
 
-  const isCurrentBackup = (operationSeq: number) => mountedRef.current && operationSeqRef.current === operationSeq
-
   const onOk = async () => {
-    if (runningRef.current) {
-      return
-    }
-
     logger.debug(`skipBackupFile: ${skipBackupFile}, backupType: ${backupType}`)
 
-    const operationSeq = ++operationSeqRef.current
-    runningRef.current = true
-    setRunning(true)
-    let didClose = false
-    try {
-      if (backupType === 'lan-transfer') {
-        await backupToLanTransfer()
-      } else {
-        await backup(skipBackupFile)
-      }
-      if (!isCurrentBackup(operationSeq)) {
-        return
-      }
-
-      didClose = true
-      close({})
-    } catch (error) {
-      if (!isCurrentBackup(operationSeq)) {
-        return
-      }
-
-      logger.error('Backup failed:', error as Error)
-      window.toast?.error(`${t('message.backup.failed')}: ${getErrorMessage(error)}`)
-    } finally {
-      if (operationSeqRef.current === operationSeq) {
-        runningRef.current = false
-      }
-      if (!didClose && isCurrentBackup(operationSeq)) {
-        setRunning(false)
-      }
+    if (backupType === 'lan-transfer') {
+      await backupToLanTransfer()
+    } else {
+      await backup(skipBackupFile)
     }
+    close({})
   }
 
   const onCancel = () => {
-    if (runningRef.current) {
-      return
-    }
-
     close({})
   }
 
@@ -133,8 +86,11 @@ const PopupContainer: React.FC<Props> = ({ resolve, backupType = 'direct' }) => 
   const content = isLanTransferMode ? t('settings.data.export_to_phone.file.content') : t('backup.content')
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && !runningRef.current && onCancel()}>
-      <DialogContent className="sm:max-w-[520px]" onPointerDownOutside={(event) => event.preventDefault()}>
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onCancel()}>
+      <DialogContent
+        closeOnOverlayClick={false}
+        className="sm:max-w-[520px]"
+        onPointerDownOutside={(event) => event.preventDefault()}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
@@ -152,10 +108,10 @@ const PopupContainer: React.FC<Props> = ({ resolve, backupType = 'direct' }) => 
           </div>
         )}
         <DialogFooter>
-          <Button variant="outline" disabled={isDisabled || running} onClick={onCancel}>
+          <Button variant="outline" disabled={isDisabled} onClick={onCancel}>
             {t('common.cancel')}
           </Button>
-          <Button disabled={isDisabled || running} loading={running} onClick={onOk}>
+          <Button disabled={isDisabled} onClick={onOk}>
             {okText}
           </Button>
         </DialogFooter>

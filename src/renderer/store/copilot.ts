@@ -32,12 +32,6 @@ export const copilotSlice = createSlice({
   name: 'copilot',
   initialState,
   reducers: {
-    hydrateCopilotState: (_state, action: PayloadAction<Partial<CopilotState>>) => {
-      return {
-        ...initialState,
-        ...action.payload
-      }
-    },
     setUsername: (state, action: PayloadAction<string>) => {
       state.username = action.payload
     },
@@ -54,7 +48,6 @@ export const copilotSlice = createSlice({
   }
 })
 
-export const { hydrateCopilotState, setUsername, setAvatar, setDefaultHeaders, updateCopilotState, resetCopilotState } =
-  copilotSlice.actions
+export const { setUsername, setAvatar, setDefaultHeaders, updateCopilotState, resetCopilotState } = copilotSlice.actions
 
 export default copilotSlice.reducer

@@ -15,8 +15,8 @@ import type { InstalledSkill } from '@shared/data/types/agent'
 import type { Assistant } from '@shared/data/types/assistant'
 import type { Prompt } from '@shared/data/types/prompt'
 import type { Tag } from '@shared/data/types/tag'
-import { useNavigate, useSearch } from '@tanstack/react-router'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from '@tanstack/react-router'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useAgentMutations } from './adapters/agentAdapter'
@@ -38,7 +38,6 @@ import {
   useAssistantPresetCatalog
 } from './list/useAssistantPresetCatalog'
 import { useResourceLibrary } from './list/useResourceLibrary'
-import type { LibraryRouteAction, LibraryRouteSearch } from './routeSearch'
 import type { AgentDetail, LibrarySidebarFilter, ResourceItem, ResourceType, TagItem } from './types'
 import { serializeAssistantForExport } from './utils/assistantTransfer'
 
@@ -48,20 +47,6 @@ type PromptDialogState = { prompt: Prompt | null } | null
 
 const DEFAULT_RESOURCE_TYPE = RESOURCE_TYPE_ORDER[0]
 const DIALOG_EXIT_ANIMATION_MS = 200
-
-function parseRouteResourceType(value: unknown): ResourceType | null {
-  return typeof value === 'string' && RESOURCE_TYPE_ORDER.includes(value as ResourceType)
-    ? (value as ResourceType)
-    : null
-}
-
-function parseRouteAction(value: unknown): LibraryRouteAction | null {
-  return value === 'create' || value === 'edit' ? value : null
-}
-
-function parseRouteId(value: unknown): string | null {
-  return typeof value === 'string' && value.trim() ? value : null
-}
 
 /**
  * Build the top-bar chip list.
@@ -96,13 +81,8 @@ function buildTags(resources: ResourceItem[], backendTags: Tag[], filterType?: R
 export default function LibraryPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const routeSearch = useSearch({ strict: false }) as LibraryRouteSearch
-  const routeResourceType = parseRouteResourceType(routeSearch.resourceType)
-  const routeAction = parseRouteAction(routeSearch.action)
-  const routeId = parseRouteId(routeSearch.id)
-  const handledRouteActionRef = useRef<string | null>(null)
   const [sidebarFilter, setSidebarFilter] = useState<LibrarySidebarFilter>(() => ({
-    resourceType: routeResourceType ?? DEFAULT_RESOURCE_TYPE
+    resourceType: DEFAULT_RESOURCE_TYPE
   }))
   const [search, setSearch] = useState('')
   const [activeTag, setActiveTag] = useState<string | null>(null)
@@ -194,7 +174,7 @@ export default function LibraryPage() {
         refetch()
         setPromptDialog(null)
       } catch (error) {
-        window.toast?.error?.(
+        window.toast.error(
           formatErrorMessageWithPrefix(
             error,
             t(prompt ? 'settings.prompts.errors.updateFailed' : 'settings.prompts.errors.createFailed')
@@ -249,7 +229,7 @@ export default function LibraryPage() {
           await duplicateAssistant(r.raw)
           refetch()
         } catch (error) {
-          window.toast?.error?.(error instanceof Error ? error.message : t('library.duplicate_assistant_failed'))
+          window.toast.error(error instanceof Error ? error.message : t('library.duplicate_assistant_failed'))
         }
       }
     },
@@ -264,7 +244,7 @@ export default function LibraryPage() {
         [getAssistantPresetCatalogKey(preset)]: assistant.id
       }))
       refetch()
-      window.toast?.success?.(t('common.add_success'))
+      window.toast.success(t('common.add_success'))
       return assistant
     },
     [createAssistant, refetch, setAddedAssistantPresets, t]
@@ -275,7 +255,7 @@ export default function LibraryPage() {
       try {
         await addAssistantPreset(preset)
       } catch (error) {
-        window.toast?.error?.(error instanceof Error ? error.message : t('library.assistant_catalog.add_failed'))
+        window.toast.error(error instanceof Error ? error.message : t('library.assistant_catalog.add_failed'))
       }
     },
     [addAssistantPreset, t]
@@ -299,7 +279,7 @@ export default function LibraryPage() {
     try {
       await addAssistantPreset(previewAssistantPreset)
     } catch (error) {
-      window.toast?.error?.(error instanceof Error ? error.message : t('library.assistant_catalog.add_failed'))
+      window.toast.error(error instanceof Error ? error.message : t('library.assistant_catalog.add_failed'))
     } finally {
       setPreviewAssistantPresetAdding(false)
     }
@@ -327,7 +307,7 @@ export default function LibraryPage() {
           filters: [{ name: t('assistants.presets.import.file_filter'), extensions: ['json'] }]
         })
       } catch (error) {
-        window.toast?.error?.(error instanceof Error ? error.message : t('library.export_assistant_failed'))
+        window.toast.error(error instanceof Error ? error.message : t('library.export_assistant_failed'))
       }
     },
     [t]
@@ -349,59 +329,6 @@ export default function LibraryPage() {
       setPromptDialog({ prompt: null })
     }
   }, [])
-
-  const clearLibraryRouteSearch = useCallback(() => {
-    void navigate({ to: '/app/library', search: {}, replace: true })
-  }, [navigate])
-
-  useEffect(() => {
-    if (!routeResourceType) return
-    setSidebarFilter((current) =>
-      current.resourceType === routeResourceType ? current : { resourceType: routeResourceType }
-    )
-  }, [routeResourceType])
-
-  useEffect(() => {
-    if (!routeAction || !routeResourceType) return
-
-    const actionKey = `${routeResourceType}:${routeAction}:${routeId ?? ''}`
-    if (handledRouteActionRef.current === actionKey) return
-
-    if (routeAction === 'create') {
-      handleCreate(routeResourceType)
-      handledRouteActionRef.current = actionKey
-      clearLibraryRouteSearch()
-      return
-    }
-
-    if (!routeId) {
-      handledRouteActionRef.current = actionKey
-      clearLibraryRouteSearch()
-      return
-    }
-
-    const resource = allResources.find((item) => item.type === routeResourceType && item.id === routeId)
-    if (!resource) {
-      if (!isLoading) {
-        handledRouteActionRef.current = actionKey
-        clearLibraryRouteSearch()
-      }
-      return
-    }
-
-    handleOpenResource(resource)
-    handledRouteActionRef.current = actionKey
-    clearLibraryRouteSearch()
-  }, [
-    allResources,
-    clearLibraryRouteSearch,
-    handleCreate,
-    handleOpenResource,
-    isLoading,
-    routeAction,
-    routeId,
-    routeResourceType
-  ])
 
   const handleCreateDialogOpenChange = useCallback(
     (open: boolean) => {

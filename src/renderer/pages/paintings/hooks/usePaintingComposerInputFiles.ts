@@ -1,6 +1,6 @@
 import { loggerService } from '@logger'
-import type { ComposerAttachment } from '@renderer/utils/messageUtils/composerAttachment'
-import { createComposerFileTokenSourceId } from '@renderer/utils/messageUtils/composerFileTokenSource'
+import type { ComposerAttachment } from '@renderer/utils/message/composerAttachment'
+import { createComposerFileTokenSourceId } from '@renderer/utils/message/composerFileTokenSource'
 import type { FileEntry } from '@shared/data/types/file/fileEntry'
 import type { FilePath } from '@shared/types/file/common'
 import { getFileTypeByExt } from '@shared/utils/file/fileType'

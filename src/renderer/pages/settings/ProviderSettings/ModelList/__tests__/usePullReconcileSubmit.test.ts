@@ -4,32 +4,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { usePullReconcileSubmit } from '../usePullReconcileSubmit'
 
-const { reconcileTriggerMock, useMutationMock } = vi.hoisted(() => ({
-  reconcileTriggerMock: vi.fn(),
-  useMutationMock: vi.fn()
+const { reconcileTriggerMock } = vi.hoisted(() => ({
+  reconcileTriggerMock: vi.fn()
 }))
 const useProviderMock = vi.fn()
 const updateProviderMock = vi.fn()
 
-type Deferred<T> = {
-  promise: Promise<T>
-  resolve: (value: T) => void
-  reject: (reason?: unknown) => void
-}
-
-function deferred<T>(): Deferred<T> {
-  let resolve: (value: T) => void = () => {}
-  let reject: (reason?: unknown) => void = () => {}
-  const promise = new Promise<T>((promiseResolve, promiseReject) => {
-    resolve = promiseResolve
-    reject = promiseReject
-  })
-
-  return { promise, resolve, reject }
-}
-
 vi.mock('@data/hooks/useDataApi', () => ({
-  useMutation: (...args: unknown[]) => useMutationMock(...args)
+  useMutation: () => ({
+    trigger: reconcileTriggerMock,
+    isLoading: false
+  })
 }))
 
 vi.mock('@renderer/hooks/useProvider', () => ({
@@ -56,11 +41,6 @@ describe('usePullReconcileSubmit', () => {
   beforeEach(() => {
     reconcileTriggerMock.mockReset()
     reconcileTriggerMock.mockResolvedValue([])
-    useMutationMock.mockReset()
-    useMutationMock.mockReturnValue({
-      trigger: reconcileTriggerMock,
-      isLoading: false
-    })
     useProviderMock.mockReset()
     updateProviderMock.mockReset()
     updateProviderMock.mockResolvedValue(undefined)
@@ -98,9 +78,6 @@ describe('usePullReconcileSubmit', () => {
     })
 
     expect(reconcileTriggerMock).toHaveBeenCalledTimes(1)
-    expect(useMutationMock).toHaveBeenCalledWith('POST', '/providers/:providerId/models:reconcile', {
-      refresh: ['/models', '/pins']
-    })
     expect(reconcileTriggerMock).toHaveBeenCalledWith({
       params: { providerId: 'cherryin' },
       body: {
@@ -181,61 +158,6 @@ describe('usePullReconcileSubmit', () => {
     expect(reconcileTriggerMock).toHaveBeenCalled()
     expect(onApplyCommitted).not.toHaveBeenCalled()
     expect(window.toast.error).toHaveBeenCalledWith('settings.models.manage.sync_pull_failed')
-  })
-
-  it('ignores a successful reconcile after the owner unmounts', async () => {
-    const reconcile = deferred<Model[]>()
-    reconcileTriggerMock.mockReturnValueOnce(reconcile.promise)
-    const onApplyCommitted = vi.fn()
-    const { result, unmount } = renderHook(() => usePullReconcileSubmit({ providerId: 'cherryin', onApplyCommitted }))
-    let applyPromise!: Promise<void>
-
-    act(() => {
-      applyPromise = result.current.confirmApply({
-        toAdd: [],
-        toRemove: ['cherryin::old-model']
-      })
-    })
-
-    unmount()
-
-    await act(async () => {
-      reconcile.resolve([])
-      await applyPromise
-    })
-
-    expect(reconcileTriggerMock).toHaveBeenCalledTimes(1)
-    expect(updateProviderMock).not.toHaveBeenCalled()
-    expect(onApplyCommitted).not.toHaveBeenCalled()
-    expect(window.toast.success).not.toHaveBeenCalled()
-    expect(window.toast.error).not.toHaveBeenCalled()
-  })
-
-  it('ignores a failed reconcile after the owner unmounts', async () => {
-    const reconcile = deferred<Model[]>()
-    reconcileTriggerMock.mockReturnValueOnce(reconcile.promise)
-    const onApplyCommitted = vi.fn()
-    const { result, unmount } = renderHook(() => usePullReconcileSubmit({ providerId: 'cherryin', onApplyCommitted }))
-    let applyPromise!: Promise<void>
-
-    act(() => {
-      applyPromise = result.current.confirmApply({
-        toAdd: [],
-        toRemove: ['cherryin::old-model']
-      })
-    })
-
-    unmount()
-
-    await act(async () => {
-      reconcile.reject(new Error('reconcile failed after unmount'))
-      await applyPromise
-    })
-
-    expect(reconcileTriggerMock).toHaveBeenCalledTimes(1)
-    expect(onApplyCommitted).not.toHaveBeenCalled()
-    expect(window.toast.success).not.toHaveBeenCalled()
-    expect(window.toast.error).not.toHaveBeenCalled()
   })
 
   it('keeps the drawer dirty on rejection of a large payload — no partial commit', async () => {

@@ -7,7 +7,7 @@ import { ToolDisclosure, type ToolDisclosureItem } from '@renderer/components/ch
 import type { ToolResponseLike } from '@renderer/components/chat/messages/tools/toolResponse'
 import type { MessageToolApprovalInput } from '@renderer/components/chat/messages/types'
 import Scrollbar from '@renderer/components/Scrollbar'
-import type { McpToolResponse, NormalToolResponse } from '@renderer/types'
+import type { McpToolResponse, NormalToolResponse } from '@renderer/types/mcpTool'
 import { cn } from '@renderer/utils/style'
 import { ArrowRight, Wrench } from 'lucide-react'
 import { useCallback, useState } from 'react'
@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next'
 
 import type { ComposerOverride } from '../ComposerContext'
 import type { PermissionRequestComposerRequest } from './permissionRequestComposerRequest'
+
 export type { PermissionRequestComposerRequest } from './permissionRequestComposerRequest'
 export { findLatestPendingPermissionRequest } from './permissionRequestComposerRequest'
 
@@ -213,7 +214,7 @@ export default function PermissionRequestComposer({ request, onRespond, classNam
           action,
           approvalId: request.approvalId
         })
-        window.toast?.error?.(t('agent.toolPermission.error.sendFailed'))
+        window.toast.error(t('agent.toolPermission.error.sendFailed'))
         setIsSubmitting(false)
       }
     },

@@ -15,18 +15,15 @@ import {
 import { loggerService } from '@logger'
 import { TopView } from '@renderer/components/TopView'
 import { useModelMutations, useModels } from '@renderer/hooks/useModel'
-import { useProviderMutations } from '@renderer/hooks/useProvider'
 import type { CreateModelDto } from '@shared/data/api/schemas/models'
 import type { Model } from '@shared/data/types/model'
-import { ENDPOINT_TYPE, type EndpointType } from '@shared/data/types/model'
+import { ENDPOINT_TYPE, type EndpointType, parseUniqueModelId } from '@shared/data/types/model'
 import type { Provider } from '@shared/data/types/provider'
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { drawerClasses } from '../primitives/ProviderSettingsPrimitives'
-import { enableProviderWhenModelsAvailable } from '../utils/providerEnablement'
 import { MODEL_ENDPOINT_OPTIONS } from './ModelDrawer/helpers'
-import { getProviderModelApiId } from './utils'
 
 const logger = loggerService.withContext('ProviderSettings:NewApiBatchAddModelPopup')
 
@@ -49,55 +46,39 @@ type FieldType = {
 const PopupContainer: React.FC<Props> = ({ title, provider, resolve, batchModels }) => {
   const [open, setOpen] = useState(true)
   const resolvedRef = useRef(false)
-  const mountedRef = useRef(true)
   const [endpointType, setEndpointType] = useState<EndpointType>(ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS)
   const [submitting, setSubmitting] = useState(false)
-  const submittingRef = useRef(false)
   const { createModels } = useModelMutations()
-  const { updateProvider } = useProviderMutations(provider.id)
   const { models: existingModels } = useModels({ providerId: provider.id })
   const { t } = useTranslation()
 
-  useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
-
   const closeWithResult = (data: any) => {
-    if (resolvedRef.current || !mountedRef.current) {
-      return false
+    if (resolvedRef.current) {
+      return
     }
     resolvedRef.current = true
     setOpen(false)
     resolve(data)
-    return true
   }
 
   const onCancel = () => {
-    if (submittingRef.current) {
-      return
-    }
-
     closeWithResult({})
   }
 
   const onAddModel = async (values: FieldType) => {
-    const existingModelApiIds = new Set(existingModels.map(getProviderModelApiId))
+    const existingModelApiIds = new Set(existingModels.map((model) => parseUniqueModelId(model.id).modelId))
     const modelsToAdd = batchModels.filter((model) => {
-      const modelId = getProviderModelApiId(model)
+      const modelId = model.apiModelId ?? parseUniqueModelId(model.id).modelId
       return !existingModelApiIds.has(modelId)
     })
 
     if (modelsToAdd.length === 0) {
-      window.toast?.error(t('error.model.exists'))
+      window.toast.error(t('error.model.exists'))
       return false
     }
 
     const dtos: CreateModelDto[] = modelsToAdd.map((model) => {
-      const modelId = getProviderModelApiId(model)
+      const modelId = model.apiModelId ?? parseUniqueModelId(model.id).modelId
       return {
         providerId: provider.id,
         modelId,
@@ -107,35 +88,10 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve, batchModels
       }
     })
     await createModels(dtos)
-    if (!mountedRef.current) {
-      return false
-    }
-
-    if (!provider.isEnabled) {
-      const enabled = await enableProviderWhenModelsAvailable(
-        provider,
-        updateProvider,
-        dtos.length,
-        'manual_batch_add_model'
-      )
-      if (!mountedRef.current) {
-        return false
-      }
-
-      if (!enabled) {
-        window.toast?.error(t('settings.models.add.provider_enable_failed'))
-        return false
-      }
-    }
     return true
   }
 
   const onSubmit = async () => {
-    if (submittingRef.current) {
-      return
-    }
-
-    submittingRef.current = true
     try {
       setSubmitting(true)
       if (await onAddModel({ provider: provider.id, endpointType })) {
@@ -143,14 +99,9 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve, batchModels
       }
     } catch (error) {
       logger.error('Failed to batch add models', { providerId: provider.id, error })
-      if (mountedRef.current) {
-        window.toast?.error(t('settings.models.manage.sync_pull_failed'))
-      }
+      window.toast.error(t('settings.models.manage.sync_pull_failed'))
     } finally {
-      submittingRef.current = false
-      if (mountedRef.current && !resolvedRef.current) {
-        setSubmitting(false)
-      }
+      setSubmitting(false)
     }
   }
 
@@ -174,10 +125,7 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve, batchModels
             <label className="font-medium text-[13px] text-foreground/85">
               {t('settings.models.add.endpoint_type.label')}
             </label>
-            <Select
-              value={endpointType}
-              onValueChange={(value) => setEndpointType(value as EndpointType)}
-              disabled={submitting}>
+            <Select value={endpointType} onValueChange={(value) => setEndpointType(value as EndpointType)}>
               <SelectTrigger className={drawerClasses.selectTrigger}>
                 <SelectValue placeholder={t('settings.models.add.endpoint_type.placeholder')} />
               </SelectTrigger>
@@ -195,7 +143,7 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve, batchModels
           <Button variant="outline" onClick={onCancel} disabled={submitting}>
             {t('common.cancel')}
           </Button>
-          <Button disabled={submitting} loading={submitting} onClick={() => void onSubmit()}>
+          <Button disabled={submitting} onClick={() => void onSubmit()}>
             {t('settings.models.add.add_model')}
           </Button>
         </DialogFooter>

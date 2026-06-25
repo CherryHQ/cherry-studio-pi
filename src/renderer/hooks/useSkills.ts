@@ -1,7 +1,7 @@
 import { useInvalidateCache, useQuery } from '@data/hooks/useDataApi'
 import { loggerService } from '@logger'
 import { searchSkills } from '@renderer/services/SkillSearchService'
-import type { InstalledSkill, LocalSkill, SkillResult, SkillSearchResult } from '@types'
+import type { InstalledSkill, LocalSkill, SkillResult, SkillSearchResult } from '@shared/types/skill'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 const logger = loggerService.withContext('useSkills')
@@ -18,7 +18,7 @@ function unwrapSkillResult<T>(result: SkillResult<T>): T {
 function reportSkillMutationError(action: string, error: unknown): string {
   const message = skillErrorMessage(error)
   logger.error(`Failed to ${action}`, { error: message })
-  window.toast?.error(message)
+  window.toast.error(message)
   return message
 }
 
@@ -93,7 +93,7 @@ export function useInstalledSkills(agentId?: string) {
   }
 }
 
-export function buildAvailableSkills(globalSkills: readonly InstalledSkill[], localSkills: readonly LocalSkill[]) {
+function buildAvailableSkills(globalSkills: readonly InstalledSkill[], localSkills: readonly LocalSkill[]) {
   const seen = new Set<string>()
   const available: LocalSkill[] = []
 
@@ -189,63 +189,42 @@ export function useSkillSearch() {
   const [results, setResults] = useState<SkillSearchResult[]>([])
   const [searching, setSearching] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const requestSeqRef = useRef(0)
-  const activeAbortControllerRef = useRef<AbortController | null>(null)
+  const abortRef = useRef(0)
 
-  const abortActiveSearch = useCallback(() => {
-    activeAbortControllerRef.current?.abort(new DOMException('Skill search superseded', 'AbortError'))
-    activeAbortControllerRef.current = null
+  const search = useCallback(async (query: string) => {
+    const requestId = ++abortRef.current
+
+    if (!query.trim()) {
+      setResults([])
+      setSearching(false)
+      return
+    }
+
+    setSearching(true)
+    setError(null)
+
+    try {
+      const data = await searchSkills(query)
+      if (requestId === abortRef.current) {
+        setResults(data)
+      }
+    } catch (err) {
+      if (requestId === abortRef.current) {
+        setError(err instanceof Error ? err.message : 'Search failed')
+      }
+    } finally {
+      if (requestId === abortRef.current) {
+        setSearching(false)
+      }
+    }
   }, [])
 
-  const search = useCallback(
-    async (query: string) => {
-      const requestId = ++requestSeqRef.current
-      abortActiveSearch()
-
-      if (!query.trim()) {
-        setResults([])
-        setSearching(false)
-        return
-      }
-
-      const controller = new AbortController()
-      activeAbortControllerRef.current = controller
-
-      setSearching(true)
-      setError(null)
-
-      try {
-        const data = await searchSkills(query, { signal: controller.signal })
-        if (requestId === requestSeqRef.current && !controller.signal.aborted) {
-          setResults(data)
-        }
-      } catch (err) {
-        if (requestId === requestSeqRef.current && !controller.signal.aborted) {
-          setError(err instanceof Error ? err.message : 'Search failed')
-        }
-      } finally {
-        if (requestId === requestSeqRef.current && activeAbortControllerRef.current === controller) {
-          activeAbortControllerRef.current = null
-          setSearching(false)
-        }
-      }
-    },
-    [abortActiveSearch]
-  )
-
   const clear = useCallback(() => {
-    requestSeqRef.current++
-    abortActiveSearch()
+    abortRef.current++
     setResults([])
     setSearching(false)
     setError(null)
-  }, [abortActiveSearch])
-
-  useEffect(() => {
-    return () => {
-      abortActiveSearch()
-    }
-  }, [abortActiveSearch])
+  }, [])
 
   return { results, searching, error, search, clear }
 }
@@ -256,34 +235,10 @@ export function useSkillSearch() {
 export function useSkillInstall() {
   const [installingKey, setInstallingKey] = useState<string | null>(null)
   const invalidate = useInvalidateCache()
-  const mountedRef = useRef(true)
-  const installSeqRef = useRef(0)
-
-  useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
-
-  const beginInstall = useCallback((key: string) => {
-    const installSeq = ++installSeqRef.current
-    if (mountedRef.current) {
-      setInstallingKey(key)
-    }
-    return installSeq
-  }, [])
-
-  const finishInstall = useCallback((installSeq: number) => {
-    if (mountedRef.current && installSeqRef.current === installSeq) {
-      setInstallingKey(null)
-    }
-  }, [])
 
   const install = useCallback(
     async (installSource: string): Promise<{ skill: InstalledSkill | null; error?: string }> => {
-      const installSeq = beginInstall(installSource)
+      setInstallingKey(installSource)
       try {
         const skill = unwrapSkillResult(await window.api.skill.install({ installSource }))
         await refreshSkillsBestEffort(invalidate)
@@ -291,15 +246,15 @@ export function useSkillInstall() {
       } catch (err) {
         return { skill: null, error: skillErrorMessage(err) }
       } finally {
-        finishInstall(installSeq)
+        setInstallingKey(null)
       }
     },
-    [beginInstall, finishInstall, invalidate]
+    [invalidate]
   )
 
   const installFromZip = useCallback(
     async (zipFilePath: string): Promise<InstalledSkill | null> => {
-      const installSeq = beginInstall('zip')
+      setInstallingKey('zip')
       try {
         const skill = unwrapSkillResult(await window.api.skill.installFromZip({ zipFilePath }))
         await refreshSkillsBestEffort(invalidate)
@@ -307,15 +262,15 @@ export function useSkillInstall() {
       } catch (error) {
         reportAndRethrowSkillMutationError('install skill from zip', error)
       } finally {
-        finishInstall(installSeq)
+        setInstallingKey(null)
       }
     },
-    [beginInstall, finishInstall, invalidate]
+    [invalidate]
   )
 
   const installFromDirectory = useCallback(
     async (directoryPath: string): Promise<InstalledSkill | null> => {
-      const installSeq = beginInstall('directory')
+      setInstallingKey('directory')
       try {
         const skill = unwrapSkillResult(await window.api.skill.installFromDirectory({ directoryPath }))
         await refreshSkillsBestEffort(invalidate)
@@ -323,10 +278,10 @@ export function useSkillInstall() {
       } catch (error) {
         reportAndRethrowSkillMutationError('install skill from directory', error)
       } finally {
-        finishInstall(installSeq)
+        setInstallingKey(null)
       }
     },
-    [beginInstall, finishInstall, invalidate]
+    [invalidate]
   )
 
   const isInstalling = useCallback(

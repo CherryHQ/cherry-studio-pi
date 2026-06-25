@@ -3,7 +3,7 @@ import MarkdownEditor from '@renderer/components/MarkdownEditor'
 import { TopView } from '@renderer/components/TopView'
 import { useProvider } from '@renderer/hooks/useProvider'
 import type { FC } from 'react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import ProviderSettingsDrawer from './primitives/ProviderSettingsDrawer'
@@ -24,15 +24,6 @@ const PopupContainer: FC<Props> = ({ providerId, resolve }) => {
   const [notes, setNotes] = useState<string>(provider?.settings?.notes || '')
   const [edited, setEdited] = useState(false)
   const [saving, setSaving] = useState(false)
-  const mountedRef = useRef(true)
-  const savingRef = useRef(false)
-  const resolvedRef = useRef(false)
-
-  useEffect(() => {
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
 
   useEffect(() => {
     if (edited) {
@@ -43,49 +34,29 @@ const PopupContainer: FC<Props> = ({ providerId, resolve }) => {
   }, [edited, provider?.settings?.notes])
 
   const handleSave = async () => {
-    if (savingRef.current || !provider) {
-      return
-    }
-
-    savingRef.current = true
     setSaving(true)
     try {
-      await updateProvider({ providerSettings: { ...provider.settings, notes } })
-      if (!mountedRef.current) {
-        return
-      }
-
+      await updateProvider({ providerSettings: { ...provider?.settings, notes } })
       setOpen(false)
-      resolvedRef.current = true
       resolve({})
     } catch {
-      if (mountedRef.current) {
-        window.toast?.error(t('blocks.edit.save.failed.label'))
-      }
+      window.toast.error(t('blocks.edit.save.failed.label'))
     } finally {
-      savingRef.current = false
-      if (mountedRef.current && !resolvedRef.current) {
-        setSaving(false)
-      }
+      setSaving(false)
     }
   }
 
   const onCancel = () => {
-    if (savingRef.current || resolvedRef.current) {
-      return
-    }
-
-    resolvedRef.current = true
     setOpen(false)
     resolve({})
   }
 
   const footer = (
     <div className={drawerClasses.footer}>
-      <Button variant="outline" disabled={saving} onClick={onCancel}>
+      <Button variant="outline" onClick={onCancel}>
         {t('common.cancel')}
       </Button>
-      <Button loading={saving} disabled={saving || !provider} onClick={() => void handleSave()}>
+      <Button loading={saving} disabled={saving} onClick={() => void handleSave()}>
         {t('common.save')}
       </Button>
     </div>

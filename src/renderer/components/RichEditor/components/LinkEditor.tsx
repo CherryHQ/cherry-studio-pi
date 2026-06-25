@@ -50,15 +50,11 @@ const LinkEditor: React.FC<LinkEditorProps> = ({
 
   // Auto-focus href input when dialog opens
   useEffect(() => {
-    if (!visible || !hrefInputRef.current) {
-      return undefined
+    if (visible && hrefInputRef.current) {
+      setTimeout(() => {
+        hrefInputRef.current?.focus()
+      }, 100)
     }
-
-    const focusTimer = window.setTimeout(() => {
-      hrefInputRef.current?.focus()
-    }, 100)
-
-    return () => window.clearTimeout(focusTimer)
   }, [visible])
 
   // Handle clicks outside to close
@@ -66,9 +62,7 @@ const LinkEditor: React.FC<LinkEditorProps> = ({
     if (!visible) return
 
     const handleClickOutside = (event: MouseEvent) => {
-      if (!(event.target instanceof Element)) return
-
-      const target = event.target
+      const target = event.target as HTMLElement
 
       // Don't close if clicking within the editor or on a link
       if (containerRef.current?.contains(target) || target.closest('a[href]') || target.closest('[data-link-editor]')) {
@@ -78,12 +72,11 @@ const LinkEditor: React.FC<LinkEditorProps> = ({
       onCancel()
     }
 
-    const listenerTimer = window.setTimeout(() => {
+    setTimeout(() => {
       document.addEventListener('mousedown', handleClickOutside)
     }, 100)
 
     return () => {
-      window.clearTimeout(listenerTimer)
       document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [visible, onCancel])
@@ -118,7 +111,7 @@ const LinkEditor: React.FC<LinkEditorProps> = ({
     left: position.x,
     top: position.y + 25, // Position slightly below the link
     zIndex: 1000,
-    background: isDark ? 'var(--color-muted, #222222)' : 'white',
+    background: isDark ? 'var(--color-background-soft, #222222)' : 'white',
     border: `1px solid ${isDark ? 'var(--color-border, #ffffff19)' : '#d9d9d9'}`,
     borderRadius: 8,
     boxShadow: isDark ? '0 4px 12px rgba(0, 0, 0, 0.3)' : '0 4px 12px rgba(0,0,0,0.15)',

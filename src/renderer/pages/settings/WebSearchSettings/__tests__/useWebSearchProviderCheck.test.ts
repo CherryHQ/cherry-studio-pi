@@ -8,20 +8,6 @@ vi.mock('@renderer/ipc', () => ({ ipcApi: { request: ipcRequestMock } }))
 
 import { useWebSearchProviderCheck } from '../hooks/useWebSearchProviderCheck'
 
-type Deferred<T> = {
-  promise: Promise<T>
-  resolve: (value: T) => void
-}
-
-function deferred<T>(): Deferred<T> {
-  let resolve!: (value: T) => void
-  const promise = new Promise<T>((promiseResolve) => {
-    resolve = promiseResolve
-  })
-
-  return { promise, resolve }
-}
-
 vi.mock('react-i18next', async (importOriginal) => {
   const actual = await importOriginal<typeof ReactI18next>()
 
@@ -96,43 +82,6 @@ describe('useWebSearchProviderCheck', () => {
     })
 
     expect(toastErrorMock).toHaveBeenCalledWith('settings.tool.websearch.check_failed: missing API key')
-  })
-
-  it('preserves nested provider check failure details in the toast', async () => {
-    ipcRequestMock.mockRejectedValueOnce({ error: { message: 'remote provider refused the request' } })
-    const { result } = renderHook(() =>
-      useWebSearchProviderCheck({ provider: tavilyProvider, capability: 'searchKeywords' })
-    )
-
-    await act(async () => {
-      await result.current.checkProvider()
-    })
-
-    expect(toastErrorMock).toHaveBeenCalledWith(
-      'settings.tool.websearch.check_failed: remote provider refused the request'
-    )
-  })
-
-  it('ignores duplicate provider checks while one is already running', async () => {
-    const runningCheck = deferred<{ results: unknown[] }>()
-    ipcRequestMock.mockReturnValueOnce(runningCheck.promise)
-    const { result } = renderHook(() =>
-      useWebSearchProviderCheck({ provider: tavilyProvider, capability: 'searchKeywords' })
-    )
-
-    let firstCheck!: Promise<void>
-    let secondCheck!: Promise<void>
-    act(() => {
-      firstCheck = result.current.checkProvider()
-      secondCheck = result.current.checkProvider()
-    })
-
-    expect(ipcRequestMock).toHaveBeenCalledTimes(1)
-
-    await act(async () => {
-      runningCheck.resolve({ results: [] })
-      await Promise.all([firstCheck, secondCheck])
-    })
   })
 
   it('disables checks for zero-config fetch provider panels', () => {

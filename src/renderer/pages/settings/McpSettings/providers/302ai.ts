@@ -1,10 +1,7 @@
 import { loggerService } from '@logger'
-import type { McpServer } from '@renderer/types'
+import type { McpServer } from '@shared/data/types/mcpServer'
 import i18next from 'i18next'
 import { nanoid } from 'nanoid'
-
-import { fetchWithProviderTimeout, getProviderSyncErrorDetails, getProviderSyncErrorMessage } from './request'
-import { clearMcpProviderToken, getMcpProviderToken, saveMcpProviderToken } from './tokenStorage'
 
 const logger = loggerService.withContext('302ai')
 
@@ -13,15 +10,15 @@ const TOKEN_STORAGE_KEY = 'ai302_token'
 export const AI302_HOST = 'https://api.302.ai/mcp'
 
 export const saveAI302Token = (token: string): void => {
-  saveMcpProviderToken(TOKEN_STORAGE_KEY, token)
+  localStorage.setItem(TOKEN_STORAGE_KEY, token)
 }
 
 export const getAI302Token = (): string | null => {
-  return getMcpProviderToken(TOKEN_STORAGE_KEY)
+  return localStorage.getItem(TOKEN_STORAGE_KEY)
 }
 
 export const clearAI302Token = (): void => {
-  clearMcpProviderToken(TOKEN_STORAGE_KEY)
+  localStorage.removeItem(TOKEN_STORAGE_KEY)
 }
 
 export const hasAI302Token = (): boolean => {
@@ -40,16 +37,13 @@ export const syncAi302Servers = async (token: string): Promise<Ai302SyncResult> 
   const t = i18next.t
 
   try {
-    const response = await fetchWithProviderTimeout(
-      `${AI302_HOST}/v1/mcps/list?baseUrl=https://api.302.ai/custom-mcp/mcp`,
-      {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': token
-        }
+    const response = await fetch(`${AI302_HOST}/v1/mcps/list?baseUrl=https://api.302.ai/custom-mcp/mcp`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': token
       }
-    )
+    })
 
     // Handle authentication errors
     if (response.status === 401 || response.status === 403) {
@@ -74,6 +68,7 @@ export const syncAi302Servers = async (token: string): Promise<Ai302SyncResult> 
     // Process successful response
     const data = await response.json()
     const servers: McpServer[] = data.mcps || []
+    logger.debug('servers', servers)
 
     if (servers.length === 0) {
       return {
@@ -115,9 +110,9 @@ export const syncAi302Servers = async (token: string): Promise<Ai302SyncResult> 
     logger.error('302ai sync error:', error as Error)
     return {
       success: false,
-      message: getProviderSyncErrorMessage(t, error),
+      message: t('settings.mcp.sync.error'),
       allServers: [],
-      errorDetails: getProviderSyncErrorDetails(error)
+      errorDetails: String(error)
     }
   }
 }

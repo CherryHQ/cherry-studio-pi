@@ -17,7 +17,7 @@ export function PaddleOcrDeploymentInfo() {
         <SettingHelpLink
           href={PADDLEOCR_DEPLOYMENT_URL}
           target="_blank"
-          rel="noopener noreferrer"
+          rel="noreferrer"
           className="inline-flex items-center gap-1">
           {t('settings.tool.file_processing.processors.paddleocr.deployment.docs')}
           <ExternalLink size={10} />

@@ -13,7 +13,6 @@ const shortcutsMock = vi.hoisted(() => ({
   updatePreference: vi.fn()
 }))
 
-const setMultipleMock = vi.hoisted(() => vi.fn())
 const setTimeoutTimerMock = vi.hoisted(() => vi.fn((_key: string, callback: () => void) => callback()))
 const clearTimeoutTimerMock = vi.hoisted(() => vi.fn())
 const registrationConflictMock = vi.hoisted(() => vi.fn(() => vi.fn()))
@@ -40,13 +39,6 @@ vi.mock('@renderer/config/constant', async (importOriginal) => {
     isMac: false
   }
 })
-
-vi.mock('@data/PreferenceService', () => ({
-  preferenceService: {
-    get: vi.fn().mockResolvedValue(undefined),
-    setMultiple: setMultipleMock
-  }
-}))
 
 vi.mock('@renderer/utils/style', () => ({
   cn: (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(' ')
@@ -169,21 +161,11 @@ const renderShortcutSettings = (onKeyDown?: React.KeyboardEventHandler<HTMLDivEl
     </div>
   )
 
-function deferred<T = void>() {
-  let resolve!: (value: T | PromiseLike<T>) => void
-  const promise = new Promise<T>((resolvePromise) => {
-    resolve = resolvePromise
-  })
-  return { promise, resolve }
-}
-
 describe('ShortcutSettings shortcut recorder', () => {
   beforeEach(() => {
     shortcutsMock.shortcuts = [makeShortcut()]
     shortcutsMock.updatePreference.mockReset()
     shortcutsMock.updatePreference.mockResolvedValue(undefined)
-    setMultipleMock.mockReset()
-    setMultipleMock.mockResolvedValue(undefined)
     setTimeoutTimerMock.mockClear()
     clearTimeoutTimerMock.mockClear()
     registrationConflictMock.mockClear()
@@ -243,55 +225,5 @@ describe('ShortcutSettings shortcut recorder', () => {
     fireEvent.keyDown(recorder, { key: 'Process', code: 'KeyK', ctrlKey: true, bubbles: true })
 
     expect(shortcutsMock.updatePreference).not.toHaveBeenCalled()
-  })
-
-  it('clears recording safely when blur moves to a non-element target', () => {
-    renderShortcutSettings()
-
-    fireEvent.click(screen.getByText('settings.shortcuts.press_shortcut'))
-    const recorder = screen.getByRole('button', { name: 'settings.shortcuts.press_shortcut' })
-    const textTarget = document.createTextNode('outside')
-
-    expect(() => fireEvent.blur(recorder, { relatedTarget: textTarget })).not.toThrow()
-
-    expect(screen.getByText('settings.shortcuts.press_shortcut')).toBeInTheDocument()
-  })
-
-  it('prevents duplicate reset-default confirmations and writes', async () => {
-    const runningReset = deferred<void>()
-    setMultipleMock.mockReturnValueOnce(runningReset.promise)
-    renderShortcutSettings()
-
-    const resetButton = screen.getByText('settings.shortcuts.reset').closest('button')
-    expect(resetButton).not.toBeNull()
-
-    fireEvent.click(resetButton!)
-    fireEvent.click(resetButton!)
-
-    expect(window.modal.confirm).toHaveBeenCalledTimes(1)
-    const options = (window.modal.confirm as ReturnType<typeof vi.fn>).mock.calls[0][0]
-
-    const firstReset = options.onOk()
-    const secondReset = options.onOk()
-    expect(setMultipleMock).toHaveBeenCalledTimes(1)
-
-    runningReset.resolve(undefined)
-    await Promise.all([firstReset, secondReset])
-  })
-
-  it('keeps the shortcut page usable when a system conflict arrives before the toast bridge is ready', async () => {
-    Object.assign(window, { toast: undefined })
-
-    renderShortcutSettings()
-
-    const registrationConflictCalls = registrationConflictMock.mock.calls as unknown as Array<
-      [(event: { key: string; hasConflict: boolean }) => void]
-    >
-    const onRegistrationConflict = registrationConflictCalls[0]?.[0]
-    expect(onRegistrationConflict).toBeTypeOf('function')
-
-    onRegistrationConflict?.({ key: 'shortcut.app.search', hasConflict: true })
-
-    expect(await screen.findByText('settings.shortcuts.occupied_by_other_application')).toBeInTheDocument()
   })
 })

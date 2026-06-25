@@ -2,10 +2,6 @@ import { loggerService } from '@logger'
 
 const logger = loggerService.withContext('utils:mcp')
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
-}
-
 /**
  * 从npm readme中提取 npx mcp config
  * @param {string} readme readme字符串
@@ -13,22 +9,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  */
 export function getMcpConfigSampleFromReadme(readme: string): Record<string, any> | null {
   if (readme) {
-    const regex = /"mcpServers"\s*:\s*({(?:[^{}]*|{(?:[^{}]*|{[^{}]*})*})*})/g
-    for (const match of readme.matchAll(regex)) {
-      try {
-        const servers = JSON.parse(match[1]) as unknown
-        if (!isRecord(servers)) {
-          continue
+    try {
+      const regex = /"mcpServers"\s*:\s*({(?:[^{}]*|{(?:[^{}]*|{[^{}]*})*})*})/g
+      for (const match of readme.matchAll(regex)) {
+        let orgSample = JSON.parse(match[1])
+        orgSample = orgSample[Object.keys(orgSample)[0] ?? '']
+        if (orgSample.command === 'npx') {
+          return orgSample
         }
-
-        for (const sample of Object.values(servers)) {
-          if (isRecord(sample) && sample.command === 'npx') {
-            return sample
-          }
-        }
-      } catch (e) {
-        logger.error('getMcpConfigSampleFromReadme', e as Error)
       }
+    } catch (e) {
+      logger.error('getMcpConfigSampleFromReadme', e as Error)
     }
   }
   return null

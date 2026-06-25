@@ -7,14 +7,8 @@ import type { HighlighterCore, SpecialLanguage, ThemedToken } from 'shiki/core'
 // 注意保持 ShikiStreamTokenizer 依赖简单，避免打包出问题
 import type { ShikiStreamTokenizerOptions } from '../services/ShikiStreamTokenizer'
 import { ShikiStreamTokenizer } from '../services/ShikiStreamTokenizer'
-import { getWorkerErrorMessage } from './workerError'
 
-const createWorkerLogger = () => {
-  const sourceLogger = loggerService.initWindowSource('Worker') || loggerService
-  return sourceLogger.withContext('ShikiStream')
-}
-
-const logger = createWorkerLogger()
+const logger = loggerService.initWindowSource('Worker').withContext('ShikiStream')
 
 // Worker 消息类型
 type WorkerMessageType = 'init' | 'highlight' | 'cleanup' | 'dispose'
@@ -236,7 +230,7 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
         throw new Error(`Unknown command: ${type}`)
     }
   } catch (error) {
-    const errorMessage = getWorkerErrorMessage(error)
+    const errorMessage = error instanceof Error ? error.message : String(error)
     self.postMessage({
       id,
       type: 'error',

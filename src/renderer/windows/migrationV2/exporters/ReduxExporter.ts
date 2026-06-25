@@ -3,8 +3,6 @@
  * Extracts persisted Redux state from localStorage and parses it for Main process
  */
 
-import { readLocalStorageItem } from './localStorageAccess'
-
 const PERSIST_KEY = 'persist:cherry-studio'
 
 // Redux slices that need to be migrated
@@ -36,7 +34,7 @@ export class ReduxExporter {
    * Parses the nested JSON structure and returns clean data
    */
   export(): ReduxExportResult {
-    const rawData = readLocalStorageItem('ReduxExporter.export', PERSIST_KEY)
+    const rawData = localStorage.getItem(PERSIST_KEY)
 
     if (!rawData) {
       return {
@@ -98,21 +96,21 @@ export class ReduxExporter {
    * Get raw Redux Persist data for debugging
    */
   getRawData(): string | null {
-    return readLocalStorageItem('ReduxExporter.getRawData', PERSIST_KEY)
+    return localStorage.getItem(PERSIST_KEY)
   }
 
   /**
    * Check if Redux Persist data exists
    */
   hasData(): boolean {
-    return readLocalStorageItem('ReduxExporter.hasData', PERSIST_KEY) !== null
+    return localStorage.getItem(PERSIST_KEY) !== null
   }
 
   /**
    * Get list of all persisted slices
    */
   getPersistedSlices(): string[] {
-    const rawData = readLocalStorageItem('ReduxExporter.getPersistedSlices', PERSIST_KEY)
+    const rawData = localStorage.getItem(PERSIST_KEY)
     if (!rawData) return []
 
     try {

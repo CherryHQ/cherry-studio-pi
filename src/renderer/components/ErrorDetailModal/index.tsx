@@ -30,8 +30,7 @@ import {
   isSerializedAiSdkUnsupportedFunctionalityError,
   isSerializedError
 } from '@renderer/types/error'
-import { formatAiSdkError, formatError, formatErrorMessageWithPrefix, safeToString } from '@renderer/utils/error'
-import { renderPlainTextCodeHtml, sanitizeHtml } from '@renderer/utils/html'
+import { formatAiSdkError, formatError, safeToString } from '@renderer/utils/error'
 import { parseDataUrl } from '@shared/utils/dataUrl'
 import { CheckCircle, Copy, Loader2, Stethoscope } from 'lucide-react'
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react'
@@ -169,7 +168,7 @@ const AiSdkErrorBase = memo(({ error }: { error: SerializedAiSdkError }) => {
         setIsTruncated(truncated)
 
         if (isLikelyBase64) {
-          setHighlightedString(renderPlainTextCodeHtml(truncatedCause))
+          setHighlightedString(truncatedCause)
           return
         }
 
@@ -177,12 +176,12 @@ const AiSdkErrorBase = memo(({ error }: { error: SerializedAiSdkError }) => {
           const parsed = JSON.parse(truncatedCause || '{}')
           const formatted = JSON.stringify(parsed, null, 2)
           const result = await highlightCode(formatted, 'json')
-          setHighlightedString(sanitizeHtml(result))
+          setHighlightedString(result)
         } catch {
-          setHighlightedString(renderPlainTextCodeHtml(truncatedCause || ''))
+          setHighlightedString(truncatedCause || '')
         }
       } catch {
-        setHighlightedString(renderPlainTextCodeHtml(cause || ''))
+        setHighlightedString(cause || '')
       }
     }
     const timer = setTimeout(highlight, 0)
@@ -502,15 +501,6 @@ const ErrorDetailContent: React.FC<ErrorDetailContentProps> = ({
   const diagSectionRef = useRef<{ runDiagnosis: () => void }>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const isInitialRenderRef = useRef(true)
-  const mountedRef = useRef(true)
-
-  useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
 
   // Scroll to bottom when diagnosis status changes, but skip initial render
   useEffect(() => {
@@ -540,18 +530,8 @@ const ErrorDetailContent: React.FC<ErrorDetailContentProps> = ({
       errorText = safeToString(error)
     }
 
-    void (async () => {
-      try {
-        await navigator.clipboard.writeText(errorText)
-        if (mountedRef.current) {
-          window.toast?.success?.(t('message.copied'))
-        }
-      } catch (copyError) {
-        if (mountedRef.current) {
-          window.toast?.error?.(formatErrorMessageWithPrefix(copyError, t('common.copy_failed')))
-        }
-      }
-    })()
+    void navigator.clipboard.writeText(errorText)
+    window.toast.success(t('message.copied'))
   }, [error, t])
 
   const renderErrorDetails = (error?: SerializedError) => {

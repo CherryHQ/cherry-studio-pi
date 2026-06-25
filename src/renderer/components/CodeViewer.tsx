@@ -118,25 +118,21 @@ const CodeViewer = ({
   // 设置 pre 标签属性
   useLayoutEffect(() => {
     let mounted = true
-    void getShikiPreProperties(language)
-      .then((properties) => {
-        if (!mounted) return
-        const shikiTheme = shikiThemeRef.current
-        if (shikiTheme) {
-          shikiTheme.className = `${properties.class || 'shiki'} code-viewer ${className ?? ''}`
-          // 滚动条适应 shiki 主题变化而非应用主题
-          shikiTheme.classList.add(isShikiThemeDark ? 'shiki-dark' : 'shiki-light')
+    void getShikiPreProperties(language).then((properties) => {
+      if (!mounted) return
+      const shikiTheme = shikiThemeRef.current
+      if (shikiTheme) {
+        shikiTheme.className = `${properties.class || 'shiki'} code-viewer ${className ?? ''}`
+        // 滚动条适应 shiki 主题变化而非应用主题
+        shikiTheme.classList.add(isShikiThemeDark ? 'shiki-dark' : 'shiki-light')
 
-          if (properties.style) {
-            shikiTheme.style.cssText += `${properties.style}`
-          }
-          // FIXME: 临时解决 SelectionToolbar 无法弹出，走剪贴板回退的问题
-          // shikiTheme.tabIndex = properties.tabindex
+        if (properties.style) {
+          shikiTheme.style.cssText += `${properties.style}`
         }
-      })
-      .catch((error) => {
-        logger.warn('Failed to load Shiki pre properties', error as Error, { language })
-      })
+        // FIXME: 临时解决 SelectionToolbar 无法弹出，走剪贴板回退的问题
+        // shikiTheme.tabIndex = properties.tabindex
+      }
+    })
     return () => {
       mounted = false
     }
@@ -374,12 +370,6 @@ const CodeViewer = ({
       void debouncedHighlightLines(lastIndex + 1)
     }
   }, [virtualItems, debouncedHighlightLines])
-
-  useEffect(() => {
-    return () => {
-      debouncedHighlightLines.cancel()
-    }
-  }, [debouncedHighlightLines])
 
   // Monitor selection changes, clear stale selection state, and auto-expand in collapsed state
   const handleSelectionChange = useMemo(

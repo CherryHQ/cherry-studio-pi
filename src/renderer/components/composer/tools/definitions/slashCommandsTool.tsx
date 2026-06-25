@@ -1,7 +1,7 @@
-import { type QuickPanelInputAdapter, type QuickPanelListItem } from '@renderer/components/composer/panelEngine'
 import { ComposerPanelSymbol } from '@renderer/components/composer/quickPanel/symbols'
 import type { ComposerToolLauncher } from '@renderer/components/composer/toolLauncher'
 import { defineTool, registerTool, TopicType } from '@renderer/components/composer/tools/types'
+import { type QuickPanelInputAdapter, type QuickPanelListItem } from '@renderer/components/QuickPanel'
 import { getBuiltinSlashCommands } from '@shared/ai/agentSlashCommands'
 import { Terminal } from 'lucide-react'
 

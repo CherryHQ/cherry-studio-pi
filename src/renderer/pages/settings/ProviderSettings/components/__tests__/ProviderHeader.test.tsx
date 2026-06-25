@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import ProviderHeader from '../ProviderHeader'
@@ -6,11 +6,6 @@ import ProviderHeader from '../ProviderHeader'
 const useProviderMock = vi.fn()
 const useProviderMetaMock = vi.fn()
 const useProviderEnableMock = vi.fn()
-
-vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key: string) => key })
-}))
-
 vi.mock('@cherrystudio/ui', () => {
   return {
     Switch: ({ checked, onCheckedChange }: any) => (
@@ -55,23 +50,9 @@ vi.mock('../../hooks/providerSetting/useProviderEnable', () => ({
   useProviderEnable: (...args: any[]) => useProviderEnableMock(...args)
 }))
 
-function createDeferred<T>() {
-  let resolve!: (value: T) => void
-  let reject!: (reason?: unknown) => void
-  const promise = new Promise<T>((promiseResolve, promiseReject) => {
-    resolve = promiseResolve
-    reject = promiseReject
-  })
-
-  return { promise, resolve, reject }
-}
-
 describe('ProviderHeader', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    window.toast = {
-      error: vi.fn()
-    } as any
     useProviderMock.mockReturnValue({
       provider: {
         id: 'openai',
@@ -118,7 +99,7 @@ describe('ProviderHeader', () => {
     expect(screen.queryByText('35836b32-9bc1-40ab-9195-8b0b4ea3f342')).not.toBeInTheDocument()
   })
 
-  it('keeps the provider name as text and exposes provider resource icons as links', () => {
+  it('keeps the provider name as text and makes only the docs icon a link', () => {
     useProviderMetaMock.mockReturnValue({
       fancyProviderName: 'OpenAI',
       docsWebsite: 'https://platform.openai.com/docs',
@@ -131,10 +112,7 @@ describe('ProviderHeader', () => {
     expect(screen.getByText('OpenAI').closest('a')).toBeNull()
     const docsLink = screen.getByRole('link', { name: 'OpenAI · common.docs' })
     expect(docsLink).toHaveAttribute('href', 'https://platform.openai.com/docs')
-    expect(docsLink).toHaveAttribute('rel', 'noopener noreferrer')
-    const modelsLink = screen.getByRole('link', { name: 'OpenAI · settings.models.list_title' })
-    expect(modelsLink).toHaveAttribute('href', 'https://platform.openai.com/docs/models')
-    expect(modelsLink).toHaveAttribute('rel', 'noopener noreferrer')
+    expect(screen.queryByRole('link', { name: 'OpenAI · settings.models.list_title' })).not.toBeInTheDocument()
   })
 
   it('opens the api options drawer when the meta enables the entry', () => {
@@ -149,24 +127,5 @@ describe('ProviderHeader', () => {
     fireEvent.click(screen.getByRole('button', { name: 'settings.provider.api.options.label' }))
 
     expect(screen.getByText('api-options-drawer')).toBeInTheDocument()
-  })
-
-  it('does not show stale toggle errors after unmount', async () => {
-    const toggle = createDeferred<void>()
-    useProviderEnableMock.mockReturnValue({
-      toggleProviderEnabled: vi.fn().mockReturnValue(toggle.promise)
-    })
-
-    const { unmount } = render(<ProviderHeader providerId="openai" />)
-
-    fireEvent.click(screen.getByText('switch'))
-    unmount()
-
-    await act(async () => {
-      toggle.reject(new Error('closed'))
-      await toggle.promise.catch(() => undefined)
-    })
-
-    expect(window.toast.error).not.toHaveBeenCalled()
   })
 })

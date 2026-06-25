@@ -1,7 +1,6 @@
 import { Tooltip } from '@cherrystudio/ui'
 import { Copy } from 'lucide-react'
 import type { CSSProperties, FC, KeyboardEvent } from 'react'
-import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface CopyButtonProps {
@@ -22,33 +21,20 @@ const CopyButton: FC<CopyButtonProps> = ({
   tooltip,
   textToCopy,
   label,
-  color = 'var(--color-foreground-secondary)',
+  color = 'var(--color-text-2)',
   hoverColor = 'var(--color-primary)',
   size = 14
 }) => {
   const { t } = useTranslation()
-  const mountedRef = useRef(true)
-
-  useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
 
   const handleCopy = () => {
     navigator.clipboard
       .writeText(textToCopy)
       .then(() => {
-        if (mountedRef.current) {
-          window.toast?.success(t('message.copy.success'))
-        }
+        window.toast?.success(t('message.copy.success'))
       })
       .catch(() => {
-        if (mountedRef.current) {
-          window.toast?.error(t('message.copy.failed'))
-        }
+        window.toast?.error(t('message.copy.failed'))
       })
   }
 

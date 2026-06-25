@@ -8,14 +8,6 @@ vi.mock('@renderer/config/logger', () => ({
   default: { error: vi.fn() }
 }))
 
-vi.mock('@logger', () => ({
-  loggerService: {
-    withContext: () => ({
-      error: vi.fn()
-    })
-  }
-}))
-
 vi.mock('@renderer/config/constant', () => ({
   isMac: false,
   isWin: true
@@ -100,52 +92,6 @@ describe('input', () => {
       const result = await getFilesFromDropEvent(event)
       expect(result).toEqual([mockMetadata])
       expect(mockGetAsString).toHaveBeenCalled()
-    })
-
-    it('should resolve empty list for malformed codefiles data', async () => {
-      const mockGetAsString = vi.fn((callback) => {
-        callback('not-json')
-      })
-
-      const event = {
-        dataTransfer: {
-          files: [],
-          items: [
-            {
-              type: 'codefiles',
-              getAsString: mockGetAsString
-            }
-          ]
-        }
-      } as any
-
-      await expect(getFilesFromDropEvent(event)).resolves.toEqual([])
-      expect(mockFileGet).not.toHaveBeenCalled()
-    })
-
-    it('should ignore non-string paths in codefiles data', async () => {
-      const mockMetadata = { id: '1', name: 'file.txt', path: '/path/file.txt' }
-      mockFileGet.mockResolvedValue(mockMetadata)
-
-      const mockGetAsString = vi.fn((callback) => {
-        callback(JSON.stringify(['/path/file.txt', null, 42, '']))
-      })
-
-      const event = {
-        dataTransfer: {
-          files: [],
-          items: [
-            {
-              type: 'codefiles',
-              getAsString: mockGetAsString
-            }
-          ]
-        }
-      } as any
-
-      await expect(getFilesFromDropEvent(event)).resolves.toEqual([mockMetadata])
-      expect(mockFileGet).toHaveBeenCalledTimes(1)
-      expect(mockFileGet).toHaveBeenCalledWith('/path/file.txt')
     })
 
     // 边界情况：空文件列表

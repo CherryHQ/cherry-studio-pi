@@ -12,7 +12,6 @@ import { useTranslation } from 'react-i18next'
 import ProviderActions from '../../primitives/ProviderActions'
 import ProviderSection from '../../primitives/ProviderSection'
 import { drawerClasses } from '../../primitives/ProviderSettingsPrimitives'
-import { enableProviderWhenModelsAvailable } from '../../utils/providerEnablement'
 import { getInitialAddModelFormState, splitModelIds } from './helpers'
 import { ModelBasicFields } from './ModelBasicFields'
 import { ModelContextWindowFields } from './ModelContextWindowFields'
@@ -44,7 +43,7 @@ export default function AddModelFormPanel({
   'data-testid': dataTestId = 'provider-settings-model-add-drawer-content'
 }: AddModelFormPanelProps) {
   const { t } = useTranslation()
-  const { provider, updateProvider } = useProvider(providerId)
+  const { provider } = useProvider(providerId)
   const { models } = useModels({ providerId })
   const { createModel } = useModelMutations()
   const [formState, setFormState] = useState<ModelBasicFormState>(() =>
@@ -53,39 +52,8 @@ export default function AddModelFormPanel({
   const [endpointTypeTouched, setEndpointTypeTouched] = useState(false)
   const [showMoreSettings, setShowMoreSettings] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const submittingRef = useRef(false)
-  const mountedRef = useRef(true)
 
   const mode: ModelDrawerMode = provider && isNewApiProvider(provider) ? 'new-api' : 'legacy'
-
-  useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
-
-  const ensureAddedModelsVisible = useCallback(
-    async (modelCount: number) => {
-      if (!provider || provider.isEnabled || modelCount <= 0) {
-        return true
-      }
-
-      const enabled = await enableProviderWhenModelsAvailable(provider, updateProvider, modelCount, 'manual_add_model')
-      if (!mountedRef.current) {
-        return false
-      }
-
-      if (!enabled) {
-        window.toast?.error(t('settings.models.add.provider_enable_failed'))
-        return false
-      }
-
-      return true
-    },
-    [provider, t, updateProvider]
-  )
 
   useEffect(() => {
     setFormState(getInitialAddModelFormState(prefill, ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS))
@@ -118,7 +86,7 @@ export default function AddModelFormPanel({
       const modelId = values.modelId.trim()
 
       if (models.some((model) => model.id.endsWith(`::${modelId}`))) {
-        window.toast?.error(t('error.model.exists'))
+        window.toast.error(t('error.model.exists'))
         return false
       }
 
@@ -139,7 +107,7 @@ export default function AddModelFormPanel({
   )
 
   const submitAddModel = useCallback(async () => {
-    if (submittingRef.current) {
+    if (isSubmitting) {
       return
     }
 
@@ -148,7 +116,6 @@ export default function AddModelFormPanel({
       return
     }
 
-    submittingRef.current = true
     setIsSubmitting(true)
 
     try {
@@ -173,11 +140,7 @@ export default function AddModelFormPanel({
         }
 
         if (addedCount > 0) {
-          if (await ensureAddedModelsVisible(addedCount)) {
-            if (mountedRef.current) {
-              onSuccess()
-            }
-          }
+          onSuccess()
         }
         return
       }
@@ -188,23 +151,14 @@ export default function AddModelFormPanel({
           modelId: normalizedId
         })
       ) {
-        if (await ensureAddedModelsVisible(1)) {
-          if (mountedRef.current) {
-            onSuccess()
-          }
-        }
+        onSuccess()
       }
     } catch {
-      if (mountedRef.current) {
-        window.toast?.error(t('settings.models.manage.operation_failed'))
-      }
+      window.toast.error(t('settings.models.manage.operation_failed'))
     } finally {
-      submittingRef.current = false
-      if (mountedRef.current) {
-        setIsSubmitting(false)
-      }
+      setIsSubmitting(false)
     }
-  }, [addSingleModel, ensureAddedModelsVisible, formState, mode, onSuccess, t])
+  }, [addSingleModel, formState, isSubmitting, mode, onSuccess, t])
 
   const handleFormSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {

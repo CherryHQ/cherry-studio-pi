@@ -3,16 +3,14 @@ import { Openclaw } from '@cherrystudio/ui/icons'
 import { Navbar, NavbarCenter } from '@renderer/components/app/Navbar'
 import ModelAvatar from '@renderer/components/Avatar/ModelAvatar'
 import { CopyIcon } from '@renderer/components/Icons'
-import { ModelSelector } from '@renderer/components/Selector/model'
+import { ModelSelector } from '@renderer/components/Selector'
 import { useSharedCache } from '@renderer/data/hooks/useCache'
 import { usePreference } from '@renderer/data/hooks/usePreference'
 import { useMiniAppPopup } from '@renderer/hooks/useMiniAppPopup'
 import { useModelById } from '@renderer/hooks/useModel'
 import { useProviders } from '@renderer/hooks/useProvider'
-import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import { loggerService } from '@renderer/services/LoggerService'
-import { openHttpExternalUrl } from '@renderer/utils/openExternal'
-import type { Model as SharedModel } from '@shared/data/types/model'
+import { type Model as SharedModel } from '@shared/data/types/model'
 import { isUniqueModelId, type UniqueModelId } from '@shared/data/types/model'
 import { IpcChannel } from '@shared/IpcChannel'
 import { isNonChatModel } from '@shared/utils/model'
@@ -40,15 +38,16 @@ const TitleSection: FC<TitleSectionProps> = ({ title, description, clickable = f
   <div className="-mt-20 mb-8 flex flex-col items-center text-center">
     <div
       className={clickable ? 'cursor-pointer' : undefined}
-      onClick={clickable ? () => openHttpExternalUrl(docsUrl ?? DEFAULT_DOCS_URL) : undefined}>
+      onClick={clickable ? () => window.open(docsUrl ?? DEFAULT_DOCS_URL, '_blank') : undefined}>
       <Openclaw.Avatar size={64} shape="rounded" />
     </div>
     <h1
-      className={`mt-3 font-semibold text-2xl text-foreground ${clickable ? 'cursor-pointer hover:text-primary' : ''}`}
-      onClick={clickable ? () => openHttpExternalUrl(docsUrl ?? DEFAULT_DOCS_URL) : undefined}>
+      className={`mt-3 font-semibold text-2xl ${clickable ? 'cursor-pointer hover:text-(--color-primary)' : ''}`}
+      style={{ color: 'var(--color-text-1)' }}
+      onClick={clickable ? () => window.open(docsUrl ?? DEFAULT_DOCS_URL, '_blank') : undefined}>
       {title}
     </h1>
-    <p className="mt-3 text-sm leading-relaxed" style={{ color: 'var(--color-foreground-secondary)' }}>
+    <p className="mt-3 text-sm leading-relaxed" style={{ color: 'var(--color-text-2)' }}>
       {description}
     </p>
   </div>
@@ -58,7 +57,6 @@ const OpenClawPage: FC = () => {
   const { t, i18n } = useTranslation()
   const { providers } = useProviders()
   const { openSmartMiniApp } = useMiniAppPopup()
-  const showSaveFailed = useSaveFailedToast()
 
   const docsUrl = useMemo(() => {
     const lang = i18n.language?.toLowerCase() ?? ''
@@ -225,7 +223,7 @@ const OpenClawPage: FC = () => {
 
   const handleModelSelect = (next: UniqueModelId | undefined) => {
     if (!next) return
-    void setSelectedModelId(next).catch(showSaveFailed)
+    void setSelectedModelId(next)
   }
 
   const handleStartGateway = async () => {
@@ -305,10 +303,10 @@ const OpenClawPage: FC = () => {
   }
 
   const renderLogContainer = (expanded = false) => (
-    <div className="mb-6 overflow-hidden rounded-lg" style={{ background: 'var(--color-muted)' }}>
+    <div className="mb-6 overflow-hidden rounded-lg" style={{ background: 'var(--color-background-soft)' }}>
       <div
         className="flex items-center justify-between px-3 py-2 font-medium text-[13px]"
-        style={{ background: 'var(--color-accent)' }}>
+        style={{ background: 'var(--color-background-mute)' }}>
         <span>{t(expanded ? 'openclaw.uninstall_progress' : 'openclaw.install_progress')}</span>
         {!expanded && (
           <Button size="sm" variant="ghost" onClick={() => setShowLogs(false)}>
@@ -324,10 +322,10 @@ const OpenClawPage: FC = () => {
             style={{
               color:
                 log.type === 'error'
-                  ? 'var(--color-error-base)'
+                  ? 'var(--color-error)'
                   : log.type === 'warn'
                     ? 'var(--color-warning)'
-                    : 'var(--color-foreground-secondary)'
+                    : 'var(--color-text-2)'
             }}>
             {log.message}
           </div>
@@ -353,7 +351,7 @@ const OpenClawPage: FC = () => {
               {!isInstalling && <Download size={16} />}
               {t(needsMigration ? 'openclaw.migration.install_button' : 'openclaw.not_installed.install_button')}
             </Button>
-            <Button variant="outline" disabled={isInstalling} onClick={() => openHttpExternalUrl(docsUrl)}>
+            <Button variant="outline" disabled={isInstalling} onClick={() => window.open(docsUrl, '_blank')}>
               <ExternalLink size={16} />
               {t('openclaw.quick_actions.view_docs')}
             </Button>
@@ -391,7 +389,7 @@ const OpenClawPage: FC = () => {
         {installPath && gatewayStatus !== 'running' && (
           <div
             className="mb-6 flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm"
-            style={{ background: 'var(--color-muted)', color: 'var(--color-foreground-muted)' }}>
+            style={{ background: 'var(--color-background-soft)', color: 'var(--color-text-3)' }}>
             <div className="min-w-0 shrink overflow-hidden">
               <div className="mb-1">{t('openclaw.installed_at')}</div>
               <div className="flex items-center gap-2">
@@ -406,9 +404,9 @@ const OpenClawPage: FC = () => {
                   onClick={async () => {
                     try {
                       await navigator.clipboard.writeText(installPath)
-                      window.toast?.success(t('common.copied'))
+                      window.toast.success(t('common.copied'))
                     } catch (error) {
-                      window.toast?.error(t('common.copy_failed'))
+                      window.toast.error(t('common.copy_failed'))
                       logger.error('Failed to copy install path:', error as Error)
                     }
                   }}>
@@ -418,7 +416,8 @@ const OpenClawPage: FC = () => {
               </div>
             </div>
             <span
-              className="cursor-pointer whitespace-nowrap text-foreground-muted text-xs transition-colors hover:text-destructive"
+              className="cursor-pointer whitespace-nowrap text-xs transition-colors hover:text-(--color-error)!"
+              style={{ color: 'var(--color-text-3)' }}
               onClick={handleUninstall}>
               {t('openclaw.quick_actions.uninstall')}
             </span>
@@ -429,13 +428,13 @@ const OpenClawPage: FC = () => {
         {gatewayStatus === 'running' && (
           <div
             className="mb-6 flex items-center justify-between rounded-lg p-3"
-            style={{ background: 'var(--color-muted)' }}>
+            style={{ background: 'var(--color-background-soft)' }}>
             <div className="flex items-center gap-2">
               <div className="h-2 w-2 rounded-full bg-green-500" />
-              <span className="font-medium text-sm" style={{ color: 'var(--color-foreground)' }}>
+              <span className="font-medium text-sm" style={{ color: 'var(--color-text-1)' }}>
                 {t('openclaw.status.running')}
               </span>
-              <span className="font-mono text-[13px]" style={{ color: 'var(--color-foreground-muted)' }}>
+              <span className="font-mono text-[13px]" style={{ color: 'var(--color-text-3)' }}>
                 :{gatewayPort}
               </span>
             </div>
@@ -472,9 +471,9 @@ const OpenClawPage: FC = () => {
                     onClick={async () => {
                       try {
                         await navigator.clipboard.writeText(error)
-                        window.toast?.success(t('common.copied'))
+                        window.toast.success(t('common.copied'))
                       } catch (err) {
-                        window.toast?.error(t('common.copy_failed'))
+                        window.toast.error(t('common.copy_failed'))
                         logger.error('Failed to copy error message:', err as Error)
                       }
                     }}>
@@ -498,9 +497,7 @@ const OpenClawPage: FC = () => {
         {/* Model Selector - only show when not running */}
         {gatewayStatus !== 'running' && (
           <div className="mb-6">
-            <div
-              className="mb-2 flex items-center gap-2 font-medium text-sm"
-              style={{ color: 'var(--color-foreground)' }}>
+            <div className="mb-2 flex items-center gap-2 font-medium text-sm" style={{ color: 'var(--color-text-1)' }}>
               {t('openclaw.model_config.model')}
             </div>
             <ModelSelector
@@ -519,14 +516,14 @@ const OpenClawPage: FC = () => {
                 </Button>
               }
             />
-            <div className="mt-1 text-xs" style={{ color: 'var(--color-foreground-muted)' }}>
+            <div className="mt-1 text-xs" style={{ color: 'var(--color-text-3)' }}>
               {t('openclaw.model_config.sync_hint')}
             </div>
 
             {/* Tips about OpenClaw */}
             <div
               className="mt-4 rounded-lg p-3 text-xs leading-relaxed"
-              style={{ background: 'var(--color-accent)', color: 'var(--color-foreground-muted)' }}>
+              style={{ background: 'var(--color-background-mute)', color: 'var(--color-text-3)' }}>
               <div className="mb-1">💡 {t('openclaw.tips.title')}</div>
               <ul className="list-inside list-disc space-y-1">
                 <li>{t('openclaw.tips.permissions')}</li>
@@ -561,7 +558,7 @@ const OpenClawPage: FC = () => {
   const renderCheckingContent = () => (
     <div id="content-container" className="flex flex-1 flex-col items-center justify-center">
       <Loader2 className="size-7 animate-spin" style={{ color: 'var(--color-primary)' }} />
-      <div className="mt-4" style={{ color: 'var(--color-foreground-muted)' }}>
+      <div className="mt-4" style={{ color: 'var(--color-text-3)' }}>
         {t('openclaw.checking_installation')}
       </div>
     </div>

@@ -39,8 +39,8 @@ vi.mock('@cherrystudio/ui', async (importOriginal) => {
         {children}
       </button>
     ),
-    MenuItem: ({ active, icon, label, onClick, ...props }: any) => (
-      <button type="button" data-active={active || undefined} onClick={onClick} {...props}>
+    MenuItem: ({ icon, label, onClick, ...props }: any) => (
+      <button type="button" onClick={onClick} {...props}>
         {icon}
         {label}
       </button>
@@ -102,6 +102,8 @@ vi.mock('../useProviderModelList', () => ({
       disabled: false,
       pendingModelIds: new Set<string>(),
       onEditModel: vi.fn(),
+      onDeleteModel: vi.fn(),
+      onDeleteModels: vi.fn(),
       onToggleModel: vi.fn(),
       onToggleModels: vi.fn()
     },
@@ -148,7 +150,7 @@ describe('ProviderModelList', () => {
     fireEvent.click(screen.getByRole('button', { name: 'settings.models.bulk_disable' }))
 
     await waitFor(() => {
-      expect(window.toast.error).toHaveBeenCalledWith('settings.models.manage.operation_failed: bulk close failed')
+      expect(window.toast.error).toHaveBeenCalledWith('settings.models.manage.operation_failed')
     })
     expect(loggerErrorMock).toHaveBeenCalledWith(
       'Failed to disable visible provider models',
@@ -157,22 +159,6 @@ describe('ProviderModelList', () => {
         error: expect.any(Error)
       })
     )
-  })
-
-  it('preserves nested bulk enable errors in the toast', async () => {
-    onToggleVisibleModelsMock.mockRejectedValue({
-      error: { message: 'provider model update rejected' }
-    })
-
-    render(<ProviderModelList providerId="openai" disabled={false} />)
-
-    fireEvent.click(screen.getByRole('button', { name: 'settings.models.bulk_enable' }))
-
-    await waitFor(() => {
-      expect(window.toast.error).toHaveBeenCalledWith(
-        'settings.models.manage.operation_failed: provider model update rejected'
-      )
-    })
   })
 
   it('enables visible disabled models from the action menu', () => {

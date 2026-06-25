@@ -13,7 +13,7 @@
  *
  * Key Features:
  * - Type-safe requests with full TypeScript inference
- * - Automatic retry with exponential backoff for read-only requests (network, timeout, 500/503 errors)
+ * - Automatic retry with exponential backoff (network, timeout, 500/503 errors)
  * - Request timeout management (3s default)
  * - Subscription management (real-time updates)
  *
@@ -43,29 +43,6 @@ import type {
 } from '@shared/data/api/apiTypes'
 
 const logger = loggerService.withContext('DataApiService')
-const DEFAULT_REQUEST_TIMEOUT_MS = 3000
-
-function unrefTimer(timer: ReturnType<typeof setTimeout>): void {
-  timer.unref?.()
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    const timer = setTimeout(resolve, ms)
-    unrefTimer(timer)
-  })
-}
-
-function toSafeRequestLog(request: DataRequest) {
-  return {
-    id: request.id,
-    method: request.method,
-    path: request.path,
-    params: request.params,
-    hasBody: request.body !== undefined,
-    hasHeaders: request.headers !== undefined && Object.keys(request.headers).length > 0
-  }
-}
 
 /**
  * Retry options interface.
@@ -136,30 +113,6 @@ export class DataApiService implements ApiClient {
     return { ...this.defaultRetryOptions }
   }
 
-  private async withRequestTimeout<T>(
-    promise: Promise<T>,
-    request: DataRequest,
-    requestContext: RequestContext
-  ): Promise<T> {
-    let timeoutHandle: ReturnType<typeof setTimeout> | undefined
-
-    try {
-      return await Promise.race([
-        promise,
-        new Promise<never>((_, reject) => {
-          timeoutHandle = setTimeout(() => {
-            reject(DataApiErrorFactory.timeout(request.path, DEFAULT_REQUEST_TIMEOUT_MS, requestContext))
-          }, DEFAULT_REQUEST_TIMEOUT_MS)
-          unrefTimer(timeoutHandle)
-        })
-      ])
-    } finally {
-      if (timeoutHandle) {
-        clearTimeout(timeoutHandle)
-      }
-    }
-  }
-
   /**
    * Send request via IPC with direct return and retry logic.
    * Uses DataApiError.isRetryable to determine if retry is appropriate.
@@ -178,10 +131,15 @@ export class DataApiService implements ApiClient {
     }
 
     try {
-      logger.debug(`Making ${request.method} request to ${request.path}`, { request: toSafeRequestLog(request) })
+      logger.debug(`Making ${request.method} request to ${request.path}`, { request })
 
       // Direct IPC call with timeout
-      const response = await this.withRequestTimeout(window.api.dataApi.request(request), request, requestContext)
+      const response = await Promise.race([
+        window.api.dataApi.request(request),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(DataApiErrorFactory.timeout(request.path, 3000, requestContext)), 3000)
+        )
+      ])
 
       if (response.error) {
         // Reconstruct DataApiError from serialized response
@@ -201,20 +159,18 @@ export class DataApiService implements ApiClient {
 
       logger.debug(`Request failed: ${request.method} ${request.path}`, apiError)
 
-      // Automatic retries are limited to GET. Retrying mutations after a timeout
-      // can duplicate writes because IPC cannot cancel the already-running main
-      // process handler.
-      if (request.method === 'GET' && retryCount < this.defaultRetryOptions.maxRetries && apiError.isRetryable) {
+      // Check if should retry using the error's built-in isRetryable getter
+      if (retryCount < this.defaultRetryOptions.maxRetries && apiError.isRetryable) {
         logger.debug(
           `Retrying request attempt ${retryCount + 1}/${this.defaultRetryOptions.maxRetries}: ${request.path}`,
           { error: apiError.message, code: apiError.code }
         )
 
         // Calculate delay with exponential backoff
-        const retryDelayMs =
+        const delay =
           this.defaultRetryOptions.retryDelay * Math.pow(this.defaultRetryOptions.backoffMultiplier, retryCount)
 
-        await delay(retryDelayMs)
+        await new Promise((resolve) => setTimeout(resolve, delay))
 
         // Create new request with new ID for retry
         const retryRequest = { ...request, id: this.generateRequestId() }
@@ -254,7 +210,7 @@ export class DataApiService implements ApiClient {
       }
     }
 
-    logger.debug(`Making ${method} request to ${path}`, { request: toSafeRequestLog(request) })
+    logger.debug(`Making ${method} request to ${path}`, { request })
 
     return this.sendRequest<T>(request).catch((error) => {
       logger.error(`Request failed: ${method} ${path}`, error)
@@ -366,11 +322,7 @@ export class DataApiService implements ApiClient {
     const unsubscribe = window.api.dataApi.subscribe(options.path, (data, event) => {
       // Convert string event to SubscriptionEvent enum
       const subscriptionEvent = event as SubscriptionEvent
-      try {
-        callback(data, subscriptionEvent)
-      } catch (error) {
-        logger.warn(`Subscription callback failed: ${options.path}`, error as Error)
-      }
+      callback(data, subscriptionEvent)
     })
 
     logger.debug(`Subscribed to ${options.path}`, { subscriptionId })

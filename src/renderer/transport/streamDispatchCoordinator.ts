@@ -1,6 +1,5 @@
 import { loggerService } from '@logger'
 import { ipcApi } from '@renderer/ipc'
-import { getErrorMessage } from '@renderer/utils/error'
 import type { AiStreamOpenRequest, AiStreamOpenResponse } from '@shared/ai/transport'
 
 const logger = loggerService.withContext('streamDispatchCoordinator')
@@ -30,13 +29,13 @@ export const streamDispatchCoordinator = {
     ipcApi
       .request('ai.stream_open', request)
       .then((ack) => {
-        if (ack.mode === 'blocked') {
+        if (ack.mode === 'blocked' && ack.reason === 'agent-session-workspace') {
           window.toast?.error(ack.message)
         }
         notify({ ok: true, topicId, ack })
       })
       .catch((error: unknown) => {
-        const err = error instanceof Error ? error : new Error(getErrorMessage(error), { cause: error })
+        const err = error instanceof Error ? error : new Error(String(error))
         logger.error('streamOpen IPC failed', err)
         notify({ ok: false, topicId, error: err })
       })

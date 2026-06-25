@@ -35,12 +35,6 @@ const openClawSlice = createSlice({
   name: 'openclaw',
   initialState,
   reducers: {
-    hydrateOpenClawState: (_state, action: PayloadAction<Partial<OpenClawState>>) => {
-      return {
-        ...initialState,
-        ...action.payload
-      }
-    },
     setGatewayStatus: (state, action: PayloadAction<GatewayStatus>) => {
       state.gatewayStatus = action.payload
     },
@@ -63,7 +57,6 @@ const openClawSlice = createSlice({
 })
 
 export const {
-  hydrateOpenClawState,
   setGatewayStatus,
   setGatewayPort,
   setChannels,

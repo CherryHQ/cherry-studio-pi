@@ -107,19 +107,6 @@ vi.mock('@renderer/services/ApiService', () => ({
   getRotatedApiKey: (provider: any) => provider.apiKey || ''
 }))
 
-vi.mock('@renderer/utils/error', () => ({
-  getErrorMessage: (error: unknown): string => {
-    if (typeof error === 'string') return error
-    if (error instanceof Error) return error.message
-    if (error && typeof error === 'object') {
-      const nested = (error as { error?: unknown }).error
-      if (nested) return (nested as { message?: string }).message || 'unknown error'
-      return (error as { message?: string }).message || 'unknown error'
-    }
-    return 'unknown error'
-  }
-}))
-
 // mock i18n
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -150,20 +137,6 @@ Object.assign(window, {
     success: vi.fn()
   }
 })
-
-type Deferred<T> = {
-  promise: Promise<T>
-  resolve: (value: T) => void
-}
-
-function deferred<T>(): Deferred<T> {
-  let resolve: (value: T) => void = () => {}
-  const promise = new Promise<T>((promiseResolve) => {
-    resolve = promiseResolve
-  })
-
-  return { promise, resolve }
-}
 
 describe('InputEmbeddingDimension', () => {
   beforeEach(() => {
@@ -241,26 +214,6 @@ describe('InputEmbeddingDimension', () => {
         expect(handleChange).toHaveBeenCalledWith(1536)
       })
     })
-
-    it('should ignore duplicate refresh clicks while dimension fetch is pending', async () => {
-      const runningFetch = deferred<{ embeddings: number[][] }>()
-      mocks.embedMany.mockReturnValueOnce(runningFetch.promise)
-      const handleChange = vi.fn()
-
-      render(<InputEmbeddingDimension model={mockModel} onChange={handleChange} />)
-
-      const refreshButton = getRefreshButton()
-      fireEvent.click(refreshButton)
-      fireEvent.click(refreshButton)
-
-      expect(mocks.embedMany).toHaveBeenCalledTimes(1)
-      expect(refreshButton).toBeDisabled()
-
-      runningFetch.resolve({ embeddings: [new Array(1536).fill(0)] })
-      await waitFor(() => {
-        expect(handleChange).toHaveBeenCalledWith(1536)
-      })
-    })
   })
 
   describe('error handling', () => {
@@ -292,20 +245,6 @@ describe('InputEmbeddingDimension', () => {
 
       await waitFor(() => {
         expect(window.toast.error).toHaveBeenCalledWith('获取嵌入维度失败\nAPI Error')
-      })
-    })
-
-    it('should show nested bridge error details when API call fails', async () => {
-      mocks.embedMany.mockRejectedValue({ error: { message: 'embedding endpoint rejected request' } })
-
-      const user = userEvent.setup()
-      render(<InputEmbeddingDimension model={mockModel} />)
-
-      const refreshButton = getRefreshButton()
-      await user.click(refreshButton)
-
-      await waitFor(() => {
-        expect(window.toast.error).toHaveBeenCalledWith('获取嵌入维度失败\nembedding endpoint rejected request')
       })
     })
 

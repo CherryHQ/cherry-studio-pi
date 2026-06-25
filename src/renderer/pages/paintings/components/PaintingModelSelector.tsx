@@ -5,7 +5,7 @@ import { ModelSelector } from '@renderer/components/Selector/model'
 import { getProviderDisplayName } from '@renderer/components/Selector/model/utils'
 import { useModels } from '@renderer/hooks/useModel'
 import { useProviders } from '@renderer/hooks/useProvider'
-import { createUniqueModelId, isUniqueModelId, parseUniqueModelId } from '@shared/data/types/model'
+import { createUniqueModelId, parseUniqueModelId } from '@shared/data/types/model'
 import { isGenerateImageModel } from '@shared/utils/model'
 import { first } from 'lodash'
 import { ChevronDown } from 'lucide-react'
@@ -24,9 +24,6 @@ interface PaintingModelSelectorProps {
   hideTitle?: boolean
 }
 
-const getModelIdentifier = (model: { apiModelId?: string; id: string }) =>
-  model.apiModelId ?? (isUniqueModelId(model.id) ? parseUniqueModelId(model.id).modelId : model.id)
-
 const PaintingModelSelector: FC<PaintingModelSelectorProps> = ({ className, painting, onSelect, hideTitle }) => {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -42,9 +39,7 @@ const PaintingModelSelector: FC<PaintingModelSelectorProps> = ({ className, pain
   const selectedModel = useMemo(
     () =>
       painting.model
-        ? models.find(
-            (model) => model.providerId === painting.providerId && getModelIdentifier(model) === painting.model
-          )
+        ? models.find((model) => model.providerId === painting.providerId && model.apiModelId === painting.model)
         : undefined,
     [models, painting.providerId, painting.model]
   )
@@ -58,7 +53,7 @@ const PaintingModelSelector: FC<PaintingModelSelectorProps> = ({ className, pain
   const selectedProviderName = selectedProvider ? getProviderDisplayName(selectedProvider) : undefined
   const selectedIcon = useMemo(() => {
     if (!painting.providerId) return undefined
-    const identifier = selectedModel ? getModelIdentifier(selectedModel) : painting.model
+    const identifier = selectedModel?.apiModelId ?? painting.model
     if (!identifier) return undefined
     return resolveIcon(identifier, painting.providerId) ?? resolveIcon(selectedModel?.name ?? '', painting.providerId)
   }, [painting.providerId, painting.model, selectedModel])

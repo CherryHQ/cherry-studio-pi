@@ -13,7 +13,6 @@ import { useTimer } from './useTimer'
  */
 export default function useScrollPosition(key: string, throttleWait?: number) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const scrollFrameRef = useRef<number | null>(null)
   const scrollKey = useMemo(() => `scroll:${key}`, [key])
   const scrollKeyRef = useRef(scrollKey)
   const { setTimeoutTimer } = useTimer()
@@ -22,21 +21,12 @@ export default function useScrollPosition(key: string, throttleWait?: number) {
     scrollKeyRef.current = scrollKey
   }, [scrollKey])
 
-  const handleScroll = useMemo(
-    () =>
-      throttle(() => {
-        const position = containerRef.current?.scrollTop ?? 0
-        if (scrollFrameRef.current !== null) {
-          window.cancelAnimationFrame(scrollFrameRef.current)
-        }
-
-        scrollFrameRef.current = window.requestAnimationFrame(() => {
-          scrollFrameRef.current = null
-          cacheService.setCasual(scrollKeyRef.current, position)
-        })
-      }, throttleWait ?? 100),
-    [throttleWait]
-  )
+  const handleScroll = throttle(() => {
+    const position = containerRef.current?.scrollTop ?? 0
+    window.requestAnimationFrame(() => {
+      cacheService.setCasual(scrollKeyRef.current, position)
+    })
+  }, throttleWait ?? 100)
 
   useEffect(() => {
     const scroll = () => containerRef.current?.scrollTo({ top: cacheService.getCasual<number>(scrollKey) || 0 })
@@ -45,13 +35,7 @@ export default function useScrollPosition(key: string, throttleWait?: number) {
   }, [scrollKey, setTimeoutTimer])
 
   useEffect(() => {
-    return () => {
-      handleScroll.cancel()
-      if (scrollFrameRef.current !== null) {
-        window.cancelAnimationFrame(scrollFrameRef.current)
-        scrollFrameRef.current = null
-      }
-    }
+    return () => handleScroll.cancel()
   }, [handleScroll])
 
   return { containerRef, handleScroll }

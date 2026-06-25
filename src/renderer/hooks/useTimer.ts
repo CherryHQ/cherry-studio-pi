@@ -48,10 +48,7 @@ export const useTimer = () => {
    * @param key - 定时器标识符
    */
   const clearTimeoutTimer = useCallback((key: string) => {
-    const timer = timeoutMapRef.current.get(key)
-    if (timer) {
-      clearTimeout(timer)
-    }
+    clearTimeout(timeoutMapRef.current.get(key))
     timeoutMapRef.current.delete(key)
   }, [])
 
@@ -60,10 +57,7 @@ export const useTimer = () => {
    * @param key - 定时器标识符
    */
   const clearIntervalTimer = useCallback((key: string) => {
-    const timer = intervalMapRef.current.get(key)
-    if (timer) {
-      clearInterval(timer)
-    }
+    clearInterval(intervalMapRef.current.get(key))
     intervalMapRef.current.delete(key)
   }, [])
 
@@ -101,16 +95,8 @@ export const useTimer = () => {
    */
   const setTimeoutTimer = useCallback(
     (key: string, ...args: Parameters<typeof setTimeout>) => {
-      clearTimeoutTimer(key)
-      const [handler, timeout, ...handlerArgs] = args
-      const timer = setTimeout(() => {
-        if (timeoutMapRef.current.get(key) === timer) {
-          timeoutMapRef.current.delete(key)
-        }
-        if (typeof handler === 'function') {
-          handler(...handlerArgs)
-        }
-      }, timeout)
+      clearTimeout(timeoutMapRef.current.get(key))
+      const timer = setTimeout(...args)
       timeoutMapRef.current.set(key, timer)
       return () => clearTimeoutTimer(key)
     },
@@ -136,7 +122,7 @@ export const useTimer = () => {
    */
   const setIntervalTimer = useCallback(
     (key: string, ...args: Parameters<typeof setInterval>) => {
-      clearIntervalTimer(key)
+      clearInterval(intervalMapRef.current.get(key))
       const timer = setInterval(...args)
       intervalMapRef.current.set(key, timer)
       return () => clearIntervalTimer(key)

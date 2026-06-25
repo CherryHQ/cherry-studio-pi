@@ -68,12 +68,6 @@ const selectionSlice = createSlice({
   name: 'selectionStore',
   initialState,
   reducers: {
-    hydrateSelectionState: (_state, action: PayloadAction<Partial<SelectionState>>) => {
-      return {
-        ...initialState,
-        ...action.payload
-      }
-    },
     // setSelectionEnabled: (state, action: PayloadAction<boolean>) => {
     //   state.selectionEnabled = action.payload
     // },
@@ -108,13 +102,12 @@ const selectionSlice = createSlice({
     //   state.actionItems = action.payload
     // },
     setPlaceholder: (state, action: PayloadAction<Partial<SelectionState>>) => {
-      Object.assign(state, action.payload)
+      state = { ...state, ...action.payload }
     }
   }
 })
 
 export const {
-  hydrateSelectionState,
   // setSelectionEnabled,
   // setTriggerMode,
   // setIsCompact,

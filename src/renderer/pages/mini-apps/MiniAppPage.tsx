@@ -5,7 +5,6 @@ import { useCurrentTab, useCurrentTabId } from '@renderer/context/TabIdContext'
 import { useOptionalTabsContext } from '@renderer/context/TabsContext'
 import { useMiniAppPopup } from '@renderer/hooks/useMiniAppPopup'
 import { useMiniApps } from '@renderer/hooks/useMiniApps'
-import { getErrorMessage } from '@renderer/utils/error'
 import { getWebviewLoaded, onWebviewStateChange, setWebviewLoaded } from '@renderer/utils/webviewStateManager'
 import { DataApiError, ErrorCode } from '@shared/data/api'
 import type { MiniApp } from '@shared/data/types/miniApp'
@@ -66,7 +65,7 @@ const MiniAppPage: FC = () => {
   useEffect(() => {
     if (isLoading) return
     if (error) {
-      logger.error('Failed to load mini apps', error instanceof Error ? error : new Error(getErrorMessage(error)))
+      logger.error('Failed to load mini apps', error instanceof Error ? error : new Error(String(error)))
       return
     }
     if (!app) return
@@ -86,14 +85,6 @@ const MiniAppPage: FC = () => {
   const [isReady, setIsReady] = useState<boolean>(() => (appId ? getWebviewLoaded(appId) : false))
   const [currentUrl, setCurrentUrl] = useState<string | null>(app?.url ?? null)
 
-  useEffect(() => {
-    setIsReady(appId ? getWebviewLoaded(appId) : false)
-  }, [appId])
-
-  useEffect(() => {
-    setCurrentUrl(app?.url ?? null)
-  }, [app?.appId, app?.url])
-
   // Get the webview element from the pool (avoid re-running on openedKeepAliveMiniApps.length changes)
   const webviewCleanupRef = useRef<(() => void) | null>(null)
 
@@ -105,20 +96,11 @@ const MiniAppPage: FC = () => {
 
     if (webviewRef.current === el) return true // Already attached
 
-    webviewCleanupRef.current?.()
-    webviewCleanupRef.current = null
-
     webviewRef.current = el
     const handleInPageNav = (e: any) => setCurrentUrl(e.url)
     el.addEventListener('did-navigate-in-page', handleInPageNav)
-    let cleaned = false
     webviewCleanupRef.current = () => {
-      if (cleaned) return
-      cleaned = true
       el.removeEventListener('did-navigate-in-page', handleInPageNav)
-      if (webviewRef.current === el) {
-        webviewRef.current = null
-      }
     }
     return true
   }, [app])
@@ -170,7 +152,7 @@ const MiniAppPage: FC = () => {
     return (
       <div className="pointer-events-none relative z-3 flex h-full w-full flex-col *:pointer-events-auto">
         <div className="absolute inset-x-0 top-8.75 bottom-0 z-4 flex flex-col items-center justify-center gap-3 bg-card">
-          <BeatLoader color="var(--color-foreground-secondary)" size={8} />
+          <BeatLoader color="var(--color-text-2)" size={8} />
         </div>
       </div>
     )
@@ -232,7 +214,7 @@ const MiniAppPage: FC = () => {
       {!isReady && (
         <div className="absolute inset-x-0 top-8.75 bottom-0 z-4 flex flex-col items-center justify-center gap-3 bg-card">
           <LogoAvatar logo={getMiniAppsLogo(app.logo) ?? app.logo} size={60} />
-          <BeatLoader color="var(--color-foreground-secondary)" size={8} style={{ marginTop: 12 }} />
+          <BeatLoader color="var(--color-text-2)" size={8} style={{ marginTop: 12 }} />
         </div>
       )}
     </div>

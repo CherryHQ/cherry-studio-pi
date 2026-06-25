@@ -1,7 +1,6 @@
 import { loggerService } from '@logger'
 import { PROVIDER_URLS } from '@renderer/config/providers'
-import { enableProviderWhenModelsAvailable } from '@renderer/pages/settings/ProviderSettings/utils/providerEnablement'
-import { validateApiHost } from '@renderer/utils'
+import { validateApiHost } from '@renderer/utils/api'
 import { ErrorCode, isDataApiError, isSerializedDataApiError, toDataApiError } from '@shared/data/api'
 import { ENDPOINT_TYPE } from '@shared/data/types/model'
 import type { Provider } from '@shared/data/types/provider'
@@ -67,19 +66,10 @@ export function useProviderEndpointActions({
   const { t } = useTranslation()
   const providerConfig = provider ? PROVIDER_URLS[provider.id as keyof typeof PROVIDER_URLS] : undefined
   const lastPersistedApiHostRef = useRef(trim(providerApiHost))
-  const mountedRef = useRef(true)
 
   useEffect(() => {
     lastPersistedApiHostRef.current = trim(providerApiHost)
   }, [providerApiHost])
-
-  useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
 
   const buildNextApiEndpointConfigs = useCallback(
     (baseUrl: string) => {
@@ -97,23 +87,14 @@ export function useProviderEndpointActions({
 
   const syncProviderModelsInBackground = useCallback(
     (nextProvider: Provider) => {
-      void syncProviderModels()
-        .then(async (syncedModels) => {
-          await enableProviderWhenModelsAvailable(
-            nextProvider,
-            patchProvider,
-            syncedModels.length,
-            'endpoint_background_sync'
-          )
+      void syncProviderModels().catch((error) => {
+        logger.error('Silent provider model sync failed after endpoint update', {
+          providerId: nextProvider.id,
+          error
         })
-        .catch((error) => {
-          logger.error('Silent provider model sync failed after endpoint update', {
-            providerId: nextProvider.id,
-            error
-          })
-        })
+      })
     },
-    [patchProvider, syncProviderModels]
+    [syncProviderModels]
   )
 
   const persistApiHostDraft = useCallback(
@@ -144,17 +125,8 @@ export function useProviderEndpointActions({
   )
 
   const debouncedPersistApiHost = useMemo(
-    () =>
-      debounce((nextApiHost: string) => {
-        void persistApiHostDraft(nextApiHost).catch((error) => {
-          logger.error('Failed to persist provider API host draft', { providerId: provider?.id, error })
-
-          if (mountedRef.current) {
-            window.toast?.error(getEndpointActionErrorMessage(error, t('settings.provider.save_failed')))
-          }
-        })
-      }, 150),
-    [persistApiHostDraft, provider?.id, t]
+    () => debounce((nextApiHost: string) => void persistApiHostDraft(nextApiHost), 150),
+    [persistApiHostDraft]
   )
 
   useEffect(() => {
@@ -179,9 +151,11 @@ export function useProviderEndpointActions({
     }
 
     debouncedPersistApiHost(apiHost)
+
+    return () => debouncedPersistApiHost.cancel()
   }, [apiHost, debouncedPersistApiHost, provider])
 
-  useEffect(() => () => debouncedPersistApiHost.flush(), [debouncedPersistApiHost])
+  useEffect(() => () => debouncedPersistApiHost.cancel(), [debouncedPersistApiHost])
 
   const commitApiHost = useCallback(
     async (explicitNext?: string): Promise<boolean> => {
@@ -196,7 +170,7 @@ export function useProviderEndpointActions({
         const trimmedApiHost = trim(raw)
         if (!validateApiHost(trimmedApiHost)) {
           setApiHost(providerApiHost)
-          window.toast?.error(t('settings.provider.api_host_no_valid'))
+          window.toast.error(t('settings.provider.api_host_no_valid'))
           return false
         }
 
@@ -223,7 +197,7 @@ export function useProviderEndpointActions({
         return true
       } catch (error) {
         logger.error('Failed to commit provider API host', { providerId: provider?.id, error })
-        window.toast?.error(getEndpointActionErrorMessage(error, t('settings.provider.save_failed')))
+        window.toast.error(getEndpointActionErrorMessage(error, t('settings.provider.save_failed')))
         return false
       }
     },
@@ -271,7 +245,7 @@ export function useProviderEndpointActions({
         return true
       } catch (error) {
         logger.error('Failed to commit Anthropic API host', { providerId: provider?.id, error })
-        window.toast?.error(getEndpointActionErrorMessage(error, t('settings.provider.save_failed')))
+        window.toast.error(getEndpointActionErrorMessage(error, t('settings.provider.save_failed')))
         return false
       }
     },
@@ -293,7 +267,7 @@ export function useProviderEndpointActions({
       return true
     } catch (error) {
       logger.error('Failed to commit API version', { providerId: provider.id, error })
-      window.toast?.error(getEndpointActionErrorMessage(error, t('settings.provider.save_failed')))
+      window.toast.error(getEndpointActionErrorMessage(error, t('settings.provider.save_failed')))
       return false
     }
   }, [apiVersion, patchProvider, provider, t])
@@ -319,7 +293,7 @@ export function useProviderEndpointActions({
       return true
     } catch (error) {
       logger.error('Failed to reset provider API host', { providerId: provider.id, error })
-      window.toast?.error(getEndpointActionErrorMessage(error, t('settings.provider.save_failed')))
+      window.toast.error(getEndpointActionErrorMessage(error, t('settings.provider.save_failed')))
       return false
     }
   }, [

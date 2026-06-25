@@ -1,9 +1,6 @@
 import { Button, Dialog, DialogContent, DialogHeader, DialogTitle } from '@cherrystudio/ui'
-import { loggerService } from '@logger'
 import type { FC } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
-
-const logger = loggerService.withContext('MacProcessTrustHintModal')
 
 interface MacProcessTrustHintModalProps {
   open: boolean
@@ -13,26 +10,14 @@ interface MacProcessTrustHintModalProps {
 const MacProcessTrustHintModal: FC<MacProcessTrustHintModalProps> = ({ open, onClose }) => {
   const { t } = useTranslation()
 
-  const handleOpenAccessibility = async () => {
-    try {
-      await window.api.shell.openExternal(
-        'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility'
-      )
-      onClose()
-    } catch (error) {
-      logger.error('Failed to open macOS accessibility settings', error as Error)
-      window.toast?.error(t('common.error'))
-    }
+  const handleOpenAccessibility = () => {
+    void window.api.shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility')
+    onClose()
   }
 
   const handleConfirm = async () => {
-    try {
-      await window.api.mac.requestProcessTrust()
-      onClose()
-    } catch (error) {
-      logger.error('Failed to request macOS process trust', error as Error)
-      window.toast?.error(t('common.error'))
-    }
+    void window.api.mac.requestProcessTrust()
+    onClose()
   }
 
   return (

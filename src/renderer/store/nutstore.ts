@@ -33,7 +33,7 @@ export interface NutstoreState {
 
 const initialState: NutstoreState = {
   nutstoreToken: '',
-  nutstorePath: '/cherry-studio-pi',
+  nutstorePath: '/cherry-studio',
   nutstoreAutoSync: false,
   nutstoreSyncInterval: 0,
   nutstoreSyncState: {
@@ -49,12 +49,6 @@ const nutstoreSlice = createSlice({
   name: 'nutstore',
   initialState,
   reducers: {
-    hydrateNutstoreState: (_state, action: PayloadAction<Partial<NutstoreState>>) => {
-      return {
-        ...initialState,
-        ...action.payload
-      }
-    },
     setNutstoreToken: (state, action: PayloadAction<string>) => {
       state.nutstoreToken = action.payload
     },
@@ -80,7 +74,6 @@ const nutstoreSlice = createSlice({
 })
 
 export const {
-  hydrateNutstoreState,
   setNutstoreToken,
   setNutstorePath,
   setNutstoreAutoSync,

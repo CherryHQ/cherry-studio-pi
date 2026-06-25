@@ -2,16 +2,13 @@ import { Button, InfoTooltip, Input, RowFlex } from '@cherrystudio/ui'
 import { usePreference } from '@data/hooks/usePreference'
 import { loggerService } from '@logger'
 import { useTheme } from '@renderer/context/ThemeProvider'
-import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
-import { formatErrorMessage, formatErrorMessageWithPrefix } from '@renderer/utils/error'
+import { formatErrorMessage } from '@renderer/utils/error'
 import type { FC } from 'react'
-import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingRow, SettingRowTitle, SettingTitle } from '..'
 
 const logger = loggerService.withContext('YuqueSettings')
-const INTEGRATION_CHECK_TIMEOUT_MS = 10_000
 
 const isYuqueRepoResponse = (value: unknown): value is { data: { id: string | number } } => {
   if (!value || typeof value !== 'object') return false
@@ -26,103 +23,62 @@ const YuqueSettings: FC = () => {
   const [yuqueToken, setYuqueToken] = usePreference('data.integration.yuque.token')
   const [yuqueUrl, setYuqueUrl] = usePreference('data.integration.yuque.url')
   const [, setYuqueRepoId] = usePreference('data.integration.yuque.repo_id')
-  const [checkingConnection, setCheckingConnection] = useState(false)
-  const checkingConnectionRef = useRef(false)
-  const mountedRef = useRef(true)
-
-  useEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
-
-  const showSaveFailed = useSaveFailedToast()
 
   const handleYuqueTokenChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    void setYuqueToken(e.target.value).catch(showSaveFailed)
+    void setYuqueToken(e.target.value)
   }
 
   const handleYuqueRepoUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    void setYuqueUrl(e.target.value).catch(showSaveFailed)
+    void setYuqueUrl(e.target.value)
   }
 
   const handleYuqueConnectionCheck = async () => {
-    if (checkingConnectionRef.current) {
+    if (!yuqueToken) {
+      window.toast.error(t('settings.data.yuque.check.empty_token'))
       return
     }
-    try {
-      if (!yuqueToken) {
-        window.toast?.error(t('settings.data.yuque.check.empty_token'))
-        return
-      }
-      if (!yuqueUrl) {
-        window.toast?.error(t('settings.data.yuque.check.empty_repo_url'))
-        return
-      }
+    if (!yuqueUrl) {
+      window.toast.error(t('settings.data.yuque.check.empty_repo_url'))
+      return
+    }
 
-      checkingConnectionRef.current = true
-      setCheckingConnection(true)
+    try {
       const response = await fetch('https://www.yuque.com/api/v2/hello', {
-        signal: AbortSignal.timeout(INTEGRATION_CHECK_TIMEOUT_MS),
         headers: {
           'X-Auth-Token': yuqueToken
         }
       })
 
-      if (!mountedRef.current) {
-        return
-      }
-
       if (!response.ok) {
-        window.toast?.error(t('settings.data.yuque.check.fail'))
+        window.toast.error(t('settings.data.yuque.check.fail'))
         return
       }
       const yuqueSlug = yuqueUrl.replace('https://www.yuque.com/', '')
       const repoIDResponse = await fetch(`https://www.yuque.com/api/v2/repos/${yuqueSlug}`, {
-        signal: AbortSignal.timeout(INTEGRATION_CHECK_TIMEOUT_MS),
         headers: {
           'X-Auth-Token': yuqueToken
         }
       })
-      if (!mountedRef.current) {
-        return
-      }
-
       if (!repoIDResponse.ok) {
-        window.toast?.error(t('settings.data.yuque.check.fail'))
+        window.toast.error(t('settings.data.yuque.check.fail'))
         return
       }
       const data = (await repoIDResponse.json()) as unknown
-      if (!mountedRef.current) {
-        return
-      }
-
       if (!isYuqueRepoResponse(data)) {
         logger.error('Invalid Yuque repo response')
-        window.toast?.error(t('settings.data.yuque.check.fail'))
+        window.toast.error(t('settings.data.yuque.check.fail'))
         return
       }
       await setYuqueRepoId(String(data.data.id))
-      window.toast?.success(t('settings.data.yuque.check.success'))
+      window.toast.success(t('settings.data.yuque.check.success'))
     } catch (error) {
       logger.error('Failed to check Yuque connection', error as Error)
-      if (mountedRef.current) {
-        window.toast?.error(formatErrorMessage(error) || t('settings.data.yuque.check.fail'))
-      }
-    } finally {
-      checkingConnectionRef.current = false
-      if (mountedRef.current) {
-        setCheckingConnection(false)
-      }
+      window.toast.error(formatErrorMessage(error) || t('settings.data.yuque.check.fail'))
     }
   }
 
   const handleYuqueHelpClick = () => {
-    void window.api.openWebsite('https://www.yuque.com/settings/tokens').catch((error) => {
-      logger.error('Failed to open Yuque token settings', error as Error)
-      window.toast?.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
-    })
+    void window.api.openWebsite('https://www.yuque.com/settings/tokens')
   }
 
   return (
@@ -163,12 +119,7 @@ const YuqueSettings: FC = () => {
               placeholder={t('settings.data.yuque.token_placeholder')}
               style={{ width: '100%' }}
             />
-            <Button
-              onClick={handleYuqueConnectionCheck}
-              variant="outline"
-              className="h-9 shrink-0"
-              disabled={checkingConnection}
-              loading={checkingConnection}>
+            <Button onClick={handleYuqueConnectionCheck} variant="outline" className="h-9 shrink-0">
               {t('settings.data.yuque.check.button')}
             </Button>
           </RowFlex>

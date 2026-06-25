@@ -1,18 +1,8 @@
 import { loggerService } from '@logger'
-import { uuid } from '@renderer/utils'
-import { getErrorMessage } from '@renderer/utils/error'
+import { uuid } from '@renderer/utils/uuid'
 import { IpcChannel } from '@shared/IpcChannel'
 
 const logger = loggerService.withContext('PyodideService')
-const PYODIDE_IPC_HANDLER_KEY = '__CHERRY_STUDIO_PI_PYODIDE_IPC_HANDLER__'
-
-type PyodideIpcHandlerState = {
-  remove: () => void
-}
-
-type PyodideIpcHandlerGlobal = typeof globalThis & {
-  [PYODIDE_IPC_HANDLER_KEY]?: boolean | PyodideIpcHandlerState
-}
 
 const SERVICE_CONFIG = {
   WORKER: {
@@ -22,16 +12,6 @@ const SERVICE_CONFIG = {
       RUN: 60000 // 60 秒默认运行超时
     }
   }
-}
-
-function unrefTimer(timer: ReturnType<typeof setTimeout>) {
-  if (typeof timer === 'object' && timer && 'unref' in timer && typeof timer.unref === 'function') {
-    timer.unref()
-  }
-}
-
-function toError(error: unknown): Error {
-  return error instanceof Error ? error : new Error(getErrorMessage(error), { cause: error })
 }
 
 // 定义结果类型接口
@@ -56,38 +36,6 @@ class PyodideService {
   private initRetryCount: number = 0
   private resolvers: Map<string, { resolve: (value: any) => void; reject: (error: Error) => void }> = new Map()
 
-  private rejectPendingRequests(error: Error): void {
-    this.resolvers.forEach((resolver) => {
-      resolver.reject(error)
-    })
-    this.resolvers.clear()
-  }
-
-  private terminateWorker(): void {
-    if (this.worker) {
-      this.worker.onmessage = null
-      this.worker.onerror = null
-      this.worker.terminate()
-      this.worker = null
-    }
-    this.initPromise = null
-  }
-
-  private createWorkerError(event: ErrorEvent | Event): Error {
-    if ('message' in event && typeof event.message === 'string' && event.message.trim()) {
-      return new Error(`Pyodide worker error: ${event.message.trim()}`)
-    }
-
-    return new Error('Pyodide worker error')
-  }
-
-  private handleWorkerError(event: ErrorEvent | Event): void {
-    const error = this.createWorkerError(event)
-    logger.error('Pyodide worker failed', error)
-    this.terminateWorker()
-    this.rejectPendingRequests(error)
-  }
-
   /**
    * 初始化 Pyodide Worker
    */
@@ -111,52 +59,32 @@ class PyodideService {
           // 设置通用消息处理器
           this.worker.onmessage = this.handleMessage.bind(this)
 
-          const timeoutRef: { current?: ReturnType<typeof setTimeout> } = {}
-          const clearInitTimeout = () => {
-            if (!timeoutRef.current) return
-
-            clearTimeout(timeoutRef.current)
-            timeoutRef.current = undefined
-          }
+          // 设置初始化超时
+          const timeout = setTimeout(() => {
+            this.worker = null
+            this.initPromise = null
+            this.initRetryCount++
+            reject(new Error('Pyodide initialization timeout'))
+          }, SERVICE_CONFIG.WORKER.REQUEST_TIMEOUT.INIT)
 
           // 设置初始化处理器
-          let settled = false
-          const failInitialization = (error: Error) => {
-            if (settled) return
-
-            settled = true
-            clearInitTimeout()
-            this.worker?.removeEventListener('message', initHandler)
-            this.terminateWorker()
-            this.initRetryCount++
-            reject(error)
-          }
-
           const initHandler = (event: MessageEvent) => {
             if (event.data?.type === 'initialized') {
-              settled = true
-              clearInitTimeout()
+              clearTimeout(timeout)
               this.worker?.removeEventListener('message', initHandler)
-              if (this.worker) {
-                this.worker.onerror = this.handleWorkerError.bind(this)
-              }
               this.initRetryCount = 0
               this.initPromise = null
               resolve()
             } else if (event.data?.type === 'init-error') {
-              failInitialization(new Error(`Pyodide initialization failed: ${event.data.error}`))
+              clearTimeout(timeout)
+              this.worker?.removeEventListener('message', initHandler)
+              this.worker?.terminate()
+              this.worker = null
+              this.initPromise = null
+              this.initRetryCount++
+              reject(new Error(`Pyodide initialization failed: ${event.data.error}`))
             }
           }
-
-          this.worker.onerror = (event) => {
-            failInitialization(this.createWorkerError(event))
-          }
-
-          // 设置初始化超时
-          timeoutRef.current = setTimeout(() => {
-            failInitialization(new Error('Pyodide initialization timeout'))
-          }, SERVICE_CONFIG.WORKER.REQUEST_TIMEOUT.INIT)
-          unrefTimer(timeoutRef.current)
 
           this.worker.addEventListener('message', initHandler)
         })
@@ -164,7 +92,7 @@ class PyodideService {
           this.worker = null
           this.initPromise = null
           this.initRetryCount++
-          reject(new Error(`Failed to load Pyodide worker: ${getErrorMessage(error)}`, { cause: error }))
+          reject(new Error(`Failed to load Pyodide worker: ${error instanceof Error ? error.message : String(error)}`))
         })
     })
 
@@ -214,9 +142,8 @@ class PyodideService {
     try {
       await this.initialize()
     } catch (error: unknown) {
-      const normalizedError = toError(error)
-      logger.error('Pyodide initialization failed, cannot execute Python code', normalizedError)
-      const text = `Initialization failed: ${normalizedError.message}`
+      logger.error('Pyodide initialization failed, cannot execute Python code', error as Error)
+      const text = `Initialization failed: ${error instanceof Error ? error.message : String(error)}`
       return { text }
     }
 
@@ -231,15 +158,9 @@ class PyodideService {
 
         // 设置消息超时
         const timeoutId = setTimeout(() => {
-          if (!this.resolvers.has(id)) return
-
-          const timeoutError = new Error('Python execution timed out')
           this.resolvers.delete(id)
-          this.terminateWorker()
-          this.rejectPendingRequests(timeoutError)
-          reject(timeoutError)
+          reject(new Error('Python execution timed out'))
         }, timeout)
-        unrefTimer(timeoutId)
 
         this.resolvers.set(id, {
           resolve: (output) => {
@@ -252,22 +173,16 @@ class PyodideService {
           }
         })
 
-        try {
-          this.worker?.postMessage({
-            id,
-            python: script,
-            context
-          })
-        } catch (error) {
-          clearTimeout(timeoutId)
-          this.resolvers.delete(id)
-          reject(toError(error))
-        }
+        this.worker?.postMessage({
+          id,
+          python: script,
+          context
+        })
       })
 
       return { text: this.formatOutput(output), image: output.image }
     } catch (error: unknown) {
-      const text = `Internal error: ${getErrorMessage(error)}`
+      const text = `Internal error: ${error instanceof Error ? error.message : String(error)}`
       return { text }
     }
   }
@@ -332,73 +247,53 @@ class PyodideService {
    * 释放 Pyodide Worker 资源
    */
   public terminate(): void {
-    this.terminateWorker()
-    this.initRetryCount = 0
+    if (this.worker) {
+      this.worker.terminate()
+      this.worker = null
+      this.initPromise = null
+      this.initRetryCount = 0
 
-    // 清理所有等待的请求
-    this.rejectPendingRequests(new Error('Worker terminated'))
+      // 清理所有等待的请求
+      this.resolvers.forEach((resolver) => {
+        resolver.reject(new Error('Worker terminated'))
+      })
+      this.resolvers.clear()
+    }
   }
 }
 
 // 创建并导出单例实例
 export const pyodideService = new PyodideService()
 
-interface PythonExecutionRequest {
-  id: string
-  script: string
-  context: Record<string, any>
-  timeout: number
-}
+// Set up IPC handler for main process requests
+if (typeof window !== 'undefined' && window.electron?.ipcRenderer) {
+  interface PythonExecutionRequest {
+    id: string
+    script: string
+    context: Record<string, any>
+    timeout: number
+  }
 
-interface PythonExecutionResponse {
-  id: string
-  result?: string
-  error?: string
-}
+  interface PythonExecutionResponse {
+    id: string
+    result?: string
+    error?: string
+  }
 
-export function registerPyodideIpcHandler(): void {
-  const ipcRenderer = typeof window !== 'undefined' ? window.electron?.ipcRenderer : undefined
-  if (!ipcRenderer) return
-
-  const globalState = globalThis as PyodideIpcHandlerGlobal
-  if (globalState[PYODIDE_IPC_HANDLER_KEY]) return
-
-  const remove = ipcRenderer.on(IpcChannel.Python_ExecutionRequest, async (_, request: PythonExecutionRequest) => {
+  window.electron.ipcRenderer.on(IpcChannel.Python_ExecutionRequest, async (_, request: PythonExecutionRequest) => {
     try {
       const { text } = await pyodideService.runScript(request.script, request.context, request.timeout)
       const response: PythonExecutionResponse = {
         id: request.id,
         result: text
       }
-      ipcRenderer.send(IpcChannel.Python_ExecutionResponse, response)
+      window.electron.ipcRenderer.send(IpcChannel.Python_ExecutionResponse, response)
     } catch (error: unknown) {
       const response: PythonExecutionResponse = {
         id: request.id,
-        error: getErrorMessage(error)
+        error: error instanceof Error ? error.message : String(error)
       }
-      ipcRenderer.send(IpcChannel.Python_ExecutionResponse, response)
+      window.electron.ipcRenderer.send(IpcChannel.Python_ExecutionResponse, response)
     }
-  })
-  globalState[PYODIDE_IPC_HANDLER_KEY] = { remove }
-}
-
-export function unregisterPyodideIpcHandler(): void {
-  const globalState = globalThis as PyodideIpcHandlerGlobal
-  const state = globalState[PYODIDE_IPC_HANDLER_KEY]
-
-  if (state && typeof state === 'object') {
-    state.remove()
-  }
-
-  delete globalState[PYODIDE_IPC_HANDLER_KEY]
-}
-
-// Set up IPC handler for main process requests
-registerPyodideIpcHandler()
-
-if (import.meta.hot) {
-  import.meta.hot.dispose(() => {
-    unregisterPyodideIpcHandler()
-    pyodideService.terminate()
   })
 }

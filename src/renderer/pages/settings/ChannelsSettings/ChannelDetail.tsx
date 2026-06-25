@@ -37,7 +37,6 @@ import { getFormForType } from './ChannelForms'
 import type { AvailableChannel, ChannelData } from './channelTypes'
 
 const logger = loggerService.withContext('ChannelDetail')
-const SYSTEM_CHANNEL_WORKSPACE_SOURCE = { type: 'system' as const } satisfies CreateAgentChannelDto['workspace']
 
 // --------------- Types ---------------
 
@@ -120,33 +119,22 @@ const ChannelLogModal: FC<{
       return
     }
 
-    let cancelled = false
-
     // Load existing logs
     window.api.channel
       .getLogs(channelId)
-      .then((entries) => {
-        if (!cancelled) {
-          setLogs(entries)
-        }
-      })
+      .then(setLogs)
       .catch((err) => {
-        if (!cancelled) {
-          logger.warn('Failed to load channel logs', { channelId, err })
-        }
+        logger.warn('Failed to load channel logs', { channelId, err })
       })
 
     // Subscribe to real-time logs
     const unsub = window.api.channel.onLog((entry) => {
-      if (!cancelled && entry.channelId === channelId) {
+      if (entry.channelId === channelId) {
         setLogs((prev) => [...prev.slice(-199), entry])
       }
     })
 
-    return () => {
-      cancelled = true
-      unsub()
-    }
+    return unsub
   }, [open, channelId])
 
   useEffect(() => {
@@ -428,32 +416,21 @@ const ChannelDetail: FC<ChannelDetailProps> = ({ channelDef }) => {
 
   // Log modal
   const [logChannel, setLogChannel] = useState<{ id: string; name: string } | null>(null)
-  const [isAddingChannel, setIsAddingChannel] = useState(false)
-  const addPendingRef = useRef(false)
-  const workspaceSource = SYSTEM_CHANNEL_WORKSPACE_SOURCE
+  // TODO(agent-workspace-picker): wire the workspace picker before re-enabling channel creation.
+  const [workspaceSource] = useState<CreateAgentChannelDto['workspace'] | null>(null)
 
   // Fetch initial statuses + subscribe to real-time changes
   useEffect(() => {
-    let cancelled = false
-
     window.api.channel
       .getStatuses()
       .then((list) => {
-        if (!cancelled) {
-          setStatuses(new Map(list.map((s) => [s.channelId, s])))
-        }
+        setStatuses(new Map(list.map((s) => [s.channelId, s])))
       })
       .catch((err) => {
-        if (!cancelled) {
-          logger.warn('Failed to load initial channel statuses', { err })
-        }
+        logger.warn('Failed to load initial channel statuses', { err })
       })
 
     const unsub = window.api.channel.onStatusChange((status) => {
-      if (cancelled) {
-        return
-      }
-
       setStatuses((prev) => {
         // When a channel transitions to connected, revalidate SWR
         // (e.g. after QR registration saves credentials in main process)
@@ -465,35 +442,21 @@ const ChannelDetail: FC<ChannelDetailProps> = ({ channelDef }) => {
         return next
       })
     })
-
-    return () => {
-      cancelled = true
-      unsub()
-    }
+    return unsub
   }, [mutate])
 
   const handleAdd = useCallback(async () => {
-    if (addPendingRef.current || !channelDef.available) {
-      return
-    }
-
-    addPendingRef.current = true
-    setIsAddingChannel(true)
-    try {
-      const existingCount = channels?.length ?? 0
-      const newChannel = await createChannel({
-        type: channelDef.type,
-        name: existingCount > 0 ? `${channelDef.name} ${existingCount + 1}` : channelDef.name,
-        workspace: workspaceSource,
-        config: channelDef.defaultConfig,
-        isActive: true
-      } as never)
-      if (newChannel) {
-        setEditingChannelId(newChannel.id)
-      }
-    } finally {
-      addPendingRef.current = false
-      setIsAddingChannel(false)
+    if (!workspaceSource) return
+    const existingCount = channels?.length ?? 0
+    const newChannel = await createChannel({
+      type: channelDef.type,
+      name: existingCount > 0 ? `${channelDef.name} ${existingCount + 1}` : channelDef.name,
+      workspace: workspaceSource,
+      config: channelDef.defaultConfig,
+      isActive: true
+    } as never)
+    if (newChannel) {
+      setEditingChannelId(newChannel.id)
     }
   }, [channels?.length, createChannel, channelDef, workspaceSource])
 
@@ -553,7 +516,7 @@ const ChannelDetail: FC<ChannelDetailProps> = ({ channelDef }) => {
               {channelDef.available ? t(channelDef.description) : t('agent.cherryClaw.channels.comingSoon')}
             </p>
           </div>
-          <Button size="sm" disabled={!channelDef.available || isAddingChannel} variant="outline" onClick={handleAdd}>
+          <Button size="sm" disabled={!channelDef.available || !workspaceSource} variant="outline" onClick={handleAdd}>
             <Plus className="size-4" />
             {t('agent.cherryClaw.channels.add')}
           </Button>

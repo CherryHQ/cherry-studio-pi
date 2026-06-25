@@ -11,13 +11,11 @@ import {
   Tooltip
 } from '@cherrystudio/ui'
 import { restoreFromWebdav } from '@renderer/services/BackupService'
-import { formatFileSize } from '@renderer/utils'
-import { getErrorMessage } from '@renderer/utils/error'
-import { runExclusiveOperation } from '@renderer/utils/exclusiveOperation'
+import { formatFileSize } from '@renderer/utils/file'
 import dayjs from 'dayjs'
 import { ChevronLeft, ChevronRight, CircleAlert, RefreshCw, Trash2 } from 'lucide-react'
 import type { Key } from 'react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface BackupFile {
@@ -67,36 +65,15 @@ export function WebdavBackupManager({
   const [deleting, setDeleting] = useState(false)
   const [restoring, setRestoring] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
-  const mountedRef = useRef(true)
-  const visibleRef = useRef(visible)
-  const fetchSeqRef = useRef(0)
-  const operationRef = useRef(false)
-
-  visibleRef.current = visible
 
   const { webdavHost, webdavUser, webdavPass, webdavPath } = webdavConfig
-  const isActive = useCallback(() => mountedRef.current && visibleRef.current, [])
-
-  useEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
-      visibleRef.current = false
-      fetchSeqRef.current += 1
-    }
-  }, [])
 
   const fetchBackupFiles = useCallback(async () => {
-    if (!isActive()) {
-      return
-    }
-
     if (!webdavHost) {
-      window.toast?.error(t('message.error.invalid.webdav'))
+      window.toast.error(t('message.error.invalid.webdav'))
       return
     }
 
-    const fetchSeq = ++fetchSeqRef.current
     setLoading(true)
     try {
       const files = await window.api.backup.listWebdavFiles({
@@ -105,33 +82,19 @@ export function WebdavBackupManager({
         webdavPass,
         webdavPath
       } as WebdavConfig)
-      if (isActive() && fetchSeq === fetchSeqRef.current) {
-        setBackupFiles(files)
-      }
-    } catch (error) {
-      if (isActive() && fetchSeq === fetchSeqRef.current) {
-        window.toast?.error(`${t('settings.data.webdav.backup.manager.fetch.error')}: ${getErrorMessage(error)}`)
-      }
+      setBackupFiles(files)
+    } catch (error: any) {
+      window.toast.error(`${t('settings.data.webdav.backup.manager.fetch.error')}: ${error.message}`)
     } finally {
-      if (isActive() && fetchSeq === fetchSeqRef.current) {
-        setLoading(false)
-      }
+      setLoading(false)
     }
-  }, [webdavHost, webdavUser, webdavPass, webdavPath, t, isActive])
+  }, [webdavHost, webdavUser, webdavPass, webdavPath, t])
 
   useEffect(() => {
-    if (!visible) {
-      fetchSeqRef.current += 1
-      setLoading(false)
-      return
-    }
-
-    void fetchBackupFiles()
-    setSelectedRowKeys([])
-    setCurrentPage(1)
-
-    return () => {
-      fetchSeqRef.current += 1
+    if (visible) {
+      void fetchBackupFiles()
+      setSelectedRowKeys([])
+      setCurrentPage(1)
     }
   }, [visible, fetchBackupFiles])
 
@@ -141,14 +104,6 @@ export function WebdavBackupManager({
   useEffect(() => {
     setCurrentPage((page) => Math.min(page, totalPages))
   }, [totalPages])
-
-  useEffect(() => {
-    const availableKeys = new Set(backupFiles.map((file) => file.fileName))
-    setSelectedRowKeys((previousKeys) => {
-      const nextKeys = previousKeys.filter((key) => availableKeys.has(key.toString()))
-      return nextKeys.length === previousKeys.length ? previousKeys : nextKeys
-    })
-  }, [backupFiles])
 
   const paginatedBackupFiles = useMemo(() => {
     const start = (safeCurrentPage - 1) * PAGE_SIZE
@@ -172,12 +127,12 @@ export function WebdavBackupManager({
 
   const handleDeleteSelected = async () => {
     if (selectedRowKeys.length === 0) {
-      window.toast?.warning(t('settings.data.webdav.backup.manager.select.files.delete'))
+      window.toast.warning(t('settings.data.webdav.backup.manager.select.files.delete'))
       return
     }
 
     if (!webdavHost) {
-      window.toast?.error(t('message.error.invalid.webdav'))
+      window.toast.error(t('message.error.invalid.webdav'))
       return
     }
 
@@ -189,49 +144,34 @@ export function WebdavBackupManager({
       cancelText: t('common.cancel'),
       centered: true,
       onOk: async () => {
-        await runExclusiveOperation(operationRef, async () => {
-          if (!isActive()) {
-            return
+        setDeleting(true)
+        try {
+          // 依次删除选中的文件
+          for (const key of selectedRowKeys) {
+            await window.api.backup.deleteWebdavFile(key.toString(), {
+              webdavHost,
+              webdavUser,
+              webdavPass,
+              webdavPath
+            } as WebdavConfig)
           }
-
-          setDeleting(true)
-          try {
-            // 依次删除选中的文件
-            for (const key of selectedRowKeys) {
-              await window.api.backup.deleteWebdavFile(key.toString(), {
-                webdavHost,
-                webdavUser,
-                webdavPass,
-                webdavPath
-              } as WebdavConfig)
-            }
-
-            if (!isActive()) {
-              return
-            }
-
-            window.toast?.success(
-              t('settings.data.webdav.backup.manager.delete.success.multiple', { count: selectedRowKeys.length })
-            )
-            setSelectedRowKeys([])
-            await fetchBackupFiles()
-          } catch (error) {
-            if (isActive()) {
-              window.toast?.error(`${t('settings.data.webdav.backup.manager.delete.error')}: ${getErrorMessage(error)}`)
-            }
-          } finally {
-            if (isActive()) {
-              setDeleting(false)
-            }
-          }
-        })
+          window.toast.success(
+            t('settings.data.webdav.backup.manager.delete.success.multiple', { count: selectedRowKeys.length })
+          )
+          setSelectedRowKeys([])
+          await fetchBackupFiles()
+        } catch (error: any) {
+          window.toast.error(`${t('settings.data.webdav.backup.manager.delete.error')}: ${error.message}`)
+        } finally {
+          setDeleting(false)
+        }
       }
     })
   }
 
   const handleDeleteSingle = async (fileName: string) => {
     if (!webdavHost) {
-      window.toast?.error(t('message.error.invalid.webdav'))
+      window.toast.error(t('message.error.invalid.webdav'))
       return
     }
 
@@ -243,43 +183,28 @@ export function WebdavBackupManager({
       cancelText: t('common.cancel'),
       centered: true,
       onOk: async () => {
-        await runExclusiveOperation(operationRef, async () => {
-          if (!isActive()) {
-            return
-          }
-
-          setDeleting(true)
-          try {
-            await window.api.backup.deleteWebdavFile(fileName, {
-              webdavHost,
-              webdavUser,
-              webdavPass,
-              webdavPath
-            } as WebdavConfig)
-
-            if (!isActive()) {
-              return
-            }
-
-            window.toast?.success(t('settings.data.webdav.backup.manager.delete.success.single'))
-            await fetchBackupFiles()
-          } catch (error) {
-            if (isActive()) {
-              window.toast?.error(`${t('settings.data.webdav.backup.manager.delete.error')}: ${getErrorMessage(error)}`)
-            }
-          } finally {
-            if (isActive()) {
-              setDeleting(false)
-            }
-          }
-        })
+        setDeleting(true)
+        try {
+          await window.api.backup.deleteWebdavFile(fileName, {
+            webdavHost,
+            webdavUser,
+            webdavPass,
+            webdavPath
+          } as WebdavConfig)
+          window.toast.success(t('settings.data.webdav.backup.manager.delete.success.single'))
+          await fetchBackupFiles()
+        } catch (error: any) {
+          window.toast.error(`${t('settings.data.webdav.backup.manager.delete.error')}: ${error.message}`)
+        } finally {
+          setDeleting(false)
+        }
       }
     })
   }
 
   const handleRestore = async (fileName: string) => {
     if (!webdavHost) {
-      window.toast?.error(customLabels?.invalidConfigMessage || t('message.error.invalid.webdav'))
+      window.toast.error(customLabels?.invalidConfigMessage || t('message.error.invalid.webdav'))
       return
     }
 
@@ -291,33 +216,16 @@ export function WebdavBackupManager({
       cancelText: t('common.cancel'),
       centered: true,
       onOk: async () => {
-        await runExclusiveOperation(operationRef, async () => {
-          if (!isActive()) {
-            return
-          }
-
-          setRestoring(true)
-          try {
-            await (restoreMethod || restoreFromWebdav)(fileName)
-
-            if (!isActive()) {
-              return
-            }
-
-            window.toast?.success(t('settings.data.webdav.backup.manager.restore.success'))
-            onClose()
-          } catch (error) {
-            if (isActive()) {
-              window.toast?.error(
-                `${t('settings.data.webdav.backup.manager.restore.error')}: ${getErrorMessage(error)}`
-              )
-            }
-          } finally {
-            if (isActive()) {
-              setRestoring(false)
-            }
-          }
-        })
+        setRestoring(true)
+        try {
+          await (restoreMethod || restoreFromWebdav)(fileName)
+          window.toast.success(t('settings.data.webdav.backup.manager.restore.success'))
+          onClose() // 关闭模态框
+        } catch (error: any) {
+          window.toast.error(`${t('settings.data.webdav.backup.manager.restore.error')}: ${error.message}`)
+        } finally {
+          setRestoring(false)
+        }
       }
     })
   }
@@ -372,7 +280,7 @@ export function WebdavBackupManager({
   ]
 
   return (
-    <Dialog open={visible} onOpenChange={(open) => !open && !operationRef.current && onClose()}>
+    <Dialog open={visible} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-[800px]">
         <DialogHeader>
           <DialogTitle>{t('settings.data.webdav.backup.manager.title')}</DialogTitle>
@@ -424,11 +332,7 @@ export function WebdavBackupManager({
           )}
         </div>
         <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={fetchBackupFiles}
-            disabled={loading || deleting || restoring}>
+          <Button type="button" variant="outline" onClick={fetchBackupFiles} disabled={loading}>
             <RefreshCw className="size-4" />
             {t('settings.data.webdav.backup.manager.refresh')}
           </Button>
@@ -436,7 +340,7 @@ export function WebdavBackupManager({
             type="button"
             variant="destructive"
             onClick={handleDeleteSelected}
-            disabled={selectedRowKeys.length === 0 || deleting || restoring}>
+            disabled={selectedRowKeys.length === 0 || deleting}>
             <Trash2 className="size-4" />
             {t('settings.data.webdav.backup.manager.delete.selected')} ({selectedRowKeys.length})
           </Button>

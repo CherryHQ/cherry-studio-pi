@@ -1,7 +1,7 @@
 import { loggerService } from '@logger'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { ImagePreviewService } from '@renderer/services/ImagePreviewService'
-import { download as downloadFile, revokeObjectUrlLater } from '@renderer/utils/download'
+import { download as downloadFile } from '@renderer/utils/download'
 import { svgToPngBlob, svgToSvgBlob } from '@renderer/utils/image'
 import type { RefObject } from 'react'
 import { useCallback, useEffect, useRef } from 'react'
@@ -23,18 +23,9 @@ export const useImageTools = (
   }
 ) => {
   const transformRef = useRef({ scale: 1, x: 0, y: 0 }) // 管理变换状态
-  const mountedRef = useRef(true)
   const { imgSelector, prefix, enableDrag, enableWheelZoom } = options
   const { t } = useTranslation()
   const { theme } = useTheme()
-
-  useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
 
   // 创建选择器函数
   const getImgElement = useCallback((): SVGElement | null => {
@@ -195,10 +186,9 @@ export const useImageTools = (
     const container = containerRef.current
 
     const handleWheel = (e: WheelEvent) => {
-      const target = e.target
-      if ((e.ctrlKey || e.metaKey) && target instanceof Node) {
+      if ((e.ctrlKey || e.metaKey) && e.target) {
         // 确认事件发生在容器内部
-        if (container.contains(target)) {
+        if (container.contains(e.target as Node)) {
           const delta = e.deltaY < 0 ? 0.1 : -0.1
           zoom(delta)
         }
@@ -221,14 +211,10 @@ export const useImageTools = (
 
       const blob = await svgToPngBlob(imgElement)
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-      if (mountedRef.current) {
-        window.toast?.success(t('message.copy.success'))
-      }
+      window.toast.success(t('message.copy.success'))
     } catch (error) {
       logger.error('Copy failed:', error as Error)
-      if (mountedRef.current) {
-        window.toast?.error(t('message.copy.failed'))
-      }
+      window.toast.error(t('message.copy.failed'))
     }
   }, [getCleanImgElement, t])
 
@@ -248,23 +234,17 @@ export const useImageTools = (
         if (format === 'svg') {
           const blob = svgToSvgBlob(imgElement)
           const url = URL.createObjectURL(blob)
-          try {
-            downloadFile(url, `${prefix}-${timestamp}.svg`)
-          } finally {
-            revokeObjectUrlLater(url)
-          }
+          downloadFile(url, `${prefix}-${timestamp}.svg`)
+          URL.revokeObjectURL(url)
         } else {
           const blob = await svgToPngBlob(imgElement)
           const pngUrl = URL.createObjectURL(blob)
-          try {
-            downloadFile(pngUrl, `${prefix}-${timestamp}.png`)
-          } finally {
-            revokeObjectUrlLater(pngUrl)
-          }
+          downloadFile(pngUrl, `${prefix}-${timestamp}.png`)
+          URL.revokeObjectURL(pngUrl)
         }
       } catch (error) {
         logger.error('Download failed:', error as Error)
-        window.toast?.error(t('message.download.failed'))
+        window.toast.error(t('message.download.failed'))
       }
     },
     [getCleanImgElement, prefix, t]
@@ -283,7 +263,7 @@ export const useImageTools = (
       await ImagePreviewService.show(imgElement, { format: 'svg' })
     } catch (error) {
       logger.error('Dialog preview failed:', error as Error)
-      window.toast?.error(t('message.dialog.failed'))
+      window.toast.error(t('message.dialog.failed'))
     }
   }, [getCleanImgElement, t])
 

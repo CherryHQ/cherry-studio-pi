@@ -4,7 +4,6 @@ import { usePreference } from '@data/hooks/usePreference'
 import { loggerService } from '@logger'
 import { isDev } from '@renderer/config/constant'
 import { useMiniApps } from '@renderer/hooks/useMiniApps'
-import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { isDataApiError, toDataApiError } from '@shared/data/api'
 import type { MiniApp } from '@shared/data/types/miniApp'
 import type { WebviewTag } from 'electron'
@@ -86,17 +85,14 @@ const MinimalToolbar: FC<Props> = ({ app, webviewRef, currentUrl, onReload, onOp
 
   // Monitor webviewRef changes and update navigation state
   useEffect(() => {
-    let checkTimeout: ReturnType<typeof setTimeout> | null = null
-    let animationFrame: number | null = null
+    let checkTimeout: NodeJS.Timeout | null = null
     let navigationListener: (() => void) | null = null
     let listenersAttached = false
     let currentInterval = WEBVIEW_CHECK_INITIAL_MS
     let attemptCount = 0
-    let disposed = false
 
     const attachListeners = () => {
-      const webview = webviewRef.current
-      if (webview && !listenersAttached) {
+      if (webviewRef.current && !listenersAttached) {
         // Update state immediately
         updateNavigationState()
 
@@ -105,13 +101,15 @@ const MinimalToolbar: FC<Props> = ({ app, webviewRef, currentUrl, onReload, onOp
           scheduleNavigationUpdate(NAVIGATION_UPDATE_DELAY_MS)
         }
 
-        webview.addEventListener('did-navigate', handleNavigation)
-        webview.addEventListener('did-navigate-in-page', handleNavigation)
+        webviewRef.current.addEventListener('did-navigate', handleNavigation)
+        webviewRef.current.addEventListener('did-navigate-in-page', handleNavigation)
         listenersAttached = true
 
         navigationListener = () => {
-          webview.removeEventListener('did-navigate', handleNavigation)
-          webview.removeEventListener('did-navigate-in-page', handleNavigation)
+          if (webviewRef.current) {
+            webviewRef.current.removeEventListener('did-navigate', handleNavigation)
+            webviewRef.current.removeEventListener('did-navigate-in-page', handleNavigation)
+          }
           listenersAttached = false
         }
 
@@ -127,14 +125,9 @@ const MinimalToolbar: FC<Props> = ({ app, webviewRef, currentUrl, onReload, onOp
     }
 
     const scheduleCheck = () => {
-      if (disposed) return
       checkTimeout = setTimeout(() => {
-        checkTimeout = null
         // Use requestAnimationFrame to avoid blocking the main thread
-        animationFrame = requestAnimationFrame(() => {
-          animationFrame = null
-          if (disposed) return
-
+        requestAnimationFrame(() => {
           attemptCount++
           if (!attachListeners()) {
             // Stop checking after max attempts to prevent infinite loops
@@ -174,9 +167,7 @@ const MinimalToolbar: FC<Props> = ({ app, webviewRef, currentUrl, onReload, onOp
 
     // Cleanup
     return () => {
-      disposed = true
       if (checkTimeout) clearTimeout(checkTimeout)
-      if (animationFrame !== null) cancelAnimationFrame(animationFrame)
       if (navigationListener) navigationListener()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -225,19 +216,13 @@ const MinimalToolbar: FC<Props> = ({ app, webviewRef, currentUrl, onReload, onOp
   }, [app.appId, isPinned, updateAppStatus, t])
 
   const handleToggleOpenExternal = useCallback(() => {
-    void setOpenLinkExternal(!openLinkExternal).catch((error) => {
-      logger.error('Failed to update miniapp external link preference', error as Error)
-      window.toast?.error?.(formatErrorMessageWithPrefix(error, t('common.save_failed')))
-    })
-  }, [setOpenLinkExternal, openLinkExternal, t])
+    void setOpenLinkExternal(!openLinkExternal)
+  }, [setOpenLinkExternal, openLinkExternal])
 
   const handleOpenLink = useCallback(() => {
     const urlToOpen = currentUrl || app.url
-    void window.api.openWebsite(urlToOpen).catch((error) => {
-      logger.error('Failed to open miniapp link externally', error as Error)
-      window.toast?.error?.(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
-    })
-  }, [currentUrl, app.url, t])
+    void window.api.openWebsite(urlToOpen)
+  }, [currentUrl, app.url])
 
   return (
     <div className="flex h-8.75 shrink-0 items-center justify-between bg-background px-3">

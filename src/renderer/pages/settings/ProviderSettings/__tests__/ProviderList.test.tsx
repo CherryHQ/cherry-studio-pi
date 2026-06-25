@@ -3,7 +3,6 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import ProviderList from '../ProviderList'
-import { normalizeProviderFilterMode } from '../ProviderList/providerFilterMode'
 
 const reorderSpy = vi.fn()
 const useProvidersMock = vi.fn()
@@ -117,27 +116,6 @@ vi.mock('../ProviderList/ProviderListItemWithContextMenu', () => ({
 vi.mock('../ProviderList/ProviderEditorDrawer', () => ({
   default: ({ open }: any) => <div data-testid="provider-editor-drawer" data-open={open ? 'true' : 'false'} />
 }))
-
-function deferred<T = void>() {
-  let resolve!: (value: T | PromiseLike<T>) => void
-  let reject!: (reason?: unknown) => void
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise
-    reject = rejectPromise
-  })
-  return { promise, resolve, reject }
-}
-
-describe('normalizeProviderFilterMode', () => {
-  it('keeps valid list filters and maps legacy agent links to Claude Agent SDK filtering', () => {
-    expect(normalizeProviderFilterMode('all')).toBe('all')
-    expect(normalizeProviderFilterMode('enabled')).toBe('enabled')
-    expect(normalizeProviderFilterMode('disabled')).toBe('disabled')
-    expect(normalizeProviderFilterMode('agent')).toBe('claude-agent')
-    expect(normalizeProviderFilterMode('claude-agent')).toBe('claude-agent')
-    expect(normalizeProviderFilterMode('unknown')).toBeUndefined()
-  })
-})
 
 describe('ProviderList', () => {
   const providers = [
@@ -343,9 +321,7 @@ describe('ProviderList', () => {
     expect(screen.getByText('OpenAI')).toBeInTheDocument()
     expect(screen.getByText('Anthropic')).toBeInTheDocument()
 
-    rerender(
-      <ProviderList selectedProviderId="openai" filterModeHint="claude-agent" onSelectProvider={onSelectProvider} />
-    )
+    rerender(<ProviderList selectedProviderId="openai" filterModeHint="agent" onSelectProvider={onSelectProvider} />)
 
     expect(screen.queryByText('OpenAI')).not.toBeInTheDocument()
     expect(screen.getByText('Anthropic')).toBeInTheDocument()
@@ -410,36 +386,5 @@ describe('ProviderList', () => {
     await options.onOk()
 
     expect(deleteProviderMock).toHaveBeenCalledWith('openai')
-  })
-
-  it('prevents duplicate provider delete confirmations and operations', async () => {
-    const runningDelete = deferred()
-    deleteProviderMock.mockReturnValueOnce(runningDelete.promise)
-    render(<ProviderList selectedProviderId="openai" onSelectProvider={vi.fn()} />)
-
-    fireEvent.click(screen.getByTestId('provider-list-delete-openai'))
-    fireEvent.click(screen.getByTestId('provider-list-delete-openai'))
-
-    expect(window.modal.confirm).toHaveBeenCalledTimes(1)
-    const options = (window.modal.confirm as ReturnType<typeof vi.fn>).mock.calls[0][0]
-
-    const firstDelete = options.onOk()
-    const secondDelete = options.onOk()
-    expect(deleteProviderMock).toHaveBeenCalledTimes(1)
-
-    runningDelete.resolve()
-    await Promise.all([firstDelete, secondDelete])
-  })
-
-  it('keeps failed provider deletion visible and reports the error', async () => {
-    const error = new Error('delete failed')
-    deleteProviderMock.mockRejectedValueOnce(error)
-    render(<ProviderList selectedProviderId="openai" onSelectProvider={vi.fn()} />)
-
-    fireEvent.click(screen.getByTestId('provider-list-delete-openai'))
-    const options = (window.modal.confirm as ReturnType<typeof vi.fn>).mock.calls[0][0]
-
-    await expect(options.onOk()).rejects.toBe(error)
-    expect(window.toast.error).toHaveBeenCalled()
   })
 })

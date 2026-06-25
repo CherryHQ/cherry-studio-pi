@@ -109,11 +109,7 @@ function PageSidePanel({
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
             data-slot="page-side-panel-backdrop"
-            className={cn(
-              isScopedPortal ? 'absolute inset-0' : 'fixed inset-0',
-              'z-[60] bg-black/50',
-              backdropClassName
-            )}
+            className={cn(isScopedPortal ? 'absolute inset-0' : 'fixed inset-0', 'z-60 bg-black/50', backdropClassName)}
             onClick={handleClose}
           />
           <motion.aside
@@ -133,7 +129,7 @@ function PageSidePanel({
             data-slot="page-side-panel"
             className={cn(
               isScopedPortal ? 'absolute' : 'fixed',
-              'top-3 bottom-3 z-[70] flex w-100 flex-col overflow-hidden rounded-3xl bg-card text-card-foreground shadow-xl outline-none',
+              'top-3 bottom-3 z-70 flex w-100 flex-col overflow-hidden rounded-3xl bg-card text-card-foreground shadow-xl outline-none',
               side === 'right' ? 'right-3' : 'left-3',
               contentClassName
             )}>

@@ -2,7 +2,6 @@
  * Hook for subscribing to migration progress updates
  */
 
-import { loggerService } from '@logger'
 import {
   MigrationIpcChannels,
   type MigrationProgress,
@@ -10,9 +9,7 @@ import {
   type MigratorStatus,
   type StartMigrationPayload
 } from '@shared/data/migration/v2/types'
-import { useCallback, useEffect, useState } from 'react'
-
-const logger = loggerService.withContext('MigrationProgress')
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 // Re-export types for convenience
 export type { MigrationProgress, MigrationStage, MigratorStatus }
@@ -27,29 +24,58 @@ const initialProgress: MigrationProgress = {
 export function useMigrationProgress() {
   const [progress, setProgress] = useState<MigrationProgress>(initialProgress)
   const [lastError, setLastError] = useState<string | null>(null)
+  const migrationStageStartedAtRef = useRef<number | null>(null)
+
+  const applyMigrationStageTiming = useCallback((progressData: MigrationProgress): MigrationProgress => {
+    if (progressData.stage === 'migration') {
+      if (migrationStageStartedAtRef.current === null) {
+        migrationStageStartedAtRef.current = performance.now()
+      }
+      return progressData
+    }
+
+    if (progressData.stage === 'completed') {
+      const startedAt = migrationStageStartedAtRef.current
+      migrationStageStartedAtRef.current = null
+
+      if (startedAt === null || !progressData.summary) {
+        return progressData
+      }
+
+      return {
+        ...progressData,
+        summary: {
+          ...progressData.summary,
+          durationMs: Math.max(0, performance.now() - startedAt)
+        }
+      }
+    }
+
+    migrationStageStartedAtRef.current = null
+    return progressData
+  }, [])
 
   useEffect(() => {
     // Listen for progress updates from Main process
     const handleProgress = (_: unknown, progressData: MigrationProgress) => {
-      setProgress(progressData)
+      const nextProgress = applyMigrationStageTiming(progressData)
+      setProgress(nextProgress)
       if (progressData.error) {
         setLastError(progressData.error)
       }
     }
 
-    const removeProgressListener = window.electron.ipcRenderer.on(MigrationIpcChannels.Progress, handleProgress)
+    window.electron.ipcRenderer.on(MigrationIpcChannels.Progress, handleProgress)
 
     // Request initial progress
     window.electron.ipcRenderer
       .invoke(MigrationIpcChannels.GetProgress)
       .then((initialProgress: MigrationProgress) => {
         if (initialProgress) {
-          setProgress(initialProgress)
+          setProgress(applyMigrationStageTiming(initialProgress))
         }
       })
-      .catch((error) => {
-        logger.error('Failed to load initial migration progress', error as Error)
-      })
+      .catch(console.error)
 
     // Check for last error
     window.electron.ipcRenderer
@@ -59,36 +85,26 @@ export function useMigrationProgress() {
           setLastError(error)
         }
       })
-      .catch((error) => {
-        logger.error('Failed to load last migration error', error as Error)
-      })
+      .catch(console.error)
 
-    return removeProgressListener
+    return () => {
+      window.electron.ipcRenderer.removeAllListeners(MigrationIpcChannels.Progress)
+    }
+  }, [applyMigrationStageTiming])
+
+  const returnToIntroduction = useCallback(() => {
+    void window.electron.ipcRenderer.invoke(MigrationIpcChannels.ReturnToIntroduction)
   }, [])
 
-  // Local state transition for confirming migration completion (frontend only)
-  const confirmComplete = useCallback(() => {
-    setProgress((prev) => ({
-      ...prev,
-      stage: 'completed',
-      currentMessage: 'Migration completed successfully! Click restart to continue.'
-    }))
+  const returnToBackupChoice = useCallback(() => {
+    void window.electron.ipcRenderer.invoke(MigrationIpcChannels.ReturnToBackupChoice)
   }, [])
-
-  // Stage helpers
-  const isInProgress = progress.stage === 'migration'
-  const isCompleted = progress.stage === 'completed'
-  const isError = progress.stage === 'error'
-  const canCancel = progress.stage === 'introduction' || progress.stage === 'backup_required'
 
   return {
     progress,
     lastError,
-    isInProgress,
-    isCompleted,
-    isError,
-    canCancel,
-    confirmComplete
+    returnToIntroduction,
+    returnToBackupChoice
   }
 }
 

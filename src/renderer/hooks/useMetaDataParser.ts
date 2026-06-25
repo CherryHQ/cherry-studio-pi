@@ -12,30 +12,20 @@ export function useMetaDataParser<T extends string>(
   const { timeout = 5000 } = options || {}
 
   const [metadata, setMetadata] = useState<Record<T, string>>({} as Record<T, string>)
-  const [isLoading, setIsLoading] = useState(Boolean(link))
+  const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
 
   const abortControllerRef = useRef<AbortController | null>(null)
-  const isFetchingRef = useRef(false)
-  const mountedRef = useRef(true)
-
-  useEffect(() => {
-    abortControllerRef.current?.abort()
-    abortControllerRef.current = null
-    isFetchingRef.current = false
-    setMetadata({} as Record<T, string>)
-    setError(null)
-    setIsLoading(Boolean(link))
-  }, [link])
 
   const parseMetadata = useCallback(async () => {
-    if (!link || isFetchingRef.current) return
+    if (!link || !isLoading) return
 
-    abortControllerRef.current?.abort()
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
 
     const controller = new AbortController()
     abortControllerRef.current = controller
-    isFetchingRef.current = true
 
     setIsLoading(true)
     setError(null)
@@ -45,50 +35,79 @@ export function useMetaDataParser<T extends string>(
 
       const htmlContent = response.data
       const parsedMetadata = {} as Record<T, string>
+      let isReadingTitle = false
+      let titleText = ''
+
+      const resolveUrl = (value: string) => {
+        try {
+          return new URL(value, link).href
+        } catch {
+          return value
+        }
+      }
+
+      const setMetadataValue = (key: string, value: string | undefined) => {
+        const trimmed = value?.trim()
+        if (!trimmed || !properties.includes(key as T) || parsedMetadata[key as T]) return
+        const shouldResolveUrl = key === 'image' || key === 'og:image'
+        parsedMetadata[key as T] = shouldResolveUrl ? resolveUrl(trimmed) : trimmed
+      }
 
       const parser = new htmlparser2.Parser({
         onopentag(tagName, attributes) {
+          if (tagName === 'title') {
+            isReadingTitle = true
+            titleText = ''
+            return
+          }
+
           if (tagName === 'meta') {
             const { name: metaName, property: metaProperty, content } = attributes
             const metaKey = metaName || metaProperty
-            if (!metaKey || !properties.includes(metaKey as T)) return
-            parsedMetadata[metaKey as T] = content
+            setMetadataValue(metaKey, content)
+            return
+          }
+
+          if (tagName === 'link') {
+            const rel = attributes.rel?.toLowerCase().split(/\s+/) ?? []
+            if (rel.includes('preload') && attributes.as?.toLowerCase() === 'image') {
+              setMetadataValue('image', attributes.href)
+            }
+          }
+        },
+        ontext(text) {
+          if (isReadingTitle) {
+            titleText += text
+          }
+        },
+        onclosetag(tagName) {
+          if (tagName === 'title') {
+            setMetadataValue('title', titleText)
+            isReadingTitle = false
+            titleText = ''
           }
         }
       })
 
       parser.parseComplete(htmlContent)
 
-      if (mountedRef.current && abortControllerRef.current === controller && !controller.signal.aborted) {
-        setMetadata(parsedMetadata)
-      }
+      setMetadata(parsedMetadata)
     } catch (err) {
       // Don't set error if request was aborted
       if (axios.isCancel(err) || (err instanceof Error && err.name === 'AbortError')) {
         return
       }
-      if (mountedRef.current && abortControllerRef.current === controller && !controller.signal.aborted) {
-        setError(err instanceof Error ? err : new Error('Failed to fetch HTML'))
-      }
+      setError(err instanceof Error ? err : new Error('Failed to fetch HTML'))
     } finally {
-      if (abortControllerRef.current === controller) {
-        abortControllerRef.current = null
-        isFetchingRef.current = false
-        if (mountedRef.current) {
-          setIsLoading(false)
-        }
-      }
+      setIsLoading(false)
     }
-  }, [link, properties, timeout])
+  }, [isLoading, link, properties, timeout])
 
   useEffect(() => {
-    mountedRef.current = true
-
     return () => {
-      mountedRef.current = false
-      abortControllerRef.current?.abort()
-      abortControllerRef.current = null
-      isFetchingRef.current = false
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
     }
   }, [])
 

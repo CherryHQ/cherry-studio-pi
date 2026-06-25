@@ -3,6 +3,7 @@ import type { UpdateInfo } from 'builder-util-runtime'
 
 import type { AgentSessionCompactionState } from '../../ai/agentSessionCompaction'
 import type { AgentSessionContextUsage } from '../../ai/agentSessionContextUsage'
+import type { ExternalAppId } from '../../types/externalApp'
 import type { MiniApp } from '../types/miniApp'
 import type { WebSearchStatus } from '../types/webSearch'
 
@@ -75,6 +76,27 @@ export interface TabsState {
   activeTabId: string
 }
 
+export type GlobalSearchRecentEntry =
+  | {
+      kind: 'route'
+      url: string
+      title: string
+      icon?: string
+      lastAccessTime: number
+    }
+  | {
+      kind: 'topic'
+      topicId: string
+      title: string
+      lastAccessTime: number
+    }
+  | {
+      kind: 'session'
+      sessionId: string
+      title: string
+      lastAccessTime: number
+    }
+
 export type TranslatingState =
   | {
       isTranslating: true
@@ -102,6 +124,8 @@ export interface ChatScrollAnchor {
   /** Pixels scrolled past the top of that group. */
   offset: number
 }
+
+export type AgentOpenExternalAppTarget = ExternalAppId | 'file_manager' | null
 
 export type CachePaintingGenerationState = {
   status: 'running' | 'failed' | 'canceled'

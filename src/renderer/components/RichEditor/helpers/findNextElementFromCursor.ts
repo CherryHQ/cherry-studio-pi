@@ -20,11 +20,6 @@ export const findElementNextToCoords = (options: FindElementNextToCoords) => {
   while (resultNode === null && currentX < window.innerWidth && currentX > 0) {
     const allElements = document.elementsFromPoint(currentX, y)
     const prosemirrorIndex = allElements.findIndex((element) => element.classList.contains('ProseMirror'))
-    if (prosemirrorIndex === -1) {
-      currentX += direction === 'left' ? -1 : 1
-      continue
-    }
-
     const filteredElements = allElements.slice(0, prosemirrorIndex)
 
     if (filteredElements.length > 0) {

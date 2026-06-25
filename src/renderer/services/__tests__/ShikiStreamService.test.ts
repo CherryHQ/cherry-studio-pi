@@ -71,21 +71,6 @@ describe('ShikiStreamService', () => {
       }
       spy.mockRestore()
     })
-
-    it('should preserve nested postMessage failure details and clear pending requests', async () => {
-      const postFailure = { error: { message: 'structured clone failed' } }
-      ;(shikiStreamService as any).worker = {
-        postMessage: vi.fn(() => {
-          throw postFailure
-        }),
-        terminate: vi.fn()
-      }
-
-      await expect((shikiStreamService as any).sendWorkerMessage({ type: 'cleanup', callerId })).rejects.toThrow(
-        'structured clone failed'
-      )
-      expect((shikiStreamService as any).pendingRequests.size).toBe(0)
-    })
   })
 
   describe('tokenizer management (main)', () => {
@@ -241,14 +226,6 @@ describe('ShikiStreamService', () => {
       shikiStreamService.cleanupTokenizers(callerId)
       // @ts-ignore: access private
       expect(shikiStreamService.tokenizerCache.has(cacheKey)).toBe(false)
-    })
-
-    it('should return normalized Shiki pre properties without unsafe casts', async () => {
-      const properties = await shikiStreamService.getShikiPreProperties(language, theme)
-
-      expect(properties.class).toContain('shiki')
-      expect(properties.style).toContain('background-color')
-      expect(properties.tabindex).toBeTypeOf('number')
     })
   })
 

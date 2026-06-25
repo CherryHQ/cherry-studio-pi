@@ -4,7 +4,6 @@ import {
   Combobox,
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -13,14 +12,13 @@ import {
   Label
 } from '@cherrystudio/ui'
 import { loggerService } from '@logger'
-import { summarizeTextForLog } from '@renderer/aiCore/utils/logging'
 import CustomTag from '@renderer/components/Tags/CustomTag'
 import { TopView } from '@renderer/components/TopView'
 import { useKnowledgeBases } from '@renderer/hooks/useKnowledgeBase'
 import { useAddKnowledgeItems } from '@renderer/hooks/useKnowledgeItems'
-import type { Topic } from '@renderer/types'
-import type { Message } from '@renderer/types/newMessage'
+import type { ExportableMessage } from '@renderer/types/messageExport'
 import type { NotesTreeNode } from '@renderer/types/note'
+import type { Topic } from '@renderer/types/topic'
 import type { ContentType, MessageContentStats, TopicContentStats } from '@renderer/utils/knowledge'
 import {
   analyzeMessageContent,
@@ -92,7 +90,7 @@ interface ContentTypeOption {
 }
 
 type ContentSource =
-  | { type: 'message'; data: Message }
+  | { type: 'message'; data: ExportableMessage }
   | { type: 'topic'; data: Topic }
   | { type: 'note'; data: NotesTreeNode }
 
@@ -137,11 +135,6 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
   const [hasInitialized, setHasInitialized] = useState(false)
   const [contentStats, setContentStats] = useState<ContentStats | null>(null)
   const resolvedRef = useRef(false)
-  const mountedRef = useRef(true)
-  const closeTimerRef = useRef<number | null>(null)
-  const pendingResolveRef = useRef<{ result: SaveResult | null } | null>(null)
-  const analysisRequestSeqRef = useRef(0)
-  const savingRef = useRef(false)
   const { bases } = useKnowledgeBases()
   const { submit: submitKnowledgeItems } = useAddKnowledgeItems(selectedBaseId || '')
   const { t } = useTranslation()
@@ -149,33 +142,11 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
   const isTopicMode = source?.type === 'topic'
   const isNoteMode = source?.type === 'note'
 
-  useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-      analysisRequestSeqRef.current += 1
-      if (closeTimerRef.current !== null) {
-        window.clearTimeout(closeTimerRef.current)
-        closeTimerRef.current = null
-      }
-      if (pendingResolveRef.current) {
-        const pending = pendingResolveRef.current
-        pendingResolveRef.current = null
-        resolve(pending.result)
-      }
-    }
-  }, [resolve])
-
   // 异步分析内容统计
   useEffect(() => {
-    const requestSeq = ++analysisRequestSeqRef.current
-
     const analyze = async () => {
       if (isNoteMode) {
-        if (mountedRef.current && requestSeq === analysisRequestSeqRef.current) {
-          setAnalysisLoading(false)
-        }
+        setAnalysisLoading(false)
         return
       }
 
@@ -183,36 +154,26 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
       setContentStats(null)
       try {
         const stats = isTopicMode ? await analyzeTopicContent(source?.data) : analyzeMessageContent(source?.data)
-        if (mountedRef.current && requestSeq === analysisRequestSeqRef.current) {
-          setContentStats(stats)
-        }
+        setContentStats(stats)
       } catch (error) {
         logger.error('analyze content failed:', error as Error)
-        if (mountedRef.current && requestSeq === analysisRequestSeqRef.current) {
-          setContentStats({
-            text: 0,
-            code: 0,
-            thinking: 0,
-            images: 0,
-            files: 0,
-            tools: 0,
-            citations: 0,
-            translations: 0,
-            errors: 0,
-            ...(isTopicMode && { messages: 0 })
-          })
-        }
+        setContentStats({
+          text: 0,
+          code: 0,
+          thinking: 0,
+          images: 0,
+          files: 0,
+          tools: 0,
+          citations: 0,
+          translations: 0,
+          errors: 0,
+          ...(isTopicMode && { messages: 0 })
+        })
       } finally {
-        if (mountedRef.current && requestSeq === analysisRequestSeqRef.current) {
-          setAnalysisLoading(false)
-        }
+        setAnalysisLoading(false)
       }
     }
     void analyze()
-
-    return () => {
-      analysisRequestSeqRef.current += 1
-    }
   }, [source, isTopicMode, isNoteMode])
 
   // 生成内容类型选项
@@ -317,22 +278,15 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
     if (resolvedRef.current) return
 
     resolvedRef.current = true
-    pendingResolveRef.current = { result }
     setOpen(false)
-    closeTimerRef.current = window.setTimeout(() => {
-      closeTimerRef.current = null
-      const pending = pendingResolveRef.current
-      pendingResolveRef.current = null
-      resolve(pending?.result ?? result)
+    window.setTimeout(() => {
+      resolve(result)
     }, CLOSE_ANIMATION_MS)
   }
 
   const onOk = async () => {
-    if (resolvedRef.current) return
-    if (savingRef.current) return
     if (!formState.canSubmit) return
 
-    savingRef.current = true
     setLoading(true)
     let savedCount = 0
 
@@ -372,6 +326,7 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
           throw new Error('Note content is empty. Cannot export empty notes to knowledge base.')
         }
 
+        logger.debug('Note content loaded', { contentLength: content.length })
         items.push({
           type: 'note',
           data: {
@@ -386,6 +341,7 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
           ? await processTopicContent(source?.data, selectedTypes)
           : processMessageContent(source?.data, selectedTypes)
 
+        logger.debug('Processed content:', result)
         if (result.text.trim() && selectedTypes.some((type) => type !== CONTENT_TYPES.FILE)) {
           items.push({
             type: 'note',
@@ -405,10 +361,8 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
               ? [
                   {
                     index,
-                    source: summarizeTextForLog(result.files[index]?.origin_name || result.files[index]?.name),
-                    reason: summarizeTextForLog(
-                      item.reason instanceof Error ? item.reason.message : String(item.reason)
-                    )
+                    source: result.files[index]?.origin_name || result.files[index]?.name,
+                    reason: item.reason instanceof Error ? item.reason.message : String(item.reason)
                   }
                 ]
               : []
@@ -421,7 +375,7 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
               totalCount: fileResults.length,
               failedFiles
             })
-            window.toast?.warning(t('chat.save.knowledge.error.file_partial_failed', { count: failedCount }))
+            window.toast.warning(t('chat.save.knowledge.error.file_partial_failed', { count: failedCount }))
           }
 
           items.push(
@@ -440,10 +394,6 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
 
       resolveAfterClose({ success: true, savedCount })
     } catch (error) {
-      if (resolvedRef.current) {
-        return
-      }
-
       logger.error('save failed:', error as Error)
 
       // Provide more specific error messages
@@ -461,16 +411,12 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
         }
       }
 
-      window.toast?.error(errorMessage)
-      if (mountedRef.current) {
-        setLoading(false)
-      }
-      savingRef.current = false
+      window.toast.error(errorMessage)
+      setLoading(false)
     }
   }
 
   const onCancel = () => {
-    if (savingRef.current) return
     resolveAfterClose(null)
   }
 
@@ -577,19 +523,10 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
                     : 'chat.save.knowledge.title'
               )}
           </DialogTitle>
-          <DialogDescription className="sr-only">
-            {t(
-              isNoteMode
-                ? 'notes.export_knowledge'
-                : isTopicMode
-                  ? 'chat.save.topic.knowledge.select.content.label'
-                  : 'chat.save.knowledge.select.content.title'
-            )}
-          </DialogDescription>
         </DialogHeader>
         {uiState.type === 'form' ? renderFormContent() : renderEmptyState()}
         <DialogFooter>
-          <Button variant="outline" onClick={onCancel} disabled={loading}>
+          <Button variant="outline" onClick={onCancel}>
             {t('common.cancel')}
           </Button>
           <Button onClick={onOk} loading={loading} disabled={!formState.canSubmit || analysisLoading}>
@@ -623,7 +560,7 @@ export default class SaveToKnowledgePopup {
     })
   }
 
-  static showForMessage(message: Message, title?: string): Promise<SaveResult | null> {
+  static showForMessage(message: ExportableMessage, title?: string): Promise<SaveResult | null> {
     return this.show({ source: { type: 'message', data: message }, title })
   }
 

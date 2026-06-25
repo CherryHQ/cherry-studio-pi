@@ -216,23 +216,15 @@ function ContextMenuSubContent({
 }
 
 type ContextMenuContentProps = React.ComponentProps<typeof ContextMenuPrimitive.Content> & {
-  /** @deprecated Use portalContainer. Kept for existing Cherry Studio Pi callers. */
-  container?: React.ComponentProps<typeof ContextMenuPrimitive.Portal>['container']
   portalContainer?: React.ComponentProps<typeof ContextMenuPrimitive.Portal>['container']
 }
 
-function ContextMenuContent({
-  className,
-  onPointerUpCapture,
-  container,
-  portalContainer,
-  ...props
-}: ContextMenuContentProps) {
+function ContextMenuContent({ className, onPointerUpCapture, portalContainer, ...props }: ContextMenuContentProps) {
   const pointerUpGuard = React.use(ContextMenuOpeningPointerUpGuardContext)
   const defaultPortalContainer = usePortalContainer()
 
   return (
-    <ContextMenuPrimitive.Portal container={portalContainer ?? container ?? defaultPortalContainer ?? undefined}>
+    <ContextMenuPrimitive.Portal container={portalContainer ?? defaultPortalContainer ?? undefined}>
       <ContextMenuPrimitive.Content
         data-slot="context-menu-content"
         className={cn(

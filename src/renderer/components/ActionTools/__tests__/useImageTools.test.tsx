@@ -1,5 +1,5 @@
 import { useImageTools } from '@renderer/components/ActionTools'
-import { act, renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Mock dependencies
@@ -10,28 +10,10 @@ const mocks = vi.hoisted(() => ({
   svgToPngBlob: vi.fn(),
   svgToSvgBlob: vi.fn(),
   download: vi.fn(),
-  revokeObjectUrlLater: vi.fn(),
   ImagePreviewService: {
     show: vi.fn()
   }
 }))
-
-type Deferred<T> = {
-  promise: Promise<T>
-  resolve: (value: T | PromiseLike<T>) => void
-  reject: (reason?: unknown) => void
-}
-
-function deferred<T>(): Deferred<T> {
-  let resolve!: Deferred<T>['resolve']
-  let reject!: Deferred<T>['reject']
-  const promise = new Promise<T>((promiseResolve, promiseReject) => {
-    resolve = promiseResolve
-    reject = promiseReject
-  })
-
-  return { promise, resolve, reject }
-}
 
 vi.mock('@renderer/utils/image', () => ({
   svgToPngBlob: mocks.svgToPngBlob,
@@ -39,8 +21,7 @@ vi.mock('@renderer/utils/image', () => ({
 }))
 
 vi.mock('@renderer/utils/download', () => ({
-  download: mocks.download,
-  revokeObjectUrlLater: mocks.revokeObjectUrlLater
+  download: mocks.download
 }))
 
 vi.mock('react-i18next', () => ({
@@ -161,16 +142,6 @@ describe('useImageTools', () => {
     } as unknown as SVGElement
 
     return mockSvg
-  }
-
-  const getWheelHandler = (mockContainer: HTMLDivElement) => {
-    const addEventListenerMock = mockContainer.addEventListener as unknown as {
-      mock: { calls: Array<[string, EventListenerOrEventListenerObject]> }
-    }
-
-    return addEventListenerMock.mock.calls.find(([type]) => type === 'wheel')?.[1] as
-      | ((event: WheelEvent) => void)
-      | undefined
   }
 
   describe('initialization', () => {
@@ -316,38 +287,6 @@ describe('useImageTools', () => {
       expect(mockedToast.success).toHaveBeenCalledWith('message.copy.success')
     })
 
-    it('should ignore delayed copy feedback after unmount', async () => {
-      const mockContainer = createMockContainer()
-      const mockSvg = createMockSvgElement()
-      mockContainer.querySelector = vi.fn().mockReturnValue(mockSvg)
-      const runningWrite = deferred<void>()
-
-      mocks.svgToPngBlob.mockResolvedValue(new Blob(['test'], { type: 'image/png' }))
-      mockWrite.mockReturnValueOnce(runningWrite.promise)
-
-      const { result, unmount } = renderHook(() =>
-        useImageTools(
-          { current: mockContainer },
-          {
-            prefix: 'test',
-            imgSelector: 'svg'
-          }
-        )
-      )
-
-      const copyPromise = result.current.copy()
-      await waitFor(() => expect(mockWrite).toHaveBeenCalled())
-      unmount()
-
-      await act(async () => {
-        runningWrite.resolve()
-        await copyPromise
-      })
-
-      expect(mockedToast.success).not.toHaveBeenCalled()
-      expect(mockedToast.error).not.toHaveBeenCalled()
-    })
-
     it('should download image as PNG and SVG', async () => {
       const mockContainer = createMockContainer()
       const mockSvg = createMockSvgElement()
@@ -386,8 +325,7 @@ describe('useImageTools', () => {
       // 验证通用的下载流程
       expect(mockCreateObjectURL).toHaveBeenCalledTimes(2)
       expect(mocks.download).toHaveBeenCalledTimes(2)
-      expect(mocks.revokeObjectUrlLater).toHaveBeenCalledTimes(2)
-      expect(mockRevokeObjectURL).not.toHaveBeenCalled()
+      expect(mockRevokeObjectURL).toHaveBeenCalledTimes(2)
     })
 
     it('should handle copy/download failures and missing elements', async () => {
@@ -544,72 +482,6 @@ describe('useImageTools', () => {
 
       expect(mockContainer.addEventListener).not.toHaveBeenCalledWith('mousedown', expect.any(Function))
       expect(mockContainer.addEventListener).not.toHaveBeenCalledWith('wheel', expect.any(Function))
-    })
-
-    it('ignores wheel zoom events whose target is not a DOM node', () => {
-      const mockContainer = createMockContainer()
-      const mockSvg = createMockSvgElement()
-      mockContainer.querySelector = vi.fn().mockReturnValue(mockSvg)
-
-      const { result } = renderHook(() =>
-        useImageTools(
-          { current: mockContainer },
-          {
-            prefix: 'test',
-            imgSelector: 'svg',
-            enableWheelZoom: true
-          }
-        )
-      )
-
-      const wheelHandler = getWheelHandler(mockContainer)
-
-      expect(wheelHandler).toBeDefined()
-
-      const event = new WheelEvent('wheel', { ctrlKey: true, deltaY: -1 })
-      Object.defineProperty(event, 'target', {
-        configurable: true,
-        value: window
-      })
-
-      expect(() => wheelHandler?.(event)).not.toThrow()
-      expect(mockContainer.contains).not.toHaveBeenCalled()
-      expect(result.current.getCurrentTransform().scale).toBe(1)
-    })
-
-    it('still zooms for wheel events inside the container', () => {
-      const mockContainer = createMockContainer()
-      const mockSvg = createMockSvgElement()
-      const target = document.createElement('div')
-      mockContainer.querySelector = vi.fn().mockReturnValue(mockSvg)
-
-      const { result } = renderHook(() =>
-        useImageTools(
-          { current: mockContainer },
-          {
-            prefix: 'test',
-            imgSelector: 'svg',
-            enableWheelZoom: true
-          }
-        )
-      )
-
-      const wheelHandler = getWheelHandler(mockContainer)
-
-      expect(wheelHandler).toBeDefined()
-
-      const event = new WheelEvent('wheel', { ctrlKey: true, deltaY: -1 })
-      Object.defineProperty(event, 'target', {
-        configurable: true,
-        value: target
-      })
-
-      act(() => {
-        wheelHandler?.(event)
-      })
-
-      expect(mockContainer.contains).toHaveBeenCalledWith(target)
-      expect(result.current.getCurrentTransform().scale).toBe(1.1)
     })
   })
 

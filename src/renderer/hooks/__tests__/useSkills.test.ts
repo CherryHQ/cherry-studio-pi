@@ -1,15 +1,14 @@
-import type { InstalledSkill, LocalSkill, SkillSearchResult } from '@renderer/types'
-import { act, renderHook } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const useQueryMock = vi.hoisted(() => vi.fn())
 const invalidateMock = vi.hoisted(() => vi.fn())
-const searchSkillsMock = vi.hoisted(() => vi.fn())
 const toggleSkillMock = vi.hoisted(() => vi.fn())
 const uninstallSkillMock = vi.hoisted(() => vi.fn())
 const installSkillMock = vi.hoisted(() => vi.fn())
 const installSkillFromZipMock = vi.hoisted(() => vi.fn())
 const installSkillFromDirectoryMock = vi.hoisted(() => vi.fn())
+const listLocalSkillsMock = vi.hoisted(() => vi.fn())
 const toastErrorMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@data/hooks/useDataApi', () => ({
@@ -17,11 +16,9 @@ vi.mock('@data/hooks/useDataApi', () => ({
   useInvalidateCache: () => invalidateMock
 }))
 
-vi.mock('@renderer/services/SkillSearchService', () => ({
-  searchSkills: searchSkillsMock
-}))
+import type { InstalledSkill } from '@shared/types/skill'
 
-import { buildAvailableSkills, useInstalledSkills, useSkillInstall, useSkillSearch } from '../useSkills'
+import { useAvailableSkills, useInstalledSkills, useSkillInstall } from '../useSkills'
 
 function createSkill(overrides: Partial<InstalledSkill> = {}): InstalledSkill {
   return {
@@ -41,147 +38,6 @@ function createSkill(overrides: Partial<InstalledSkill> = {}): InstalledSkill {
     ...overrides
   }
 }
-
-function createSearchResult(name: string): SkillSearchResult {
-  return {
-    slug: name.toLowerCase(),
-    name,
-    description: null,
-    author: null,
-    stars: 0,
-    downloads: 0,
-    sourceRegistry: 'skills.sh',
-    sourceUrl: null,
-    installSource: `skills.sh:${name.toLowerCase()}`
-  }
-}
-
-function deferred<T>() {
-  let resolve!: (value: T | PromiseLike<T>) => void
-  let reject!: (reason?: unknown) => void
-  const promise = new Promise<T>((promiseResolve, promiseReject) => {
-    resolve = promiseResolve
-    reject = promiseReject
-  })
-
-  return { promise, resolve, reject }
-}
-
-describe('useSkillSearch', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
-
-  it('aborts a stale search when a newer query starts', async () => {
-    const pendingSearches: Array<{
-      query: string
-      signal?: AbortSignal
-      resolve: (results: SkillSearchResult[]) => void
-    }> = []
-
-    searchSkillsMock.mockImplementation(
-      (query: string, options?: { signal?: AbortSignal }) =>
-        new Promise<SkillSearchResult[]>((resolve) => {
-          pendingSearches.push({ query, signal: options?.signal, resolve })
-        })
-    )
-
-    const { result } = renderHook(() => useSkillSearch())
-    let firstSearch = Promise.resolve()
-    let secondSearch = Promise.resolve()
-
-    act(() => {
-      firstSearch = result.current.search('alpha')
-    })
-
-    expect(pendingSearches[0].query).toBe('alpha')
-    expect(pendingSearches[0].signal?.aborted).toBe(false)
-
-    act(() => {
-      secondSearch = result.current.search('beta')
-    })
-
-    expect(pendingSearches[0].signal?.aborted).toBe(true)
-    expect(pendingSearches[1].query).toBe('beta')
-    expect(pendingSearches[1].signal?.aborted).toBe(false)
-
-    await act(async () => {
-      pendingSearches[0].resolve([createSearchResult('Alpha')])
-      await firstSearch
-    })
-
-    expect(result.current.results).toEqual([])
-    expect(result.current.searching).toBe(true)
-
-    await act(async () => {
-      pendingSearches[1].resolve([createSearchResult('Beta')])
-      await secondSearch
-    })
-
-    expect(result.current.results).toEqual([createSearchResult('Beta')])
-    expect(result.current.searching).toBe(false)
-  })
-
-  it('aborts the current search when clearing results', async () => {
-    let capturedSignal: AbortSignal | undefined
-    let resolveSearch: ((results: SkillSearchResult[]) => void) | undefined
-    searchSkillsMock.mockImplementation(
-      (_query: string, options?: { signal?: AbortSignal }) =>
-        new Promise<SkillSearchResult[]>((resolve) => {
-          capturedSignal = options?.signal
-          resolveSearch = resolve
-        })
-    )
-
-    const { result } = renderHook(() => useSkillSearch())
-    let searchPromise = Promise.resolve()
-
-    act(() => {
-      searchPromise = result.current.search('alpha')
-    })
-
-    expect(result.current.searching).toBe(true)
-    expect(capturedSignal?.aborted).toBe(false)
-
-    act(() => {
-      result.current.clear()
-    })
-
-    expect(capturedSignal?.aborted).toBe(true)
-    expect(result.current.results).toEqual([])
-    expect(result.current.searching).toBe(false)
-
-    await act(async () => {
-      resolveSearch?.([createSearchResult('Alpha')])
-      await searchPromise
-    })
-
-    expect(result.current.results).toEqual([])
-    expect(result.current.searching).toBe(false)
-  })
-
-  it('aborts the current search on unmount', () => {
-    let capturedSignal: AbortSignal | undefined
-    searchSkillsMock.mockImplementation(
-      (_query: string, options?: { signal?: AbortSignal }) =>
-        new Promise<SkillSearchResult[]>(() => {
-          capturedSignal = options?.signal
-        })
-    )
-
-    const { result, unmount } = renderHook(() => useSkillSearch())
-
-    act(() => {
-      void result.current.search('alpha')
-    })
-
-    expect(capturedSignal?.aborted).toBe(false)
-
-    unmount()
-
-    expect(capturedSignal?.aborted).toBe(true)
-  })
-})
 
 describe('useInstalledSkills', () => {
   beforeEach(() => {
@@ -207,11 +63,13 @@ describe('useInstalledSkills', () => {
       data: createSkill({ id: skillId, isEnabled, updatedAt: '2024-01-02T00:00:00.000Z' })
     }))
     uninstallSkillMock.mockResolvedValue({ success: true, data: undefined })
+    listLocalSkillsMock.mockResolvedValue({ success: true, data: [] })
 
     vi.stubGlobal('api', {
       skill: {
         toggle: toggleSkillMock,
-        uninstall: uninstallSkillMock
+        uninstall: uninstallSkillMock,
+        listLocal: listLocalSkillsMock
       }
     })
     vi.stubGlobal('toast', { error: toastErrorMock })
@@ -296,6 +154,58 @@ describe('useInstalledSkills', () => {
     })
     expect(toastErrorMock).toHaveBeenCalledWith('uninstall failed')
   })
+
+  it('combines enabled installed skills with local workspace skills', async () => {
+    useQueryMock.mockReturnValue({
+      data: [
+        createSkill({ id: 'global-on', name: 'PDF', folderName: 'pdf', isEnabled: true }),
+        createSkill({ id: 'global-off', name: 'Docx', folderName: 'docx', isEnabled: false })
+      ],
+      isLoading: false,
+      isRefreshing: false,
+      error: undefined,
+      refetch: vi.fn(),
+      mutate: vi.fn()
+    })
+    listLocalSkillsMock.mockResolvedValue({
+      success: true,
+      data: [{ name: 'repo-skill', filename: 'repo-skill', description: 'Repo skill' }]
+    })
+
+    const { result } = renderHook(() => useAvailableSkills('agent-1', '/repo'))
+
+    await waitFor(() => expect(listLocalSkillsMock).toHaveBeenCalledWith('/repo'))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    expect(result.current.skills).toEqual([
+      expect.objectContaining({ name: 'PDF', filename: 'pdf' }),
+      expect.objectContaining({ name: 'repo-skill', filename: 'repo-skill' })
+    ])
+  })
+
+  it('dedupes local skills already represented by enabled global skills', async () => {
+    useQueryMock.mockReturnValue({
+      data: [createSkill({ id: 'global-pdf', name: 'PDF', folderName: 'pdf', isEnabled: true })],
+      isLoading: false,
+      isRefreshing: false,
+      error: undefined,
+      refetch: vi.fn(),
+      mutate: vi.fn()
+    })
+    listLocalSkillsMock.mockResolvedValue({
+      success: true,
+      data: [
+        { name: 'Local PDF', filename: 'pdf', description: 'Same directory' },
+        { name: 'repo-skill', filename: 'repo-skill', description: 'Repo skill' }
+      ]
+    })
+
+    const { result } = renderHook(() => useAvailableSkills('agent-1', '/repo'))
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    expect(result.current.skills.map((skill) => skill.filename)).toEqual(['pdf', 'repo-skill'])
+  })
 })
 
 describe('useSkillInstall', () => {
@@ -370,43 +280,6 @@ describe('useSkillInstall', () => {
     expect(invalidateMock).toHaveBeenCalledWith('/skills')
   })
 
-  it('keeps installing key for the latest overlapping install', async () => {
-    const remoteInstall = deferred<{ success: true; data: InstalledSkill }>()
-    const zipInstall = deferred<{ success: true; data: InstalledSkill }>()
-    installSkillMock.mockReturnValueOnce(remoteInstall.promise)
-    installSkillFromZipMock.mockReturnValueOnce(zipInstall.promise)
-
-    const { result } = renderHook(() => useSkillInstall())
-
-    let remoteInstallPromise!: ReturnType<typeof result.current.install>
-    let zipInstallPromise!: ReturnType<typeof result.current.installFromZip>
-    await act(async () => {
-      remoteInstallPromise = result.current.install('skills.sh:owner/repo/remote-skill')
-      zipInstallPromise = result.current.installFromZip('/tmp/local-skill.zip')
-      await Promise.resolve()
-    })
-
-    expect(result.current.installingKey).toBe('zip')
-    expect(result.current.isInstalling('skills.sh:owner/repo/remote-skill')).toBe(false)
-    expect(result.current.isInstalling('zip')).toBe(true)
-
-    await act(async () => {
-      remoteInstall.resolve({ success: true, data: createSkill({ id: 'skill-remote' }) })
-      await remoteInstallPromise
-    })
-
-    expect(result.current.installingKey).toBe('zip')
-    expect(result.current.isInstalling('zip')).toBe(true)
-
-    await act(async () => {
-      zipInstall.resolve({ success: true, data: createSkill({ id: 'skill-zip' }) })
-      await zipInstallPromise
-    })
-
-    expect(result.current.installingKey).toBeNull()
-    expect(result.current.isInstalling()).toBe(false)
-  })
-
   it('logs, toasts, and rethrows local ZIP and directory install failures', async () => {
     const { result } = renderHook(() => useSkillInstall())
 
@@ -421,34 +294,5 @@ describe('useSkillInstall', () => {
       await expect(result.current.installFromDirectory('/tmp/bad-dir')).rejects.toThrow('directory failed')
     })
     expect(toastErrorMock).toHaveBeenCalledWith('directory failed')
-  })
-})
-
-describe('buildAvailableSkills', () => {
-  it('includes only enabled global skills', () => {
-    const result = buildAvailableSkills(
-      [
-        createSkill({ folderName: 'enabled', name: 'Enabled', isEnabled: true }),
-        createSkill({ folderName: 'disabled', name: 'Disabled', isEnabled: false })
-      ],
-      []
-    )
-
-    expect(result).toEqual([{ name: 'Enabled', description: 'First skill', filename: 'enabled' }])
-  })
-
-  it('lets an enabled global win over a same-filename local and keeps local-only skills', () => {
-    const result = buildAvailableSkills(
-      [createSkill({ folderName: 'shared', name: 'Global Shared', isEnabled: true })],
-      [
-        { name: 'Local Shared', description: 'shadowed', filename: 'shared' },
-        { name: 'Local Only', description: 'kept', filename: 'unique' }
-      ] as LocalSkill[]
-    )
-
-    expect(result).toEqual([
-      { name: 'Global Shared', description: 'First skill', filename: 'shared' },
-      { name: 'Local Only', description: 'kept', filename: 'unique' }
-    ])
   })
 })

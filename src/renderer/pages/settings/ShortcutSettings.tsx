@@ -46,10 +46,6 @@ const logger = loggerService.withContext('ShortcutSettings')
 const isBindingEqual = (a: ShortcutBinding, b: ShortcutBinding): boolean =>
   a.length === b.length && a.every((key, index) => key === b[index])
 
-const closestFromEventTarget = (target: EventTarget | null, selector: string): Element | null => {
-  return target instanceof Element ? target.closest(selector) : null
-}
-
 const keyCodeToAccelerator: Record<string, ShortcutToken> = {
   Backquote: '`',
   Period: '.',
@@ -85,8 +81,6 @@ const ShortcutSettings: FC = () => {
   const { theme } = useTheme()
   const { shortcuts, updatePreference } = useCommandShortcuts()
   const recorderRefs = useRef<Record<string, HTMLButtonElement>>({})
-  const resetConfirmRef = useRef(false)
-  const resetOperationRef = useRef(false)
   const [editingKey, setEditingKey] = useState<string | null>(null)
   const [pendingKeys, setPendingKeys] = useState<ShortcutBinding>([])
   const [conflictLabel, setConflictLabel] = useState<string | null>(null)
@@ -164,7 +158,7 @@ const ShortcutSettings: FC = () => {
       })
 
       if (hasConflict) {
-        window.toast?.error(t('settings.shortcuts.occupied_by_other_application'))
+        window.toast.error(t('settings.shortcuts.occupied_by_other_application'))
       }
     })
   }, [t])
@@ -192,7 +186,7 @@ const ShortcutSettings: FC = () => {
 
   const handleUpdateFailure = (record: (typeof shortcuts)[number], error: unknown) => {
     logger.error(`Failed to update shortcut preference: ${record.key}`, error as Error)
-    window.toast?.error(t('settings.shortcuts.save_failed_with_name', { name: record.label }))
+    window.toast.error(t('settings.shortcuts.save_failed_with_name', { name: record.label }))
   }
 
   const handleResetShortcut = async (record: (typeof shortcuts)[number]) => {
@@ -242,7 +236,7 @@ const ShortcutSettings: FC = () => {
   }
 
   const showConflictToast = (label: string) => {
-    window.toast?.error(t('settings.shortcuts.conflict_with', { name: label }))
+    window.toast.error(t('settings.shortcuts.conflict_with', { name: label }))
   }
 
   const handleKeyDown = async (event: ReactKeyboardEvent, record: (typeof shortcuts)[number]) => {
@@ -297,26 +291,10 @@ const ShortcutSettings: FC = () => {
   }
 
   const handleResetAllShortcuts = () => {
-    if (resetConfirmRef.current || resetOperationRef.current) {
-      return
-    }
-
-    const clearResetGuard = () => {
-      if (resetOperationRef.current) return
-      resetConfirmRef.current = false
-    }
-
-    resetConfirmRef.current = true
     window.modal.confirm({
       title: t('settings.shortcuts.reset_defaults_confirm'),
       centered: true,
-      onCancel: clearResetGuard,
       onOk: async () => {
-        if (resetOperationRef.current) {
-          return
-        }
-
-        resetOperationRef.current = true
         const updates: Record<string, PreferenceShortcutType> = getAllShortcutDefaultPreferences()
 
         try {
@@ -324,10 +302,7 @@ const ShortcutSettings: FC = () => {
           await preferenceService.setMultiple(updates)
         } catch (error) {
           logger.error('Failed to reset all shortcuts to defaults', error as Error)
-          window.toast?.error(t('settings.shortcuts.reset_defaults_failed'))
-        } finally {
-          resetOperationRef.current = false
-          resetConfirmRef.current = false
+          window.toast.error(t('settings.shortcuts.reset_defaults_failed'))
         }
       }
     })
@@ -371,7 +346,7 @@ const ShortcutSettings: FC = () => {
       await preferenceService.setMultiple(updates)
     } catch (error) {
       logger.error(`Failed to toggle shortcuts for group ${activeGroup}`, error as Error)
-      window.toast?.error(t('settings.shortcuts.save_failed'))
+      window.toast.error(t('settings.shortcuts.save_failed'))
     }
   }
 
@@ -404,7 +379,7 @@ const ShortcutSettings: FC = () => {
             )}
             onKeyDown={(event) => void handleKeyDown(event, record)}
             onBlur={(event) => {
-              const isUndoClick = closestFromEventTarget(event.relatedTarget, '.shortcut-undo-icon')
+              const isUndoClick = (event.relatedTarget as HTMLElement)?.closest('.shortcut-undo-icon')
               if (!isUndoClick) {
                 clearEditingState()
               }

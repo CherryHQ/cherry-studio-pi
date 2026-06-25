@@ -20,7 +20,6 @@ import { createSelector, createSlice } from '@reduxjs/toolkit'
 import { DEFAULT_CONTEXTCOUNT, DEFAULT_TEMPERATURE } from '@renderer/config/constant'
 import i18n from '@renderer/i18n'
 import { DEFAULT_ASSISTANT_SETTINGS, getDefaultAssistant } from '@renderer/services/AssistantService'
-import type { LegacyAssistant as Assistant, LegacyAssistant as AssistantPreset, Model, Topic } from '@renderer/types'
 import { isEmpty, uniqBy } from 'lodash'
 import { v4 as uuid } from 'uuid'
 
@@ -40,6 +39,10 @@ function getDefaultTopic(assistantId: string): Topic {
     isNameManuallyEdited: false
   }
 }
+
+import type { LegacyAssistant as Assistant, LegacyAssistant as AssistantPreset } from '@renderer/types/assistant'
+import type { Model } from '@renderer/types/model'
+import type { Topic } from '@renderer/types/topic'
 
 import type { RootState } from '.'
 
@@ -70,12 +73,6 @@ const assistantsSlice = createSlice({
   name: 'assistants',
   initialState,
   reducers: {
-    hydrateAssistantsState: (_state, action: PayloadAction<Partial<AssistantsState>>) => {
-      return {
-        ...initialState,
-        ...action.payload
-      }
-    },
     updateDefaultAssistant: (state, action: PayloadAction<{ assistant: Assistant }>) => {
       // @ts-ignore ts2589
       state.defaultAssistant = action.payload.assistant
@@ -271,7 +268,6 @@ const assistantsSlice = createSlice({
 })
 
 export const {
-  hydrateAssistantsState,
   updateDefaultAssistant,
   updateAssistants,
   addAssistant,

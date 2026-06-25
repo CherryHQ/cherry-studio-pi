@@ -14,30 +14,21 @@ function PopoverTrigger({ ...props }: React.ComponentProps<typeof PopoverPrimiti
   return <PopoverPrimitive.Trigger data-slot="popover-trigger" {...props} />
 }
 
-type PopoverContentProps = React.ComponentProps<typeof PopoverPrimitive.Content> & {
-  /** @deprecated Use portalContainer. Kept for existing Cherry Studio Pi callers. */
-  container?: React.ComponentProps<typeof PopoverPrimitive.Portal>['container']
-  portalContainer?: React.ComponentProps<typeof PopoverPrimitive.Portal>['container']
-}
-
 function PopoverContent({
   className,
   align = 'center',
   sideOffset = 4,
   forceMount,
-  container,
   portalContainer,
-  ref,
   ...props
-}: PopoverContentProps) {
+}: React.ComponentProps<typeof PopoverPrimitive.Content> & {
+  portalContainer?: React.ComponentProps<typeof PopoverPrimitive.Portal>['container']
+}) {
   const defaultPortalContainer = usePortalContainer()
 
   return (
-    <PopoverPrimitive.Portal
-      forceMount={forceMount}
-      container={portalContainer ?? container ?? defaultPortalContainer ?? undefined}>
+    <PopoverPrimitive.Portal forceMount={forceMount} container={portalContainer ?? defaultPortalContainer ?? undefined}>
       <PopoverPrimitive.Content
-        ref={ref}
         data-slot="popover-content"
         align={align}
         sideOffset={sideOffset}

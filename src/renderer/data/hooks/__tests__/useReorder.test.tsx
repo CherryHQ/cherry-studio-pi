@@ -144,15 +144,11 @@ describe('useReorder - move()', () => {
 
     const { result } = renderReorder(COLLECTION, Wrapper)
 
-    let thrown: unknown
-    await act(async () => {
-      try {
+    await expect(
+      act(async () => {
         await result.current.move('b', { position: 'first' })
-      } catch (error) {
-        thrown = error
-      }
-    })
-    expect(thrown).toBe(failure)
+      })
+    ).rejects.toThrow('server rejected')
 
     // On rollback we perform a GET (no value passed to globalMutate → revalidation).
     await waitFor(() => {

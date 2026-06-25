@@ -1,6 +1,5 @@
-import { ENDPOINT_TYPE, type Model, MODEL_CAPABILITY } from '@shared/data/types/model'
+import { ENDPOINT_TYPE, type Model, MODEL_CAPABILITY, parseUniqueModelId } from '@shared/data/types/model'
 
-import { getProviderModelApiId } from '../utils'
 import type {
   AddModelDrawerPrefill,
   ModelBasicFormState,
@@ -33,7 +32,7 @@ export const MODEL_ENDPOINT_OPTIONS = [
 ] as const
 
 export function getModelApiId(model: Model): string {
-  return getProviderModelApiId(model)
+  return model.apiModelId ?? parseUniqueModelId(model.id).modelId
 }
 
 function resolveInitialEndpointTypes(

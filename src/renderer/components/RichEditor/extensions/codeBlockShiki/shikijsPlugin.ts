@@ -1,25 +1,18 @@
 import { loggerService } from '@logger'
+// Cache highlighter instance once initialized so that decoration computation can run synchronously.
+import type { HighlighterGeneric } from 'shiki/core'
+let cachedHighlighter: HighlighterGeneric<any, any> | null = null
 import { getHighlighter, loadLanguageIfNeeded, loadThemeIfNeeded } from '@renderer/utils/shiki'
 import { findChildren } from '@tiptap/core'
 import type { Node as ProsemirrorNode } from '@tiptap/pm/model'
 import type { PluginView } from '@tiptap/pm/state'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
-import type { HighlighterGeneric } from 'shiki/core'
 
 const logger = loggerService.withContext('RichEditor:CodeBlockShiki')
-// Cache highlighter instance once initialized so decoration computation can run synchronously.
-let cachedHighlighter: HighlighterGeneric<any, any> | null = null
 
 // Languages that should skip syntax highlighting entirely
 const SKIP_HIGHLIGHTING_LANGUAGES = new Set(['text', 'plain', 'plaintext', 'txt', '', null, undefined])
-
-function getStepRange(step: unknown): { from: number; to: number } | null {
-  const candidate = step as { from?: unknown; to?: unknown }
-  return typeof candidate.from === 'number' && typeof candidate.to === 'number'
-    ? { from: candidate.from, to: candidate.to }
-    : null
-}
 
 function getDecorations({
   doc,
@@ -128,9 +121,21 @@ export function ShikiPlugin({
             // (for example, a transaction that affects the entire document).
             // Such transactions can happen during collab syncing via y-prosemirror, for example.
             transaction.steps.some((step) => {
-              const range = getStepRange(step)
-              return Boolean(
-                range && oldNodes.some((node) => node.pos >= range.from && node.pos + node.node.nodeSize <= range.to)
+              // @ts-ignore: ProseMirror step types are complex to type properly
+              return (
+                // @ts-ignore: ProseMirror step types are complex to type properly
+                step.from !== undefined &&
+                // @ts-ignore: ProseMirror step types are complex to type properly
+                step.to !== undefined &&
+                oldNodes.some((node) => {
+                  // @ts-ignore: ProseMirror step types are complex to type properly
+                  return (
+                    // @ts-ignore: ProseMirror step types are complex to type properly
+                    node.pos >= step.from &&
+                    // @ts-ignore: ProseMirror step types are complex to type properly
+                    node.pos + node.node.nodeSize <= step.to
+                  )
+                })
               )
             }))
 
@@ -150,8 +155,6 @@ export function ShikiPlugin({
     view: (view) => {
       class ShikiPluginView implements PluginView {
         private highlighter: HighlighterGeneric<any, any> | null = null
-        private destroyed = false
-
         constructor() {
           void this.initDecorations()
         }
@@ -161,27 +164,15 @@ export function ShikiPlugin({
         }
 
         destroy() {
-          this.destroyed = true
           this.highlighter = null
           cachedHighlighter = null
         }
 
         async initDecorations() {
-          try {
-            const highlighter = await getHighlighter()
-            if (this.destroyed) {
-              return
-            }
-
-            this.highlighter = highlighter
-            cachedHighlighter = highlighter
-            const tr = view.state.tr.setMeta('shikiHighlighterReady', true)
-            view.dispatch(tr)
-          } catch (error) {
-            if (!this.destroyed) {
-              logger.error('Error initializing Shiki highlighter:', error as Error)
-            }
-          }
+          this.highlighter = await getHighlighter()
+          cachedHighlighter = this.highlighter
+          const tr = view.state.tr.setMeta('shikiHighlighterReady', true)
+          view.dispatch(tr)
         }
 
         async checkUndecoratedBlocks() {
@@ -234,7 +225,7 @@ export function ShikiPlugin({
 
             await Promise.all(tasks)
 
-            if (didLoadSomething && !this.destroyed) {
+            if (didLoadSomething) {
               const tr = view.state.tr.setMeta('shikiHighlighterReady', true)
               view.dispatch(tr)
             }

@@ -139,9 +139,6 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
   const [urlText, setUrlText] = useState('')
   const [status, setStatus] = useState<ImportStatus>({ kind: 'idle' })
   const [loading, setLoading] = useState(false)
-  const mountedRef = useRef(true)
-  const loadingRef = useRef(false)
-  const operationSeqRef = useRef(0)
   const autoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const clearAutoCloseTimer = useCallback(() => {
@@ -150,53 +147,19 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
     autoCloseTimerRef.current = null
   }, [])
 
-  useEffect(() => clearAutoCloseTimer, [clearAutoCloseTimer])
-
-  useEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
-      operationSeqRef.current += 1
-    }
-  }, [])
-
   useEffect(() => {
     if (!open) {
       clearAutoCloseTimer()
-      operationSeqRef.current += 1
       setTab('file')
       setClipboardText('')
       setUrlText('')
       setStatus({ kind: 'idle' })
-      loadingRef.current = false
       setLoading(false)
     }
   }, [clearAutoCloseTimer, open])
 
-  const isCurrentImport = useCallback((operationSeq: number) => {
-    return mountedRef.current && operationSeqRef.current === operationSeq
-  }, [])
-
-  const beginLoading = useCallback(() => {
-    if (loadingRef.current) return false
-    const operationSeq = ++operationSeqRef.current
-    loadingRef.current = true
-    if (mountedRef.current) {
-      setLoading(true)
-    }
-    return operationSeq
-  }, [])
-
-  const endLoading = useCallback((operationSeq: number) => {
-    if (operationSeqRef.current !== operationSeq) return
-    loadingRef.current = false
-    if (mountedRef.current) {
-      setLoading(false)
-    }
-  }, [])
-
   const close = () => {
-    if (loadingRef.current) return
+    if (loading) return
     onOpenChange(false)
   }
 
@@ -209,110 +172,85 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
    * outcomes are "ok" or "failed"; a mid-batch failure leaves prior successes
    * intact and continues with the next draft.
    */
-  const runImport = async (
-    content: string,
-    source: 'file' | 'clipboard' | 'url',
-    fileName?: string,
-    activeOperationSeq?: number
-  ) => {
-    const operationSeq = activeOperationSeq ?? beginLoading()
-    if (!operationSeq || !isCurrentImport(operationSeq)) return
+  const runImport = async (content: string, source: 'file' | 'clipboard' | 'url', fileName?: string) => {
+    setLoading(true)
     setStatus({ kind: 'idle' })
 
+    // Parse error short-circuits the whole operation — no partial import possible.
+    let drafts: ReturnType<typeof parseAssistantImportContent>
     try {
-      // Parse error short-circuits the whole operation — no partial import possible.
-      let drafts: ReturnType<typeof parseAssistantImportContent>
-      try {
-        drafts = parseAssistantImportContent(content)
-      } catch (error) {
-        const message =
-          error instanceof AssistantTransferError
-            ? t(IMPORT_ERROR_I18N_KEYS[error.code])
-            : error instanceof Error
-              ? error.message
-              : t('message.agents.import.error')
-        if (isCurrentImport(operationSeq)) {
-          setStatus({ kind: 'error', message })
-        }
-        return
-      }
-
-      const outcomes: DraftOutcome[] = []
-
-      for (const draft of drafts) {
-        if (!isCurrentImport(operationSeq)) return
-        try {
-          // Names → ids first so the create call carries tagIds directly.
-          // ensureTags is idempotent (POST /tags only for names the backend
-          // doesn't already have). A failure here aborts the draft without
-          // creating an orphan assistant row.
-          const tagIds = draft.tags.length > 0 ? (await ensureTags(draft.tags)).map((tag) => tag.id) : undefined
-          if (!isCurrentImport(operationSeq)) return
-
-          await createAssistant({ ...draft.dto, ...(tagIds ? { tagIds } : {}) })
-          outcomes.push({ kind: 'ok' })
-        } catch (error) {
-          outcomes.push({
-            kind: 'failed',
-            name: draft.dto.name,
-            error: error instanceof Error ? error.message : t('message.agents.import.error')
-          })
-        }
-      }
-
-      if (!isCurrentImport(operationSeq)) return
-      await Promise.resolve(onImported?.()).catch(() => undefined)
-      if (!isCurrentImport(operationSeq)) return
-
-      const nextStatus = summarizeAssistantImportOutcomes(outcomes, t, fileName)
-      setStatus(nextStatus)
-
-      if (nextStatus.kind === 'success') {
-        window.toast?.success(nextStatus.message)
-        // File-mode banner stays so the filename echo is visible;
-        // clipboard / URL auto-close after a short delay.
-        if (source !== 'file') {
-          clearAutoCloseTimer()
-          autoCloseTimerRef.current = setTimeout(() => {
-            autoCloseTimerRef.current = null
-            if (!isCurrentImport(operationSeq)) return
-            onOpenChange(false)
-          }, AUTO_CLOSE_DELAY_MS)
-        }
-      } else {
-        window.toast?.error(nextStatus.message)
-      }
-    } finally {
-      endLoading(operationSeq)
+      drafts = parseAssistantImportContent(content)
+    } catch (error) {
+      const message =
+        error instanceof AssistantTransferError
+          ? t(IMPORT_ERROR_I18N_KEYS[error.code])
+          : error instanceof Error
+            ? error.message
+            : t('message.agents.import.error')
+      setStatus({ kind: 'error', message })
+      setLoading(false)
+      return
     }
+
+    const outcomes: DraftOutcome[] = []
+
+    for (const draft of drafts) {
+      try {
+        // Names → ids first so the create call carries tagIds directly.
+        // ensureTags is idempotent (POST /tags only for names the backend
+        // doesn't already have). A failure here aborts the draft without
+        // creating an orphan assistant row.
+        const tagIds = draft.tags.length > 0 ? (await ensureTags(draft.tags)).map((tag) => tag.id) : undefined
+
+        await createAssistant({ ...draft.dto, ...(tagIds ? { tagIds } : {}) })
+        outcomes.push({ kind: 'ok' })
+      } catch (error) {
+        outcomes.push({
+          kind: 'failed',
+          name: draft.dto.name,
+          error: error instanceof Error ? error.message : t('message.agents.import.error')
+        })
+      }
+    }
+
+    await onImported?.()
+
+    const nextStatus = summarizeAssistantImportOutcomes(outcomes, t, fileName)
+    setStatus(nextStatus)
+
+    if (nextStatus.kind === 'success') {
+      window.toast.success(nextStatus.message)
+      // File-mode banner stays so the filename echo is visible;
+      // clipboard / URL auto-close after a short delay.
+      if (source !== 'file') {
+        clearAutoCloseTimer()
+        autoCloseTimerRef.current = setTimeout(() => {
+          autoCloseTimerRef.current = null
+          onOpenChange(false)
+        }, AUTO_CLOSE_DELAY_MS)
+      }
+    } else {
+      window.toast.error(nextStatus.message)
+    }
+
+    setLoading(false)
   }
 
   // ---- File tab ----
-  const readFileOrBail = async (file: File, operationSeq: number): Promise<string | null> => {
+  const readFileOrBail = async (file: File): Promise<string | null> => {
     if (file.size > MAX_IMPORT_BYTES) {
-      if (isCurrentImport(operationSeq)) {
-        setStatus({ kind: 'error', message: t('library.import_dialog.error.file_too_large') })
-      }
+      setStatus({ kind: 'error', message: t('library.import_dialog.error.file_too_large') })
       return null
     }
-    const content = await file.text()
-    return isCurrentImport(operationSeq) ? content : null
+    return file.text()
   }
 
   const handleFileDrop = async (file?: File) => {
+    if (loading) return
     if (!file) return
-    const operationSeq = beginLoading()
-    if (!operationSeq) return
-
-    let handedOff = false
-    try {
-      const content = await readFileOrBail(file, operationSeq)
-      if (content === null) return
-      handedOff = true
-      await runImport(content, 'file', file.name, operationSeq)
-    } finally {
-      if (!handedOff) endLoading(operationSeq)
-    }
+    const content = await readFileOrBail(file)
+    if (content === null) return
+    await runImport(content, 'file', file.name)
   }
 
   // ---- Clipboard tab ----
@@ -337,23 +275,17 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
   const handleUrlImport = async () => {
     const raw = urlText.trim()
     if (!raw) return
-    if (loadingRef.current) return
 
     const validation = validateAssistantImportUrl(raw)
     if (!validation.ok) {
-      if (mountedRef.current) {
-        setStatus({ kind: 'error', message: t(validation.errorKey) })
-      }
+      setStatus({ kind: 'error', message: t(validation.errorKey) })
       return
     }
 
-    const operationSeq = beginLoading()
-    if (!operationSeq) return
+    setLoading(true)
     setStatus({ kind: 'idle' })
-    let handedOff = false
     try {
       const response = await fetch(validation.url, createAssistantImportFetchInit())
-      if (!isCurrentImport(operationSeq)) return
       if (!response.ok) {
         throw new Error(t('assistants.presets.import.error.fetch_failed'))
       }
@@ -361,24 +293,20 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
         throw new Error(t('library.import_dialog.error.response_too_large'))
       }
       const content = await response.text()
-      if (!isCurrentImport(operationSeq)) return
       if (isAssistantImportContentTooLarge(content)) {
         throw new Error(t('library.import_dialog.error.response_too_large'))
       }
-      handedOff = true
-      await runImport(content, 'url', undefined, operationSeq)
+      setLoading(false)
+      await runImport(content, 'url')
     } catch (error) {
+      setLoading(false)
       const message =
         error instanceof DOMException && error.name === 'TimeoutError'
           ? t('library.import_dialog.error.timeout')
           : error instanceof Error
             ? error.message
             : t('message.agents.import.error')
-      if (isCurrentImport(operationSeq)) {
-        setStatus({ kind: 'error', message })
-      }
-    } finally {
-      if (!handedOff) endLoading(operationSeq)
+      setStatus({ kind: 'error', message })
     }
   }
 

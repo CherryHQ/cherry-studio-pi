@@ -1,168 +1,105 @@
-import { FILE_TYPE } from '@renderer/types'
-import type { ComposerAttachment } from '@renderer/utils/messageUtils/composerAttachment'
-import { allFilesExt } from '@shared/config/constant'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { LONG_TEXT_PASTE_THRESHOLD } from '@renderer/config/constant'
+import { COMPOSER_FILE_KIND, FILE_TYPE, type FileMetadata } from '@renderer/types/file'
+import type { ComposerAttachment } from '@renderer/utils/message/composerAttachment'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+import pasteHandling from '../pasteHandling'
 
 vi.mock('@logger', () => ({
   loggerService: {
     withContext: () => ({
-      error: vi.fn(),
-      verbose: vi.fn()
+      error: vi.fn()
     })
   }
 }))
 
-const composerPasteStateKey = '__CHERRY_STUDIO_PI_COMPOSER_PASTE_STATE__'
-const originalApiDescriptor = Object.getOwnPropertyDescriptor(window, 'api')
-const originalToast = window.toast
+describe('pasteHandling', () => {
+  const selectedFile: FileMetadata = {
+    id: 'file-1',
+    name: 'pasted_text.txt',
+    origin_name: 'pasted_text.txt',
+    path: '/tmp/pasted_text.txt',
+    size: 2048,
+    ext: '.txt',
+    type: FILE_TYPE.TEXT,
+    created_at: '2026-06-08T00:00:00.000Z',
+    count: 1
+  }
 
-describe('composer pasteHandling', () => {
   beforeEach(() => {
-    vi.resetModules()
-    vi.clearAllMocks()
-    delete (globalThis as Record<string, unknown>)[composerPasteStateKey]
-  })
-
-  afterEach(() => {
-    vi.restoreAllMocks()
-    if (originalApiDescriptor) {
-      Object.defineProperty(window, 'api', originalApiDescriptor)
-    } else {
-      delete (window as unknown as { api?: unknown }).api
-    }
-    window.toast = originalToast
-  })
-
-  it('registers the global paste listener only once', async () => {
-    const addEventListener = vi.spyOn(document, 'addEventListener').mockImplementation(() => undefined)
-
-    const pasteHandling = await import('../pasteHandling')
-    pasteHandling.init()
-    pasteHandling.init()
-
-    expect(addEventListener.mock.calls.filter(([event]) => event === 'paste')).toHaveLength(1)
-
-    addEventListener.mockRestore()
-  })
-
-  it('routes the global paste listener through the latest registered handler after module reloads', async () => {
-    let pasteListener: ((event: ClipboardEvent) => Promise<void>) | undefined
-    const addEventListener = vi.spyOn(document, 'addEventListener').mockImplementation(((
-      event: string,
-      listener: EventListenerOrEventListenerObject
-    ) => {
-      if (event === 'paste' && typeof listener === 'function') {
-        pasteListener = listener as unknown as (event: ClipboardEvent) => Promise<void>
-      }
-    }) as typeof document.addEventListener)
-
-    const firstModule = await import('../pasteHandling')
-    firstModule.init()
-    const staleHandler = vi.fn(async () => true)
-    firstModule.registerHandler('inputbar', staleHandler)
-
-    vi.resetModules()
-    const secondModule = await import('../pasteHandling')
-    secondModule.init()
-    const latestHandler = vi.fn(async () => true)
-    secondModule.registerHandler('inputbar', latestHandler)
-
-    await pasteListener?.({} as ClipboardEvent)
-
-    expect(addEventListener.mock.calls.filter(([event]) => event === 'paste')).toHaveLength(1)
-    expect(staleHandler).not.toHaveBeenCalled()
-    expect(latestHandler).toHaveBeenCalledTimes(1)
-
-    addEventListener.mockRestore()
-  })
-
-  it('does not route paste events from descendants of editable content through the global handler', async () => {
-    let pasteListener: ((event: ClipboardEvent) => Promise<void>) | undefined
-    const addEventListener = vi.spyOn(document, 'addEventListener').mockImplementation(((
-      event: string,
-      listener: EventListenerOrEventListenerObject
-    ) => {
-      if (event === 'paste' && typeof listener === 'function') {
-        pasteListener = listener as unknown as (event: ClipboardEvent) => Promise<void>
-      }
-    }) as typeof document.addEventListener)
-
-    const editor = document.createElement('div')
-    editor.setAttribute('contenteditable', 'true')
-    const nested = document.createElement('span')
-    editor.appendChild(nested)
-    document.body.appendChild(editor)
-
-    const pasteHandling = await import('../pasteHandling')
-    pasteHandling.init()
-    const inputbarHandler = vi.fn(async () => true)
-    pasteHandling.registerHandler('inputbar', inputbarHandler)
-
-    await pasteListener?.({ target: nested } as unknown as ClipboardEvent)
-
-    expect(inputbarHandler).not.toHaveBeenCalled()
-
-    editor.remove()
-    addEventListener.mockRestore()
-  })
-
-  it('accepts pasted clipboard images without paths when all files are supported', async () => {
-    const pasteHandling = await import('../pasteHandling')
-    const selectedFile = {
-      id: 'file-1',
-      name: 'clipboard.png',
-      origin_name: 'clipboard.png',
-      path: '/tmp/clipboard.png',
-      ext: '.png',
-      size: 4,
-      type: FILE_TYPE.IMAGE,
-      created_at: new Date().toISOString()
-    }
     Object.defineProperty(window, 'api', {
       configurable: true,
       value: {
         file: {
-          getPathForFile: vi.fn(() => ''),
-          createTempFile: vi.fn(async () => selectedFile.path),
-          write: vi.fn(async () => undefined),
-          get: vi.fn(async () => selectedFile)
+          createTempFile: vi.fn().mockResolvedValue('/tmp/pasted_text.txt'),
+          get: vi.fn().mockResolvedValue(selectedFile),
+          write: vi.fn()
         }
       }
     })
-    window.toast = {
-      info: vi.fn(),
-      error: vi.fn()
-    } as unknown as typeof window.toast
+    Object.defineProperty(window, 'toast', {
+      configurable: true,
+      value: {
+        error: vi.fn(),
+        info: vi.fn()
+      }
+    })
+  })
 
-    const imageFile = {
-      name: 'clipboard.png',
-      type: 'image/png',
-      arrayBuffer: vi.fn(async () => new Uint8Array([1, 2, 3, 4]).buffer)
-    }
+  it('marks long pasted text files with the pasted-text composer kind', async () => {
+    const clipboardText = 'x'.repeat(LONG_TEXT_PASTE_THRESHOLD + 1)
+    const preventDefault = vi.fn()
+    let files: ComposerAttachment[] = []
+    const setFiles = vi.fn((updater: (prevFiles: ComposerAttachment[]) => ComposerAttachment[]) => {
+      files = updater(files)
+    })
     const event = {
-      preventDefault: vi.fn(),
+      preventDefault,
       clipboardData: {
-        getData: vi.fn(() => ''),
-        files: [imageFile]
+        getData: (type: string) => (type === 'text' ? clipboardText : ''),
+        files: []
       }
     } as unknown as ClipboardEvent
-    let attachments: ComposerAttachment[] = []
-    const setFiles = vi.fn((updater: (prevFiles: ComposerAttachment[]) => ComposerAttachment[]) => {
-      attachments = updater(attachments)
-    })
 
-    await expect(pasteHandling.handlePaste(event, [allFilesExt], setFiles)).resolves.toBe(true)
+    const handled = await pasteHandling.handlePaste(event, [], setFiles, undefined, '', undefined, (key) =>
+      key === 'chat.input.pasted_text_file_name' ? 'pasted text.txt' : key
+    )
 
-    expect(event.preventDefault).toHaveBeenCalled()
-    expect(window.api.file.createTempFile).toHaveBeenCalledWith('clipboard.png')
-    expect(window.api.file.write).toHaveBeenCalledWith(selectedFile.path, new Uint8Array([1, 2, 3, 4]))
-    expect(attachments).toEqual([
-      expect.objectContaining({
+    expect(handled).toBe(true)
+    expect(preventDefault).toHaveBeenCalled()
+    expect(window.api.file.createTempFile).toHaveBeenCalledWith('pasted_text.txt')
+    expect(window.api.file.write).toHaveBeenCalledWith('/tmp/pasted_text.txt', clipboardText)
+    expect(files).toEqual([
+      {
+        fileTokenSourceId: expect.any(String),
         path: selectedFile.path,
-        origin_name: selectedFile.origin_name,
-        type: FILE_TYPE.IMAGE
-      })
+        name: selectedFile.name,
+        origin_name: 'pasted text.txt',
+        ext: selectedFile.ext,
+        size: selectedFile.size,
+        type: selectedFile.type,
+        composerFileKind: COMPOSER_FILE_KIND.PASTED_TEXT
+      }
     ])
-    expect(window.toast?.info).not.toHaveBeenCalled()
+    expect(files[0]?.fileTokenSourceId).not.toBe(selectedFile.id)
+  })
+
+  it('leaves short pasted text untouched', async () => {
+    const clipboardText = 'x'.repeat(LONG_TEXT_PASTE_THRESHOLD)
+    const preventDefault = vi.fn()
+    const setFiles = vi.fn()
+    const event = {
+      preventDefault,
+      clipboardData: {
+        getData: (type: string) => (type === 'text' ? clipboardText : ''),
+        files: []
+      }
+    } as unknown as ClipboardEvent
+
+    const handled = await pasteHandling.handlePaste(event, [], setFiles, undefined, '')
+
+    expect(handled).toBe(false)
+    expect(preventDefault).not.toHaveBeenCalled()
+    expect(setFiles).not.toHaveBeenCalled()
   })
 })

@@ -24,10 +24,6 @@ const getOuterDomNode = (view: EditorView, domNode: HTMLElement) => {
   return tmpDomNode
 }
 
-const containsEventTarget = (container: globalThis.Node, target: EventTarget | null): boolean => {
-  return target instanceof globalThis.Node && container.contains(target)
-}
-
 export const plusButtonPluginDefaultKey = new PluginKey('plusButton')
 
 export interface PlusButtonPluginOptions {
@@ -83,17 +79,13 @@ export const PlusButtonPlugin = ({
       getBoundingClientRect: () => dom.getBoundingClientRect()
     }
 
-    void computePosition(virtualElement, element, computePositionConfig)
-      .then((val) => {
-        Object.assign(element.style, {
-          position: val.strategy,
-          left: `${val.x}px`,
-          top: `${val.y}px`
-        })
+    void computePosition(virtualElement, element, computePositionConfig).then((val) => {
+      Object.assign(element.style, {
+        position: val.strategy,
+        left: `${val.x}px`,
+        top: `${val.y}px`
       })
-      .catch(() => {
-        hideButton()
-      })
+    })
   }
 
   function onClick(e: MouseEvent) {
@@ -253,7 +245,7 @@ export const PlusButtonPlugin = ({
           // 当鼠标离开编辑器区域时隐藏按钮
           mouseleave(_view, e) {
             // 如果指针正好在 wrapper（按钮）上则不隐藏
-            if (containsEventTarget(wrapper, e.relatedTarget)) return false
+            if (wrapper.contains(e.relatedTarget as HTMLElement)) return false
             hideButton()
             currentNode = null
             currentNodePos = -1

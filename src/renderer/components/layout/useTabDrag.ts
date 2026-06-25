@@ -7,12 +7,6 @@ const DRAG_THRESHOLD = 5
 const DETACH_THRESHOLD = 30
 const TAB_GAP = 6
 
-function getTargetElement(target: EventTarget | null): Element | null {
-  if (target instanceof Element) return target
-  if (target instanceof Node) return target.parentElement
-  return null
-}
-
 type DragMode = 'pending' | 'reorder' | 'detach'
 
 interface DragState {
@@ -66,7 +60,9 @@ export function useTabDrag({
     tabType: 'normal' as 'pinned' | 'normal',
     detachedCreated: false,
     tabClosed: false,
-    originalRects: new Map<string, { left: number; width: number }>()
+    originalRects: new Map<string, { left: number; width: number }>(),
+    grabOffsetX: 0,
+    grabOffsetY: 0
   })
 
   // Prevent onClick from firing after drag ends
@@ -136,7 +132,7 @@ export function useTabDrag({
   const handlePointerDown = useCallback(
     (e: React.PointerEvent, tab: Tab, tabType: 'pinned' | 'normal') => {
       if (e.button !== 0) return
-      if (getTargetElement(e.target)?.closest('[role="button"]')) return
+      if ((e.target as HTMLElement).closest('[role="button"]')) return
 
       const list = tabType === 'pinned' ? pinnedTabs : normalTabs
       const index = list.findIndex((t) => t.id === tab.id)
@@ -162,7 +158,9 @@ export function useTabDrag({
         tabType,
         detachedCreated: false,
         tabClosed: false,
-        originalRects
+        originalRects,
+        grabOffsetX: e.screenX - window.screenX,
+        grabOffsetY: e.screenY - window.screenY
       }
 
       didDragRef.current = false

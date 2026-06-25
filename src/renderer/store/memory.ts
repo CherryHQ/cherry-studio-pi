@@ -15,8 +15,7 @@
  * --------------------------------------------------------------------------
  */
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
-import { notifyStorageV2MirroredLocalStorageKeyChanged } from '@renderer/services/StorageV2LocalStorageSnapshot'
-import type { MemoryConfig } from '@types'
+import type { MemoryConfig } from '@renderer/types/memory'
 
 /**
  * Memory store state interface
@@ -39,34 +38,12 @@ const defaultMemoryConfig: MemoryConfig = {
   customUpdateMemoryPrompt: ''
 }
 
-const MEMORY_CURRENT_USER_ID_KEY = 'memory_currentUserId'
-const DEFAULT_MEMORY_USER_ID = 'default-user'
-
-function readPersistedCurrentUserId() {
-  try {
-    if (typeof localStorage === 'undefined') return DEFAULT_MEMORY_USER_ID
-    return localStorage.getItem(MEMORY_CURRENT_USER_ID_KEY) || DEFAULT_MEMORY_USER_ID
-  } catch {
-    return DEFAULT_MEMORY_USER_ID
-  }
-}
-
-function persistCurrentUserId(userId: string) {
-  try {
-    if (typeof localStorage === 'undefined') return
-    localStorage.setItem(MEMORY_CURRENT_USER_ID_KEY, userId)
-    notifyStorageV2MirroredLocalStorageKeyChanged(MEMORY_CURRENT_USER_ID_KEY)
-  } catch {
-    // Keep Redux usable when browser storage is unavailable or blocked.
-  }
-}
-
 /**
  * Initial state for the memory store
  */
 export const initialState: MemoryState = {
   memoryConfig: defaultMemoryConfig,
-  currentUserId: readPersistedCurrentUserId(),
+  currentUserId: localStorage.getItem('memory_currentUserId') || 'default-user',
   globalMemoryEnabled: false // Default to false
 }
 
@@ -86,15 +63,6 @@ const memorySlice = createSlice({
   name: 'memory',
   initialState,
   reducers: {
-    hydrateMemoryState: (_state, action: PayloadAction<Partial<MemoryState>>) => {
-      return {
-        ...initialState,
-        ...action.payload
-      }
-    },
-    hydrateMemoryCurrentUserId: (state, action: PayloadAction<string>) => {
-      state.currentUserId = action.payload || 'default-user'
-    },
     /**
      * Updates the memory configuration
      * @param state - Current memory state
@@ -110,7 +78,7 @@ const memorySlice = createSlice({
      */
     setCurrentUserId: (state, action: PayloadAction<string>) => {
       state.currentUserId = action.payload
-      persistCurrentUserId(action.payload)
+      localStorage.setItem('memory_currentUserId', action.payload)
     },
     /**
      * Sets the global memory enabled state and persists it to localStorage
@@ -144,13 +112,7 @@ const memorySlice = createSlice({
 })
 
 // Export action creators
-export const {
-  hydrateMemoryState,
-  hydrateMemoryCurrentUserId,
-  updateMemoryConfig,
-  setCurrentUserId,
-  setGlobalMemoryEnabled
-} = memorySlice.actions
+export const { updateMemoryConfig, setCurrentUserId, setGlobalMemoryEnabled } = memorySlice.actions
 
 // Export selectors
 export const { getMemoryConfig, getCurrentUserId, getGlobalMemoryEnabled } = memorySlice.selectors

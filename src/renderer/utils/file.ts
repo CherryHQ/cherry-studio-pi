@@ -1,6 +1,4 @@
-import type { FileMetadata, FileType } from '@renderer/types'
-import { FILE_TYPE } from '@renderer/types'
-import { allFilesExt } from '@shared/config/constant'
+import { FILE_TYPE, type FileMetadata, type FileType } from '@renderer/types/file'
 import { GB, KB, MB } from '@shared/utils/constants'
 import { audioExts, documentExts, imageExts, textExts, videoExts } from '@shared/utils/file'
 import mime from 'mime-types'
@@ -11,17 +9,8 @@ import mime from 'mime-types'
  * @returns {string} 目录路径
  */
 export function getFileDirectory(filePath: string): string {
-  const separatorIndex = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'))
-  return separatorIndex >= 0 ? filePath.slice(0, separatorIndex) : ''
-}
-
-/**
- * 从文件路径中提取文件名。
- * @param {string} filePath 文件路径
- * @returns {string} 文件名
- */
-export function getFileName(filePath: string): string {
-  return filePath.split(/[/\\]/).filter(Boolean).pop() ?? ''
+  const parts = filePath.split('/')
+  return parts.slice(0, -1).join('/')
 }
 
 /**
@@ -30,8 +19,7 @@ export function getFileName(filePath: string): string {
  * @returns {string} 文件扩展名（小写），如果没有则返回 '.'
  */
 export function getFileExtension(filePath: string): string {
-  const fileName = getFileName(filePath)
-  const parts = fileName.split('.')
+  const parts = filePath.split('.')
   if (parts.length > 1) {
     const extension = parts.slice(-1)[0].toLowerCase()
     return '.' + extension
@@ -45,10 +33,9 @@ export function getFileExtension(filePath: string): string {
  * @returns {string} 移除扩展名后的文件路径
  */
 export function removeFileExtension(filePath: string): string {
-  const separatorIndex = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'))
-  const dotIndex = filePath.lastIndexOf('.')
-  if (dotIndex > separatorIndex) {
-    return filePath.slice(0, dotIndex)
+  const parts = filePath.split('.')
+  if (parts.length > 1) {
+    return parts.slice(0, -1).join('.')
   }
   return filePath
 }
@@ -99,10 +86,6 @@ export function removeSpecialCharactersForFileName(str: string): string {
  */
 export async function isSupportedFile(filePath: string, supportExts: Set<string>): Promise<boolean> {
   try {
-    if (supportExts.has(allFilesExt)) {
-      return true
-    }
-
     if (supportExts.has(getFileExtension(filePath))) {
       return true
     }

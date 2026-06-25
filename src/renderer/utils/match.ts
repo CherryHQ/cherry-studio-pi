@@ -1,6 +1,6 @@
+import i18n from '@renderer/i18n'
 import { getProviderLabelKey } from '@renderer/i18n/label'
-import type { Provider } from '@renderer/types'
-import { isSystemProvider } from '@renderer/types'
+import { isSystemProvider, type Provider } from '@renderer/types/provider'
 
 /**
  * 判断一个字符串是否包含由另一个字符串表示的 keywords
@@ -14,7 +14,7 @@ import { isSystemProvider } from '@renderer/types'
  */
 export function includeKeywords(target: string, keywords: string | string[]): boolean {
   const keywordArray = Array.isArray(keywords) ? keywords : (keywords || '').split(/\s+/)
-  const nonEmptyKeywords = keywordArray.map((keyword) => keyword.trim()).filter(Boolean)
+  const nonEmptyKeywords = keywordArray.filter(Boolean)
 
   // 如果没有有效关键词，则视为匹配
   if (nonEmptyKeywords.length === 0) return true
@@ -54,6 +54,6 @@ export function matchKeywordsInProvider(keywords: string | string[], provider: P
  */
 function getProviderSearchString(provider: Provider) {
   return isSystemProvider(provider)
-    ? `${getProviderLabelKey(provider.id)} ${provider.id} ${provider.name}`
+    ? `${i18n.t(getProviderLabelKey(provider.id))} ${provider.id} ${provider.name}`
     : `${provider.id} ${provider.name}`
 }

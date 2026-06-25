@@ -64,8 +64,6 @@ export default function ProviderList({ selectedProviderId, filterModeHint, onSel
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const lastProvidersRef = useRef(providers)
   const lastSelectedProviderIdRef = useRef(selectedProviderId)
-  const deleteConfirmProviderIdsRef = useRef(new Set<Provider['id']>())
-  const deletingProviderIdsRef = useRef(new Set<Provider['id']>())
 
   useEffect(() => {
     if (!filterModeHint) {
@@ -114,7 +112,7 @@ export default function ProviderList({ selectedProviderId, filterModeHint, onSel
       if (filterMode === 'disabled' && provider.isEnabled) {
         return false
       }
-      if (filterMode === 'claude-agent' && !isAnthropicSupportedProvider(provider)) {
+      if (filterMode === 'agent' && !isAnthropicSupportedProvider(provider)) {
         return false
       }
       const keywords = searchText.toLowerCase().split(/\s+/).filter(Boolean)
@@ -205,7 +203,7 @@ export default function ProviderList({ selectedProviderId, filterModeHint, onSel
   }, [])
 
   const handleReorderError = useCallback(() => {
-    window.toast?.error(t('settings.provider.reorder_failed'))
+    window.toast.error(t('settings.provider.reorder_failed'))
   }, [t])
 
   const handleSubmitEditor = useCallback(
@@ -213,9 +211,9 @@ export default function ProviderList({ selectedProviderId, filterModeHint, onSel
       const result = await submitEditor(providerInput)
 
       if (result.notice === 'create-logo-save-failed') {
-        window.toast?.error(t('message.error.save_provider_logo'))
+        window.toast.error(t('message.error.save_provider_logo'))
       } else if (result.notice === 'update-logo-save-failed') {
-        window.toast?.error(t('message.error.update_provider_logo'))
+        window.toast.error(t('message.error.update_provider_logo'))
       }
     },
     [submitEditor, t]
@@ -223,38 +221,14 @@ export default function ProviderList({ selectedProviderId, filterModeHint, onSel
 
   const handleDeleteProvider = useCallback(
     (providerId: Provider['id']) => {
-      if (deleteConfirmProviderIdsRef.current.has(providerId) || deletingProviderIdsRef.current.has(providerId)) {
-        return
-      }
-
-      const clearDeleteGuard = () => {
-        if (deletingProviderIdsRef.current.has(providerId)) return
-        deleteConfirmProviderIdsRef.current.delete(providerId)
-      }
-
-      deleteConfirmProviderIdsRef.current.add(providerId)
       window.modal.confirm({
         title: t('settings.provider.delete.title'),
         content: t('settings.provider.delete.content'),
         okButtonProps: { danger: true },
         okText: t('common.delete'),
         centered: true,
-        onCancel: clearDeleteGuard,
         onOk: async () => {
-          if (deletingProviderIdsRef.current.has(providerId)) {
-            return
-          }
-
-          deletingProviderIdsRef.current.add(providerId)
-          try {
-            await deleteProvider(providerId)
-          } catch (error) {
-            window.toast?.error(t('settings.provider.delete_failed'))
-            throw error
-          } finally {
-            deletingProviderIdsRef.current.delete(providerId)
-            deleteConfirmProviderIdsRef.current.delete(providerId)
-          }
+          await deleteProvider(providerId)
         }
       })
     },

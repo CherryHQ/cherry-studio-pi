@@ -1,6 +1,5 @@
 import { usePreference } from '@data/hooks/usePreference'
 import { isMac, isWin } from '@renderer/config/constant'
-import { useNavbarPosition } from '@renderer/hooks/useNavbar'
 import useUserTheme from '@renderer/hooks/useUserTheme'
 import { ThemeMode } from '@shared/data/preference/preferenceTypes'
 import { IpcChannel } from '@shared/IpcChannel'
@@ -42,7 +41,6 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
 
   const [actualTheme, setActualTheme] = useState<ThemeMode>(getSystemTheme)
   const { initUserTheme } = useUserTheme()
-  const { navbarPosition } = useNavbarPosition()
 
   const toggleTheme = () => {
     const nextTheme = {
@@ -54,6 +52,7 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
   }
 
   useEffect(() => {
+    // Set initial theme and OS attributes on body
     document.body.setAttribute('os', isMac ? 'mac' : isWin ? 'windows' : 'linux')
     if (actualTheme === ThemeMode.dark) {
       document.body.classList.remove('light')
@@ -62,27 +61,21 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
       document.body.classList.remove('dark')
       document.body.classList.add('light')
     }
-    document.body.setAttribute('navbar-position', navbarPosition)
     document.documentElement.lang = language || navigator.language
-  }, [actualTheme, language, navbarPosition])
 
-  useEffect(() => {
     // if theme is old auto, then set theme to system
     // we can delete this after next big release
     if (settedTheme !== ThemeMode.dark && settedTheme !== ThemeMode.light && settedTheme !== ThemeMode.system) {
       void setSettedTheme(ThemeMode.system)
     }
-  }, [setSettedTheme, settedTheme])
 
-  useEffect(() => {
     initUserTheme()
-  }, [initUserTheme])
 
-  useEffect(() => {
+    // listen for theme updates from main process
     return window.electron.ipcRenderer.on(IpcChannel.NativeThemeUpdated, (_, actualTheme: ThemeMode) => {
       setActualTheme(actualTheme)
     })
-  }, [])
+  }, [actualTheme, initUserTheme, language, setSettedTheme, settedTheme])
 
   useEffect(() => {
     tailwindThemeChange(actualTheme)

@@ -12,13 +12,11 @@ import {
   Tooltip
 } from '@cherrystudio/ui'
 import { restoreFromLocal } from '@renderer/services/BackupService'
-import { formatFileSize } from '@renderer/utils'
-import { getErrorMessage } from '@renderer/utils/error'
-import { runExclusiveOperation } from '@renderer/utils/exclusiveOperation'
+import { formatFileSize } from '@renderer/utils/file'
 import dayjs from 'dayjs'
 import { ChevronLeft, ChevronRight, CircleAlert, RefreshCw, Trash2 } from 'lucide-react'
 import type { Key } from 'react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface BackupFile {
@@ -44,73 +42,30 @@ export function LocalBackupManager({ visible, onClose, localBackupDir, restoreMe
   const [deleting, setDeleting] = useState(false)
   const [restoring, setRestoring] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
-  const mountedRef = useRef(true)
-  const visibleRef = useRef(visible)
-  const fetchSeqRef = useRef(0)
-  const operationRef = useRef(false)
-
-  visibleRef.current = visible
-  const isActive = useCallback(() => mountedRef.current && visibleRef.current, [])
-
-  useEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
-      visibleRef.current = false
-      fetchSeqRef.current += 1
-    }
-  }, [])
 
   const fetchBackupFiles = useCallback(async () => {
-    if (!isActive()) {
-      return
-    }
-
     if (!localBackupDir) {
       return
     }
 
-    const fetchSeq = ++fetchSeqRef.current
     setLoading(true)
     try {
       const files = await window.api.backup.listLocalBackupFiles(localBackupDir)
-      if (isActive() && fetchSeq === fetchSeqRef.current) {
-        setBackupFiles(files)
-      }
-    } catch (error) {
-      if (isActive() && fetchSeq === fetchSeqRef.current) {
-        window.toast?.error(`${t('settings.data.local.backup.manager.fetch.error')}: ${getErrorMessage(error)}`)
-      }
+      setBackupFiles(files)
+    } catch (error: any) {
+      window.toast.error(`${t('settings.data.local.backup.manager.fetch.error')}: ${error.message}`)
     } finally {
-      if (isActive() && fetchSeq === fetchSeqRef.current) {
-        setLoading(false)
-      }
+      setLoading(false)
     }
-  }, [localBackupDir, t, isActive])
+  }, [localBackupDir, t])
 
   useEffect(() => {
-    if (!visible) {
-      fetchSeqRef.current += 1
-      setLoading(false)
-      return
-    }
-
-    void fetchBackupFiles()
-    setSelectedRowKeys([])
-    setCurrentPage(1)
-
-    return () => {
-      fetchSeqRef.current += 1
+    if (visible) {
+      void fetchBackupFiles()
+      setSelectedRowKeys([])
+      setCurrentPage(1)
     }
   }, [visible, fetchBackupFiles])
-
-  useEffect(() => {
-    const availableKeys = new Set(backupFiles.map((file) => file.fileName))
-    setSelectedRowKeys((previousKeys) => {
-      const nextKeys = previousKeys.filter((key) => availableKeys.has(key.toString()))
-      return nextKeys.length === previousKeys.length ? previousKeys : nextKeys
-    })
-  }, [backupFiles])
 
   const totalPages = Math.max(1, Math.ceil(backupFiles.length / PAGE_SIZE))
   const safeCurrentPage = Math.min(currentPage, totalPages)
@@ -141,7 +96,7 @@ export function LocalBackupManager({ visible, onClose, localBackupDir, restoreMe
 
   const handleDeleteSelected = async () => {
     if (selectedRowKeys.length === 0) {
-      window.toast?.warning(t('settings.data.local.backup.manager.select.files.delete'))
+      window.toast.warning(t('settings.data.local.backup.manager.select.files.delete'))
       return
     }
 
@@ -157,37 +112,22 @@ export function LocalBackupManager({ visible, onClose, localBackupDir, restoreMe
       cancelText: t('common.cancel'),
       centered: true,
       onOk: async () => {
-        await runExclusiveOperation(operationRef, async () => {
-          if (!isActive()) {
-            return
+        setDeleting(true)
+        try {
+          // Delete selected files one by one
+          for (const key of selectedRowKeys) {
+            await window.api.backup.deleteLocalBackupFile(key.toString(), localBackupDir)
           }
-
-          setDeleting(true)
-          try {
-            // Delete selected files one by one
-            for (const key of selectedRowKeys) {
-              await window.api.backup.deleteLocalBackupFile(key.toString(), localBackupDir)
-            }
-
-            if (!isActive()) {
-              return
-            }
-
-            window.toast?.success(
-              t('settings.data.local.backup.manager.delete.success.multiple', { count: selectedRowKeys.length })
-            )
-            setSelectedRowKeys([])
-            await fetchBackupFiles()
-          } catch (error) {
-            if (isActive()) {
-              window.toast?.error(`${t('settings.data.local.backup.manager.delete.error')}: ${getErrorMessage(error)}`)
-            }
-          } finally {
-            if (isActive()) {
-              setDeleting(false)
-            }
-          }
-        })
+          window.toast.success(
+            t('settings.data.local.backup.manager.delete.success.multiple', { count: selectedRowKeys.length })
+          )
+          setSelectedRowKeys([])
+          await fetchBackupFiles()
+        } catch (error: any) {
+          window.toast.error(`${t('settings.data.local.backup.manager.delete.error')}: ${error.message}`)
+        } finally {
+          setDeleting(false)
+        }
       }
     })
   }
@@ -205,31 +145,16 @@ export function LocalBackupManager({ visible, onClose, localBackupDir, restoreMe
       cancelText: t('common.cancel'),
       centered: true,
       onOk: async () => {
-        await runExclusiveOperation(operationRef, async () => {
-          if (!isActive()) {
-            return
-          }
-
-          setDeleting(true)
-          try {
-            await window.api.backup.deleteLocalBackupFile(fileName, localBackupDir)
-
-            if (!isActive()) {
-              return
-            }
-
-            window.toast?.success(t('settings.data.local.backup.manager.delete.success.single'))
-            await fetchBackupFiles()
-          } catch (error) {
-            if (isActive()) {
-              window.toast?.error(`${t('settings.data.local.backup.manager.delete.error')}: ${getErrorMessage(error)}`)
-            }
-          } finally {
-            if (isActive()) {
-              setDeleting(false)
-            }
-          }
-        })
+        setDeleting(true)
+        try {
+          await window.api.backup.deleteLocalBackupFile(fileName, localBackupDir)
+          window.toast.success(t('settings.data.local.backup.manager.delete.success.single'))
+          await fetchBackupFiles()
+        } catch (error: any) {
+          window.toast.error(`${t('settings.data.local.backup.manager.delete.error')}: ${error.message}`)
+        } finally {
+          setDeleting(false)
+        }
       }
     })
   }
@@ -247,31 +172,16 @@ export function LocalBackupManager({ visible, onClose, localBackupDir, restoreMe
       cancelText: t('common.cancel'),
       centered: true,
       onOk: async () => {
-        await runExclusiveOperation(operationRef, async () => {
-          if (!isActive()) {
-            return
-          }
-
-          setRestoring(true)
-          try {
-            await (restoreMethod || restoreFromLocal)(fileName)
-
-            if (!isActive()) {
-              return
-            }
-
-            window.toast?.success(t('settings.data.local.backup.manager.restore.success'))
-            onClose() // Close the modal
-          } catch (error) {
-            if (isActive()) {
-              window.toast?.error(`${t('settings.data.local.backup.manager.restore.error')}: ${getErrorMessage(error)}`)
-            }
-          } finally {
-            if (isActive()) {
-              setRestoring(false)
-            }
-          }
-        })
+        setRestoring(true)
+        try {
+          await (restoreMethod || restoreFromLocal)(fileName)
+          window.toast.success(t('settings.data.local.backup.manager.restore.success'))
+          onClose() // Close the modal
+        } catch (error: any) {
+          window.toast.error(`${t('settings.data.local.backup.manager.restore.error')}: ${error.message}`)
+        } finally {
+          setRestoring(false)
+        }
       }
     })
   }
@@ -333,7 +243,7 @@ export function LocalBackupManager({ visible, onClose, localBackupDir, restoreMe
   ]
 
   return (
-    <Dialog open={visible} onOpenChange={(open) => !open && !operationRef.current && onClose()}>
+    <Dialog open={visible} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-[800px]">
         <DialogHeader>
           <DialogTitle>{t('settings.data.local.backup.manager.title')}</DialogTitle>
@@ -385,11 +295,7 @@ export function LocalBackupManager({ visible, onClose, localBackupDir, restoreMe
           )}
         </div>
         <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={fetchBackupFiles}
-            disabled={loading || deleting || restoring}>
+          <Button type="button" variant="outline" onClick={fetchBackupFiles} disabled={loading}>
             <RefreshCw className="size-4" />
             {t('settings.data.local.backup.manager.refresh')}
           </Button>
@@ -397,11 +303,11 @@ export function LocalBackupManager({ visible, onClose, localBackupDir, restoreMe
             type="button"
             variant="destructive"
             onClick={handleDeleteSelected}
-            disabled={selectedRowKeys.length === 0 || deleting || restoring}>
+            disabled={selectedRowKeys.length === 0 || deleting}>
             <Trash2 className="size-4" />
             {t('settings.data.local.backup.manager.delete.selected')} ({selectedRowKeys.length})
           </Button>
-          <Button type="button" onClick={onClose} disabled={deleting || restoring}>
+          <Button type="button" onClick={onClose}>
             {t('common.close')}
           </Button>
         </DialogFooter>

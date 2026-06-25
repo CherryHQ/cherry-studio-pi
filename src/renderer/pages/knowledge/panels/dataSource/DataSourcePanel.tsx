@@ -1,7 +1,7 @@
 import { Button, ConfirmDialog } from '@cherrystudio/ui'
 import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
-import { getKnowledgeItemDisplayTitle, type KnowledgeItem, type KnowledgeItemType } from '@shared/data/types/knowledge'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { KnowledgeItem, KnowledgeItemType } from '@shared/data/types/knowledge'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { KNOWLEDGE_DATA_SOURCE_TYPES } from '../../components/addKnowledgeItemDialog/constants'
@@ -10,13 +10,17 @@ import { usePreviewKnowledgeSource } from '../../hooks/usePreviewKnowledgeSource
 import DataSourcePanelHeader from './DataSourcePanelHeader'
 import KnowledgeItemList from './KnowledgeItemList'
 import { dataSourceTypeDisplayConfig } from './utils/models'
-import { getReadyCount } from './utils/selectors'
 
 export interface DataSourcePanelProps {
   items: KnowledgeItem[]
+  /** Server-side total across all pages. Defaults to the loaded count when omitted. */
+  total?: number
   isLoading: boolean
+  /** Cursor-pagination controls; default to a fully-loaded list when omitted. */
+  hasMore?: boolean
+  isLoadingMore?: boolean
+  onLoadMore?: () => void
   updatedAt: string
-  searchQuery?: string
   onAdd: (source?: KnowledgeItemType, files?: File[]) => void
   onItemClick?: (itemId: string) => void
   onDelete: (item: KnowledgeItem) => void | Promise<unknown>
@@ -58,9 +62,12 @@ const DataSourceEmptyState = ({ onAddSource }: { onAddSource: (source: Knowledge
 
 const DataSourcePanel = ({
   items,
+  total = items.length,
   isLoading,
+  hasMore = false,
+  isLoadingMore = false,
+  onLoadMore = () => undefined,
   updatedAt,
-  searchQuery,
   onAdd,
   onItemClick,
   onDelete,
@@ -81,19 +88,6 @@ const DataSourcePanel = ({
     })
   }, [items])
 
-  const displayedItems = useMemo(() => {
-    const query = searchQuery?.trim().toLowerCase()
-    if (!query) return items
-
-    return items.filter((item) => {
-      const title = getKnowledgeItemDisplayTitle(item).toLowerCase()
-      const source = 'source' in item.data ? item.data.source.toLowerCase() : ''
-      return title.includes(query) || source.includes(query)
-    })
-  }, [items, searchQuery])
-
-  const readyCount = useMemo(() => getReadyCount(displayedItems), [displayedItems])
-
   const handleItemClick = (itemId: string) => onItemClick?.(itemId)
 
   const handleToggleOne = useCallback((itemId: string, next: boolean) => {
@@ -110,9 +104,9 @@ const DataSourcePanel = ({
 
   const handleToggleAll = useCallback(
     (next: boolean) => {
-      setSelectedIds(next ? new Set(displayedItems.map((item) => item.id)) : new Set())
+      setSelectedIds(next ? new Set(items.map((item) => item.id)) : new Set())
     },
-    [displayedItems]
+    [items]
   )
 
   const handleBulkReindex = useCallback(async () => {
@@ -120,7 +114,7 @@ const DataSourcePanel = ({
     try {
       await Promise.all(targets.map((item) => onReindex(item)))
     } catch (error) {
-      window.toast?.error?.(formatErrorMessageWithPrefix(error, t('knowledge.data_source.reindex_failed')))
+      window.toast.error(formatErrorMessageWithPrefix(error, t('knowledge.data_source.reindex_failed')))
       return
     }
     setSelectedIds(new Set())
@@ -131,7 +125,7 @@ const DataSourcePanel = ({
     try {
       await Promise.all(targets.map((item) => onDelete(item)))
     } catch (error) {
-      window.toast?.error?.(formatErrorMessageWithPrefix(error, t('knowledge.data_source.delete_failed')))
+      window.toast.error(formatErrorMessageWithPrefix(error, t('knowledge.data_source.delete_failed')))
       return
     }
     setSelectedIds(new Set())
@@ -146,7 +140,7 @@ const DataSourcePanel = ({
     try {
       await onDelete(pendingDeleteItem)
     } catch (error) {
-      window.toast?.error?.(formatErrorMessageWithPrefix(error, t('knowledge.data_source.delete_failed')))
+      window.toast.error(formatErrorMessageWithPrefix(error, t('knowledge.data_source.delete_failed')))
       return
     }
 
@@ -161,8 +155,8 @@ const DataSourcePanel = ({
       header={
         <div className="border-border-muted border-b pb-3">
           <DataSourcePanelHeader
-            readyCount={readyCount}
-            totalCount={displayedItems.length}
+            total={total}
+            loadedCount={items.length}
             selectedCount={selectedIds.size}
             updatedAt={updatedAt}
             onBulkReindex={handleBulkReindex}
@@ -172,12 +166,15 @@ const DataSourcePanel = ({
         </div>
       }>
       <div className="flex min-h-0 flex-1 flex-col">
-        {!isLoading && displayedItems.length === 0 && !searchQuery?.trim() ? (
+        {!isLoading && items.length === 0 ? (
           <DataSourceEmptyState onAddSource={handleAddSource} />
         ) : (
           <KnowledgeItemList
-            items={displayedItems}
+            items={items}
             isLoading={isLoading}
+            hasMore={hasMore}
+            isLoadingMore={isLoadingMore}
+            onLoadMore={onLoadMore}
             selectedIds={selectedIds}
             onToggleOne={handleToggleOne}
             onToggleAll={handleToggleAll}

@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => ({
   }
 }))
 
-vi.mock('@renderer/components/composer/panelEngine', () => ({
+vi.mock('@renderer/components/QuickPanel', () => ({
   useQuickPanel: () => mocks.quickPanel
 }))
 

@@ -36,7 +36,7 @@ type LegacyPaintingsNamespace =
   | 'ppio_draw'
   | 'ppio_edit'
 
-export type LegacyPaintingsState = Record<LegacyPaintingsNamespace, PaintingData[]>
+type LegacyPaintingsState = Record<LegacyPaintingsNamespace, PaintingData[]>
 
 const initialState: LegacyPaintingsState = {
   // SiliconFlow
@@ -65,12 +65,6 @@ const paintingsSlice = createSlice({
   name: 'paintings',
   initialState,
   reducers: {
-    hydratePaintingsState: (_state, action: PayloadAction<Partial<LegacyPaintingsState>>) => {
-      return {
-        ...initialState,
-        ...action.payload
-      }
-    },
     addPainting: (
       state: LegacyPaintingsState,
       action: PayloadAction<{ namespace?: LegacyPaintingsNamespace; painting: PaintingData }>
@@ -112,7 +106,6 @@ const paintingsSlice = createSlice({
   }
 })
 
-export const { hydratePaintingsState, updatePaintings, addPainting, removePainting, updatePainting } =
-  paintingsSlice.actions
+export const { updatePaintings, addPainting, removePainting, updatePainting } = paintingsSlice.actions
 
 export default paintingsSlice.reducer

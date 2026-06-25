@@ -21,22 +21,16 @@ const McpDescription: FC<McpDescriptionProps> = ({ searchKey }) => {
   useEffect(() => {
     let isMounted = true
     setLoading(true)
-    void (async () => {
-      try {
-        const packages = await npxFinder(searchKey)
+    void npxFinder(searchKey)
+      .then((packages) => {
         const readme = packages[0]?.original?.readme ?? t('settings.mcp.noDescriptionAvailable')
-        const result = await shikiMarkdownIt(readme)
-        if (isMounted) {
-          setMcpInfo(DOMPurify.sanitize(result))
-        }
-      } catch {
-        if (isMounted) {
-          setMcpInfo(DOMPurify.sanitize(t('settings.mcp.noDescriptionAvailable')))
-        }
-      } finally {
+        void shikiMarkdownIt(readme).then((result) => {
+          if (isMounted) setMcpInfo(DOMPurify.sanitize(result))
+        })
+      })
+      .finally(() => {
         if (isMounted) setLoading(false)
-      }
-    })()
+      })
     return () => {
       isMounted = false
     }

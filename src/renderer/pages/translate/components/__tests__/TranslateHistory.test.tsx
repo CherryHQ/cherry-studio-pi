@@ -18,16 +18,6 @@ const translateHistoryMock = vi.hoisted(() => ({
 
 const writeTextMock = vi.hoisted(() => vi.fn())
 
-function deferred<T = void>() {
-  let resolve!: (value: T | PromiseLike<T>) => void
-  let reject!: (reason?: unknown) => void
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise
-    reject = rejectPromise
-  })
-  return { promise, resolve, reject }
-}
-
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en-us' } })
 }))
@@ -232,26 +222,6 @@ describe('TranslateHistory', () => {
     expect((window as any).toast.success).toHaveBeenCalledWith('translate.copied')
   })
 
-  it('ignores copy success toast after unmount', async () => {
-    const copyOperation = deferred<void>()
-    writeTextMock.mockReturnValueOnce(copyOperation.promise)
-    const { unmount } = render(<TranslateHistory isOpen onHistoryItemClick={vi.fn()} onClose={vi.fn()} />)
-
-    fireEvent.click(screen.getByText('hello'))
-    fireEvent.click(screen.getByRole('button', { name: 'translate.history.copy_target' }))
-
-    await waitFor(() => expect(writeTextMock).toHaveBeenCalledWith('你好'))
-    unmount()
-
-    await act(async () => {
-      copyOperation.resolve()
-      await copyOperation.promise
-    })
-
-    expect((window as any).toast.success).not.toHaveBeenCalled()
-    expect((window as any).toast.error).not.toHaveBeenCalled()
-  })
-
   it('shows copy failure toast when clipboard write rejects', async () => {
     writeTextMock.mockRejectedValueOnce(new Error('clipboard denied'))
     render(<TranslateHistory isOpen onHistoryItemClick={vi.fn()} onClose={vi.fn()} />)
@@ -259,28 +229,7 @@ describe('TranslateHistory', () => {
     fireEvent.click(screen.getByText('hello'))
     fireEvent.click(screen.getByRole('button', { name: 'translate.history.copy_target' }))
 
-    await waitFor(() =>
-      expect((window as any).toast.error).toHaveBeenCalledWith('common.copy_failed: clipboard denied')
-    )
-  })
-
-  it('ignores copy failure toast after unmount', async () => {
-    const copyOperation = deferred<void>()
-    writeTextMock.mockReturnValueOnce(copyOperation.promise)
-    const { unmount } = render(<TranslateHistory isOpen onHistoryItemClick={vi.fn()} onClose={vi.fn()} />)
-
-    fireEvent.click(screen.getByText('hello'))
-    fireEvent.click(screen.getByRole('button', { name: 'translate.history.copy_target' }))
-
-    await waitFor(() => expect(writeTextMock).toHaveBeenCalledWith('你好'))
-    unmount()
-
-    await act(async () => {
-      copyOperation.reject(new Error('clipboard denied after unmount'))
-      await copyOperation.promise.catch(() => undefined)
-    })
-
-    expect((window as any).toast.error).not.toHaveBeenCalled()
+    await waitFor(() => expect((window as any).toast.error).toHaveBeenCalledWith('common.copy_failed'))
   })
 
   it('invokes delete mutation from detail confirm dialog flow', async () => {

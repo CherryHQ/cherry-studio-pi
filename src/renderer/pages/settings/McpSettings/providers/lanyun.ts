@@ -1,10 +1,7 @@
 import { loggerService } from '@logger'
 import { getProviderLabelKey } from '@renderer/i18n/label'
-import type { McpServer } from '@renderer/types'
+import type { McpServer } from '@shared/data/types/mcpServer'
 import i18next from 'i18next'
-
-import { fetchWithProviderTimeout, getProviderSyncErrorDetails, getProviderSyncErrorMessage } from './request'
-import { clearMcpProviderToken, getMcpProviderToken, saveMcpProviderToken } from './tokenStorage'
 
 const logger = loggerService.withContext('TokenLanYunSyncUtils')
 
@@ -15,15 +12,15 @@ export const LANYUN_MCP_HOST = TOKENLANYUN_HOST + '/mcp/manager/selectListByApiK
 export const LANYUN_KEY_HOST = TOKENLANYUN_HOST + '/#/manage/apiKey'
 
 export const saveTokenLanYunToken = (token: string): void => {
-  saveMcpProviderToken(TOKEN_STORAGE_KEY, token)
+  localStorage.setItem(TOKEN_STORAGE_KEY, token)
 }
 
 export const getTokenLanYunToken = (): string | null => {
-  return getMcpProviderToken(TOKEN_STORAGE_KEY)
+  return localStorage.getItem(TOKEN_STORAGE_KEY)
 }
 
 export const clearTokenLanYunToken = (): void => {
-  clearMcpProviderToken(TOKEN_STORAGE_KEY)
+  localStorage.removeItem(TOKEN_STORAGE_KEY)
 }
 
 export const hasTokenLanYunToken = (): boolean => {
@@ -67,7 +64,7 @@ export const syncTokenLanYunServers = async (token: string): Promise<TokenLanYun
   const t = i18next.t
 
   try {
-    const response = await fetchWithProviderTimeout(LANYUN_MCP_HOST, {
+    const response = await fetch(LANYUN_MCP_HOST, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -126,6 +123,7 @@ export const syncTokenLanYunServers = async (token: string): Promise<TokenLanYun
 
     // Transform Token servers to MCP servers format
     const allServers: McpServer[] = []
+    logger.debug('TokenLanYun servers:', servers)
 
     for (const server of servers) {
       try {
@@ -162,9 +160,9 @@ export const syncTokenLanYunServers = async (token: string): Promise<TokenLanYun
     logger.error('TokenLanyun sync error:', error as Error)
     return {
       success: false,
-      message: getProviderSyncErrorMessage(t, error),
+      message: t('settings.mcp.sync.error'),
       allServers: [],
-      errorDetails: getProviderSyncErrorDetails(error)
+      errorDetails: String(error)
     }
   }
 }

@@ -301,9 +301,9 @@ export function OpenClawIcon(props: SVGProps<SVGSVGElement>) {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
       {...props}>
       <path d="M14.4 5.2a5.3 5.3 0 0 1 2.022-2.548L16.8 2.4" />
       <path d="M14.56 8.933v1" />

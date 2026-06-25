@@ -130,10 +130,6 @@ export function useDirectoryTree(rootPath: string | undefined, options?: Directo
     let unsubscribeMutations: (() => void) | null = null
     let createdTreeId: string | null = null
 
-    mirrorRef.current = null
-    setRoot(null)
-    setTreeId(null)
-    setVersion(0)
     setIsLoading(true)
     setError(null)
 

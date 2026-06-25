@@ -4,7 +4,7 @@ import type {
   QuickPanelListItem,
   QuickPanelOpenOptions,
   QuickPanelTriggerInfo
-} from '@renderer/components/composer/panelEngine'
+} from '@renderer/components/QuickPanel'
 
 import type { ComposerToolLauncher } from '../toolLauncher'
 import { ComposerPanelSymbol } from './symbols'

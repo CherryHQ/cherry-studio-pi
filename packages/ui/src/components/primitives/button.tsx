@@ -55,7 +55,6 @@ function Button({
   loadingIconClassName,
   disabled,
   children,
-  type,
   ...props
 }: React.ComponentProps<'button'> &
   VariantProps<typeof buttonVariants> & {
@@ -89,7 +88,6 @@ function Button({
       disabled={disabled || loading}
       aria-busy={loading || undefined}
       data-busy={loading || undefined}
-      type={asChild ? type : (type ?? 'button')}
       {...props}>
       {/* asChild mode does not support loading because Slot requires a single child element */}
       {asChild ? (

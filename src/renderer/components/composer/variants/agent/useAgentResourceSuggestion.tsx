@@ -1,7 +1,6 @@
-import { FILE_TYPE } from '@renderer/types'
-import { getFileName } from '@renderer/utils/file'
-import type { ComposerAttachment } from '@renderer/utils/messageUtils/composerAttachment'
-import { createComposerFileTokenSourceId } from '@renderer/utils/messageUtils/composerFileTokenSource'
+import { FILE_TYPE } from '@renderer/types/file'
+import type { ComposerAttachment } from '@renderer/utils/message/composerAttachment'
+import { createComposerFileTokenSourceId } from '@renderer/utils/message/composerFileTokenSource'
 import { getFileTypeByExt } from '@shared/utils/file/fileType'
 import { Folder } from 'lucide-react'
 import { useMemo, useRef } from 'react'
@@ -11,13 +10,18 @@ import { serializeComposerDocument } from '../../composerDraft'
 import type { ComposerSuggestionSource } from '../../quickPanel'
 import { agentComposerTokenId, agentFileToComposerToken } from '../agentComposerTokens'
 
+const getBaseName = (filePath: string) => {
+  const normalized = filePath.replace(/\\/g, '/')
+  return normalized.split('/').pop() || normalized
+}
+
 const getFileExtension = (fileName: string) => {
   const lastDotIndex = fileName.lastIndexOf('.')
   return lastDotIndex > 0 ? fileName.slice(lastDotIndex) : ''
 }
 
 const createAttachmentFromPath = (filePath: string): ComposerAttachment => {
-  const name = getFileName(filePath) || filePath
+  const name = getBaseName(filePath)
   const ext = getFileExtension(name)
   return {
     fileTokenSourceId: createComposerFileTokenSourceId(),

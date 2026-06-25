@@ -17,9 +17,10 @@
 import type { PayloadAction } from '@reduxjs/toolkit'
 import { createSlice } from '@reduxjs/toolkit'
 import { SYSTEM_MODELS } from '@renderer/config/models'
-import { INITIAL_STATE_EXCLUDED_PROVIDER_IDS, SYSTEM_PROVIDERS_CONFIG } from '@renderer/config/providers'
-import type { AwsBedrockAuthType, Model, Provider } from '@renderer/types'
-import { omit, uniqBy } from 'lodash'
+import { SYSTEM_PROVIDERS } from '@renderer/config/providers'
+import type { Model } from '@renderer/types/model'
+import type { AwsBedrockAuthType, Provider } from '@renderer/types/provider'
+import { uniqBy } from 'lodash'
 
 type LlmSettings = {
   ollama: {
@@ -69,7 +70,7 @@ export const initialState: LlmState = {
   quickModel: SYSTEM_MODELS.defaultModel[1],
   translateModel: SYSTEM_MODELS.defaultModel[2],
   quickAssistantId: '',
-  providers: Object.values(omit(SYSTEM_PROVIDERS_CONFIG, INITIAL_STATE_EXCLUDED_PROVIDER_IDS)),
+  providers: SYSTEM_PROVIDERS,
   settings: {
     ollama: {
       keepAliveTime: 0
@@ -117,45 +118,6 @@ const llmSlice = createSlice({
   name: 'llm',
   initialState: initialState,
   reducers: {
-    hydrateLlmState: (_state, action: PayloadAction<Partial<LlmState>>) => {
-      const nextSettings = action.payload.settings
-      return {
-        ...initialState,
-        ...action.payload,
-        settings: {
-          ...initialState.settings,
-          ...nextSettings,
-          ollama: {
-            ...initialState.settings.ollama,
-            ...nextSettings?.ollama
-          },
-          lmstudio: {
-            ...initialState.settings.lmstudio,
-            ...nextSettings?.lmstudio
-          },
-          gpustack: {
-            ...initialState.settings.gpustack,
-            ...nextSettings?.gpustack
-          },
-          vertexai: {
-            ...initialState.settings.vertexai,
-            ...nextSettings?.vertexai,
-            serviceAccount: {
-              ...initialState.settings.vertexai.serviceAccount,
-              ...nextSettings?.vertexai?.serviceAccount
-            }
-          },
-          awsBedrock: {
-            ...initialState.settings.awsBedrock,
-            ...nextSettings?.awsBedrock
-          },
-          cherryIn: {
-            ...initialState.settings.cherryIn,
-            ...nextSettings?.cherryIn
-          }
-        }
-      }
-    },
     updateProvider: (state, action: PayloadAction<Partial<Provider> & { id: string }>) => {
       const index = state.providers.findIndex((p) => p.id === action.payload.id)
       if (index !== -1) {
@@ -281,7 +243,6 @@ const llmSlice = createSlice({
 })
 
 export const {
-  hydrateLlmState,
   updateProvider,
   updateProviders,
   addProvider,

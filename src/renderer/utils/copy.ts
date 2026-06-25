@@ -1,27 +1,23 @@
-import type { Message, Topic } from '@renderer/types'
+import type { ExportableMessage } from '@renderer/types/messageExport'
+import type { Topic } from '@renderer/types/topic'
 import i18next from 'i18next'
 
-import { formatErrorMessageWithPrefix } from './error'
 import { messageToPlainText, topicToMarkdown, topicToPlainText } from './export'
 
-const copyTextWithFeedback = async (getText: () => Promise<string> | string) => {
-  try {
-    const text = await getText()
-    await navigator.clipboard.writeText(text)
-    window.toast?.success(i18next.t('message.copy.success'))
-  } catch (error) {
-    window.toast?.error(formatErrorMessageWithPrefix(error, i18next.t('common.copy_failed')))
-  }
-}
-
 export const copyTopicAsMarkdown = async (topic: Topic) => {
-  await copyTextWithFeedback(() => topicToMarkdown(topic))
+  const markdown = await topicToMarkdown(topic)
+  await navigator.clipboard.writeText(markdown)
+  window.toast.success(i18next.t('message.copy.success'))
 }
 
 export const copyTopicAsPlainText = async (topic: Topic) => {
-  await copyTextWithFeedback(() => topicToPlainText(topic))
+  const plainText = await topicToPlainText(topic)
+  await navigator.clipboard.writeText(plainText)
+  window.toast.success(i18next.t('message.copy.success'))
 }
 
-export const copyMessageAsPlainText = async (message: Message) => {
-  await copyTextWithFeedback(() => messageToPlainText(message))
+export const copyMessageAsPlainText = async (message: ExportableMessage) => {
+  const plainText = messageToPlainText(message)
+  await navigator.clipboard.writeText(plainText)
+  window.toast.success(i18next.t('message.copy.success'))
 }

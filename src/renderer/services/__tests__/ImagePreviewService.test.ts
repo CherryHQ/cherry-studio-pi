@@ -42,7 +42,6 @@ describe('ImagePreviewService', () => {
 
   afterEach(() => {
     vi.clearAllMocks()
-    ;(ImagePreviewService as any).currentObjectUrl = undefined
   })
 
   describe('show', () => {
@@ -88,45 +87,6 @@ describe('ImagePreviewService', () => {
 
       expect(mocks.createObjectURL).toHaveBeenCalledWith(mockBlob)
       expect(mocks.TopView.show).toHaveBeenCalled()
-    })
-
-    it('should revoke created blob URLs when preview closes', async () => {
-      const mockBlob = new Blob(['mock'], { type: 'image/png' })
-
-      await ImagePreviewService.show(mockBlob)
-
-      const previewFactory = mocks.TopView.show.mock.calls[0][0] as () => any
-      const element = previewFactory()
-      element.props.preview.onVisibleChange(false)
-
-      expect(mocks.revokeObjectURL).toHaveBeenCalledWith('blob:mock-url')
-      expect(mocks.TopView.hide).toHaveBeenCalledWith('image-preview')
-    })
-
-    it('should replace an existing preview and revoke the previous blob URL', async () => {
-      const firstBlob = new Blob(['first'], { type: 'image/png' })
-      const secondBlob = new Blob(['second'], { type: 'image/png' })
-      mocks.createObjectURL.mockReturnValueOnce('blob:first').mockReturnValueOnce('blob:second')
-
-      await ImagePreviewService.show(firstBlob)
-      await ImagePreviewService.show(secondBlob)
-
-      expect(mocks.revokeObjectURL).toHaveBeenCalledWith('blob:first')
-      expect(mocks.revokeObjectURL).not.toHaveBeenCalledWith('blob:second')
-      expect(mocks.TopView.hide).toHaveBeenCalledWith('image-preview')
-      expect(mocks.TopView.show).toHaveBeenCalledTimes(2)
-    })
-
-    it('should revoke created blob URLs when preview setup fails', async () => {
-      const mockBlob = new Blob(['mock'], { type: 'image/png' })
-      const error = new Error('preview failed')
-      mocks.TopView.show.mockImplementationOnce(() => {
-        throw error
-      })
-
-      await expect(ImagePreviewService.show(mockBlob)).rejects.toThrow(error)
-
-      expect(mocks.revokeObjectURL).toHaveBeenCalledWith('blob:mock-url')
     })
 
     it('should handle HTMLImageElement input', async () => {

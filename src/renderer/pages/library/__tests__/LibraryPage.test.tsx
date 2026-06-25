@@ -94,8 +94,7 @@ vi.mock('@renderer/context/TabsContext', () => ({
 }))
 
 vi.mock('@tanstack/react-router', () => ({
-  useNavigate: () => navigateMock,
-  useSearch: () => ({})
+  useNavigate: () => navigateMock
 }))
 
 vi.mock('../list/useAssistantPresetCatalog', () => ({

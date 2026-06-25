@@ -489,7 +489,7 @@ export function CommandContextMenu({
             return
           }
 
-          return window.api.command.showNativePopupMenu(nativeModel, anchor).then((result) => {
+          return window.api.command.showNativePopupMenu(nativeModel as never, anchor).then((result) => {
             if (extraItemsRequestIdRef.current !== requestId) {
               return
             }
@@ -736,8 +736,9 @@ export function CommandPopupMenu({
       const nativeItems = combinedItems.map(toNativePopupMenuItem)
       if (!nativeItems.length) return
       const model: NativePopupMenuModel<CommandId> = { location, items: nativeItems }
+      onOpenChange?.(true)
       try {
-        const result = await window.api.command.showNativePopupMenu(model, anchor)
+        const result = await window.api.command.showNativePopupMenu(model as never, anchor)
         if (result?.type === 'command') {
           runtime.execute(result.command)
         } else if (result?.type === 'custom') {
@@ -745,9 +746,11 @@ export function CommandPopupMenu({
         }
       } catch (error) {
         logger.error('Failed to show native command popup menu', error as Error)
+      } finally {
+        onOpenChange?.(false)
       }
     },
-    [combinedItems, decoratedExtraItems, location, mode, runtime]
+    [combinedItems, decoratedExtraItems, location, mode, runtime, onOpenChange]
   )
 
   const handleCherryOpenChange = useCallback(
@@ -778,7 +781,6 @@ export function CommandPopupMenu({
     // span would be blocked by the child's stopPropagation.
     if (React.isValidElement(children)) {
       const childProps = (children.props ?? {}) as { onClick?: (event: React.MouseEvent) => void }
-      // eslint-disable-next-line @eslint-react/no-clone-element -- Native mode must attach to the trigger itself so child stopPropagation handlers still work.
       return React.cloneElement(children as React.ReactElement<{ onClick?: (event: React.MouseEvent) => void }>, {
         onClick: (event: React.MouseEvent) => {
           childProps.onClick?.(event)

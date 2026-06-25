@@ -2,12 +2,10 @@ import { usePreference } from '@data/hooks/usePreference'
 import { loggerService } from '@logger'
 import { useOptionalTabsContext } from '@renderer/context/TabsContext'
 import { useMiniApps } from '@renderer/hooks/useMiniApps'
-import i18n from '@renderer/i18n'
-import { formatErrorMessage } from '@renderer/utils/error'
-import { fileUrlToPath } from '@renderer/utils/fileUrl'
 import { clearWebviewState } from '@renderer/utils/webviewStateManager'
 import { DataApiErrorFactory } from '@shared/data/api'
 import type { MiniApp, MiniAppId } from '@shared/data/types/miniApp'
+import { fileUrlToPath } from '@shared/utils/file/urlUtil'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 
 const logger = loggerService.withContext('useMiniAppPopup')
@@ -88,29 +86,18 @@ function miniAppIdFromTabUrl(url: string): string | null {
   return id ? id : null
 }
 
-function showExternalOpenError(error: unknown) {
-  logger.error('Failed to open miniapp externally', error as Error)
-  window.toast?.error?.({ title: i18n.t('common.error'), description: formatErrorMessage(error) })
-}
-
-async function openExternalMiniAppUrl(url: string): Promise<void> {
-  let parsed: URL | null = null
+function openExternalMiniAppUrl(url: string) {
   try {
-    parsed = new URL(url)
+    const parsed = new URL(url)
+    if (parsed.protocol === 'file:') {
+      void window.api.openPath(fileUrlToPath(parsed))
+      return
+    }
   } catch {
     // Fall through to openWebsite so the existing main-process URL guard handles it.
   }
 
-  try {
-    if (parsed?.protocol === 'file:') {
-      await window.api.openPath(fileUrlToPath(parsed))
-      return
-    }
-
-    await window.api.openWebsite(url)
-  } catch (error) {
-    showExternalOpenError(error)
-  }
+  void window.api.openWebsite(url)
 }
 
 /**
@@ -154,7 +141,7 @@ export const useMiniAppPopup = () => {
   // Detached settings windows can open mini-app content without AppShell tabs;
   // in that case skip eviction because pin state is not observable there.
   const tabsContext = useOptionalTabsContext()
-  const tabs = useMemo(() => tabsContext?.tabs ?? [], [tabsContext?.tabs])
+  const tabs = tabsContext?.tabs ?? []
   const openTab = tabsContext?.openTab
   const pinnedMiniAppIds = useMemo(() => {
     if (!tabsContext) return null
@@ -289,7 +276,7 @@ export const useMiniAppPopup = () => {
   const openSmartMiniApp = useCallback(
     (config: MiniAppInput) => {
       if (!openTab) {
-        void openExternalMiniAppUrl(config.url)
+        openExternalMiniAppUrl(config.url)
         return
       }
 

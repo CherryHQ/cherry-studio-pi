@@ -1,10 +1,8 @@
 import { loggerService } from '@logger'
-import { getMcpServerType, type McpServer } from '@renderer/types'
+import { getMcpServerType } from '@renderer/types/mcp'
+import type { McpServer } from '@shared/data/types/mcpServer'
 import i18next from 'i18next'
 import { nanoid } from 'nanoid'
-
-import { fetchWithProviderTimeout, getProviderSyncErrorDetails, getProviderSyncErrorMessage } from './request'
-import { clearMcpProviderToken, getMcpProviderToken, saveMcpProviderToken } from './tokenStorage'
 
 const logger = loggerService.withContext('ModelScopeSyncUtils')
 
@@ -13,15 +11,15 @@ const TOKEN_STORAGE_KEY = 'modelscope_token'
 export const MODELSCOPE_HOST = 'https://www.modelscope.cn'
 
 export const saveModelScopeToken = (token: string): void => {
-  saveMcpProviderToken(TOKEN_STORAGE_KEY, token)
+  localStorage.setItem(TOKEN_STORAGE_KEY, token)
 }
 
 export const getModelScopeToken = (): string | null => {
-  return getMcpProviderToken(TOKEN_STORAGE_KEY)
+  return localStorage.getItem(TOKEN_STORAGE_KEY)
 }
 
 export const clearModelScopeToken = (): void => {
-  clearMcpProviderToken(TOKEN_STORAGE_KEY)
+  localStorage.removeItem(TOKEN_STORAGE_KEY)
 }
 
 export const hasModelScopeToken = (): boolean => {
@@ -50,7 +48,7 @@ export const syncModelScopeServers = async (token: string): Promise<ModelScopeSy
   const t = i18next.t
 
   try {
-    const response = await fetchWithProviderTimeout(`${MODELSCOPE_HOST}/api/v1/mcp/services/operational`, {
+    const response = await fetch(`${MODELSCOPE_HOST}/api/v1/mcp/services/operational`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -92,6 +90,7 @@ export const syncModelScopeServers = async (token: string): Promise<ModelScopeSy
 
     // Transform ModelScope servers to MCP servers format
     const allServers: McpServer[] = []
+    logger.debug('ModelScope servers:', servers)
     for (const server of servers) {
       try {
         if (!server.operational_urls?.[0]?.url) continue
@@ -127,9 +126,9 @@ export const syncModelScopeServers = async (token: string): Promise<ModelScopeSy
     logger.error('ModelScope sync error:', error as Error)
     return {
       success: false,
-      message: getProviderSyncErrorMessage(t, error),
+      message: t('settings.mcp.sync.error'),
       allServers: [],
-      errorDetails: getProviderSyncErrorDetails(error)
+      errorDetails: String(error)
     }
   }
 }

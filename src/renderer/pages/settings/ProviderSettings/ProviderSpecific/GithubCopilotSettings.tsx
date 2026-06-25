@@ -1,8 +1,7 @@
 import { Button, Input, Slider, Tooltip } from '@cherrystudio/ui'
 import { loggerService } from '@logger'
 import { useProvider } from '@renderer/hooks/useProvider'
-import { cn } from '@renderer/utils'
-import { openHttpExternalUrl } from '@renderer/utils/openExternal'
+import { cn } from '@renderer/utils/style'
 import { CheckCircle2, CircleAlert, Copy } from 'lucide-react'
 import type { FC } from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -39,34 +38,7 @@ const GithubCopilotSettings: FC<GithubCopilotSettingsProps> = ({ providerId }) =
 
   const providerRateLimit = provider?.settings?.rateLimit ?? 10
   const rateLimitRef = useRef(providerRateLimit)
-  const mountedRef = useRef(true)
-  const authOperationInFlightRef = useRef(false)
   const [rateLimit, setRateLimit] = useState(providerRateLimit)
-
-  useEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
-      authOperationInFlightRef.current = false
-    }
-  }, [])
-
-  const beginAuthOperation = useCallback(() => {
-    if (authOperationInFlightRef.current) {
-      return false
-    }
-
-    authOperationInFlightRef.current = true
-    setLoading(true)
-    return true
-  }, [])
-
-  const finishAuthOperation = useCallback(() => {
-    authOperationInFlightRef.current = false
-    if (mountedRef.current) {
-      setLoading(false)
-    }
-  }, [])
 
   useEffect(() => {
     if (provider?.settings?.isAuthed) {
@@ -88,17 +60,10 @@ const GithubCopilotSettings: FC<GithubCopilotSettingsProps> = ({ providerId }) =
   }, [providerRateLimit])
 
   const handleGetDeviceCode = useCallback(async () => {
-    if (!beginAuthOperation()) {
-      return
-    }
-
     try {
+      setLoading(true)
       setCurrentStep(1)
       const { device_code, user_code, verification_uri } = await window.api.copilot.getAuthMessage(defaultHeaders)
-      if (!mountedRef.current) {
-        return
-      }
-
       logger.debug('device_code', device_code)
       logger.debug('user_code', user_code)
       logger.debug('verification_uri', verification_uri)
@@ -109,27 +74,22 @@ const GithubCopilotSettings: FC<GithubCopilotSettingsProps> = ({ providerId }) =
 
       try {
         await navigator.clipboard.writeText(user_code)
-        window.toast?.success(t('settings.provider.copilot.code_copied'))
+        window.toast.success(t('settings.provider.copilot.code_copied'))
       } catch (error) {
         logger.error('Failed to copy to clipboard:', error as Error)
       }
     } catch (error) {
       logger.error('Failed to get device code:', error as Error)
-      if (mountedRef.current) {
-        window.toast?.error(t('settings.provider.copilot.code_failed'))
-        setCurrentStep(0)
-      }
+      window.toast.error(t('settings.provider.copilot.code_failed'))
+      setCurrentStep(0)
     } finally {
-      finishAuthOperation()
+      setLoading(false)
     }
-  }, [beginAuthOperation, defaultHeaders, finishAuthOperation, t])
+  }, [t, defaultHeaders])
 
   const handleGetToken = useCallback(async () => {
-    if (!beginAuthOperation()) {
-      return
-    }
-
     try {
+      setLoading(true)
       setCurrentStep(3)
       const { access_token } = await window.api.copilot.getCopilotToken(deviceCode, defaultHeaders)
 
@@ -138,6 +98,7 @@ const GithubCopilotSettings: FC<GithubCopilotSettingsProps> = ({ providerId }) =
 
       if (token) {
         const { login, avatar: userAvatar } = await window.api.copilot.getUser(access_token)
+        setAuthStatus(AuthStatus.AUTHENTICATED)
 
         await addApiKey(token, 'Copilot')
         await updateProvider({
@@ -150,37 +111,21 @@ const GithubCopilotSettings: FC<GithubCopilotSettingsProps> = ({ providerId }) =
           }
         })
 
-        if (mountedRef.current) {
-          setAuthStatus(AuthStatus.AUTHENTICATED)
-          window.toast?.success(t('settings.provider.copilot.auth_success'))
-        }
+        window.toast.success(t('settings.provider.copilot.auth_success'))
       }
     } catch (error) {
       logger.error('Failed to get token:', error as Error)
-      if (mountedRef.current) {
-        window.toast?.error(t('settings.provider.copilot.auth_failed'))
-        setCurrentStep(2)
-      }
+      window.toast.error(t('settings.provider.copilot.auth_failed'))
+      setCurrentStep(2)
     } finally {
-      finishAuthOperation()
+      setLoading(false)
     }
-  }, [
-    addApiKey,
-    beginAuthOperation,
-    defaultHeaders,
-    deviceCode,
-    finishAuthOperation,
-    provider?.settings,
-    t,
-    updateProvider
-  ])
+  }, [deviceCode, t, provider?.settings, addApiKey, updateProvider, defaultHeaders])
 
   const handleLogout = useCallback(async () => {
-    if (!beginAuthOperation()) {
-      return
-    }
-
     try {
+      setLoading(true)
+
       const copilotKey = provider?.apiKeys.find((k) => k.label === 'Copilot')
       if (copilotKey) {
         await deleteApiKey(copilotKey.id)
@@ -198,46 +143,39 @@ const GithubCopilotSettings: FC<GithubCopilotSettingsProps> = ({ providerId }) =
 
       await window.api.copilot.logout()
 
-      if (mountedRef.current) {
-        setAuthStatus(AuthStatus.NOT_STARTED)
-        setDeviceCode('')
-        setUserCode('')
-        setVerificationUri('')
-        setVerificationPageOpened(false)
-        setCurrentStep(0)
+      setAuthStatus(AuthStatus.NOT_STARTED)
+      setDeviceCode('')
+      setUserCode('')
+      setVerificationUri('')
+      setVerificationPageOpened(false)
+      setCurrentStep(0)
 
-        window.toast?.success(t('settings.provider.copilot.logout_success'))
-      }
+      window.toast.success(t('settings.provider.copilot.logout_success'))
     } catch (error) {
       logger.error('Failed to logout:', error as Error)
-      if (mountedRef.current) {
-        window.toast?.error(t('settings.provider.copilot.logout_failed'))
-      }
+      window.toast.error(t('settings.provider.copilot.logout_failed'))
     } finally {
-      finishAuthOperation()
+      setLoading(false)
     }
-  }, [beginAuthOperation, deleteApiKey, finishAuthOperation, provider?.apiKeys, provider?.settings, t, updateProvider])
+  }, [t, provider?.apiKeys, provider?.settings, deleteApiKey, updateProvider])
 
   const handleCopyUserCode = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(userCode)
-      window.toast?.success(t('common.copied'))
+      window.toast.success(t('common.copied'))
     } catch (error) {
       logger.error('Failed to copy to clipboard:', error as Error)
-      window.toast?.error(t('common.copy_failed'))
+      window.toast.error(t('common.copy_failed'))
     }
   }, [userCode, t])
 
   const handleOpenVerificationPage = useCallback(() => {
     if (verificationUri) {
-      if (openHttpExternalUrl(verificationUri)) {
-        setVerificationPageOpened(true)
-        setCurrentStep(2)
-      } else {
-        window.toast?.error(t('settings.provider.oauth.error'))
-      }
+      window.open(verificationUri, '_blank')
+      setVerificationPageOpened(true)
+      setCurrentStep(2)
     }
-  }, [t, verificationUri])
+  }, [verificationUri])
 
   const getSteps = () => [
     {
@@ -279,7 +217,7 @@ const GithubCopilotSettings: FC<GithubCopilotSettingsProps> = ({ providerId }) =
       await updateProvider({ providerSettings: { ...provider?.settings, rateLimit: value } })
     } catch (error) {
       logger.error('Failed to save Copilot rate limit', { providerId, error })
-      window.toast?.error(t('settings.provider.save_failed'))
+      window.toast.error(t('settings.provider.save_failed'))
       setRateLimit(providerRateLimit)
       rateLimitRef.current = providerRateLimit
     }

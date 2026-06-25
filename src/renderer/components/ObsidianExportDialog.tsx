@@ -22,8 +22,8 @@ import {
 import { usePreference } from '@data/hooks/usePreference'
 import { loggerService } from '@logger'
 import i18n from '@renderer/i18n'
-import type { Topic } from '@renderer/types'
-import type { Message } from '@renderer/types/newMessage'
+import type { ExportableMessage } from '@renderer/types/messageExport'
+import type { Topic } from '@renderer/types/topic'
 import {
   exportMarkdownToObsidian,
   messagesToMarkdown,
@@ -32,7 +32,8 @@ import {
   topicToMarkdown
 } from '@renderer/utils/export'
 import { XIcon } from 'lucide-react'
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useState } from 'react'
+
 const logger = loggerService.withContext('ObsidianExportDialog')
 
 interface FileInfo {
@@ -53,8 +54,8 @@ interface PopupContainerProps {
   processingMethod: (typeof ObsidianProcessingMethod)[keyof typeof ObsidianProcessingMethod]
   open: boolean
   resolve: (success: boolean) => void
-  message?: Message
-  messages?: Message[]
+  message?: ExportableMessage
+  messages?: ExportableMessage[]
   topic?: Topic
   rawContent?: string
 }
@@ -174,12 +175,12 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
   topic,
   rawContent
 }) => {
-  const [defaultObsidianVault] = usePreference('data.integration.obsidian.default_vault')
+  const [defaultObsidianVault, setDefaultObsidianVault] = usePreference('data.integration.obsidian.default_vault')
   const [state, setState] = useState({
     title,
     tags: obsidianTags || '',
     createdAt: new Date().toISOString().split('T')[0],
-    source: 'Cherry Studio Pi',
+    source: 'Cherry Studio',
     processingMethod: processingMethod,
     folder: ''
   })
@@ -189,26 +190,8 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
   const [fileTreeData, setFileTreeData] = useState<TreeSelectOption[]>([])
   const [selectedVault, setSelectedVault] = useState<string>('')
   const [loading, setLoading] = useState<boolean>(false)
-  const [exporting, setExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [exportReasoning, setExportReasoning] = useState(false)
-  const vaultRequestSeqRef = useRef(0)
-  const filesRequestSeqRef = useRef(0)
-  const exportRequestSeqRef = useRef(0)
-  const mountedRef = useRef(true)
-  const exportingRef = useRef(false)
-
-  useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-      vaultRequestSeqRef.current += 1
-      filesRequestSeqRef.current += 1
-      exportRequestSeqRef.current += 1
-      exportingRef.current = false
-    }
-  }, [])
 
   useEffect(() => {
     if (files.length > 0) {
@@ -227,158 +210,87 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
   }, [files])
 
   useEffect(() => {
-    let isActive = true
-    const requestSeq = ++vaultRequestSeqRef.current
-
     const fetchVaults = async () => {
       try {
         setLoading(true)
         setError(null)
         const vaultsData = await window.api.obsidian.getVaults()
-        if (!isActive || requestSeq !== vaultRequestSeqRef.current) {
-          return
-        }
-
         if (vaultsData.length === 0) {
-          setVaults([])
-          setFiles([])
-          setSelectedVault('')
           setError(i18n.t('chat.topics.export.obsidian_no_vaults'))
+          setLoading(false)
           return
         }
-
         setVaults(vaultsData)
         const vaultToUse = defaultObsidianVault || vaultsData[0]?.name
         if (vaultToUse) {
           setSelectedVault(vaultToUse)
-        }
-      } catch (error) {
-        if (isActive && requestSeq === vaultRequestSeqRef.current) {
-          logger.error('获取Obsidian Vault失败:', error as Error)
-          setVaults([])
-          setFiles([])
-          setSelectedVault('')
-          setError(i18n.t('chat.topics.export.obsidian_fetch_error'))
-        }
-      } finally {
-        if (isActive && requestSeq === vaultRequestSeqRef.current) {
-          setLoading(false)
-        }
-      }
-    }
-    void fetchVaults()
-
-    return () => {
-      isActive = false
-      vaultRequestSeqRef.current += 1
-    }
-  }, [defaultObsidianVault])
-
-  useEffect(() => {
-    if (!selectedVault) {
-      setFiles([])
-      return
-    }
-
-    let isActive = true
-    const requestSeq = ++filesRequestSeqRef.current
-
-    const fetchFiles = async () => {
-      try {
-        setLoading(true)
-        setError(null)
-        const filesData = await window.api.obsidian.getFiles(selectedVault)
-        if (isActive && requestSeq === filesRequestSeqRef.current) {
+          const filesData = await window.api.obsidian.getFiles(vaultToUse)
           setFiles(filesData)
         }
       } catch (error) {
-        if (isActive && requestSeq === filesRequestSeqRef.current) {
-          logger.error('获取Obsidian文件失败:', error as Error)
-          setFiles([])
-          setError(i18n.t('chat.topics.export.obsidian_fetch_folders_error'))
-        }
+        logger.error('获取Obsidian Vault失败:', error as Error)
+        setError(i18n.t('chat.topics.export.obsidian_fetch_error'))
       } finally {
-        if (isActive && requestSeq === filesRequestSeqRef.current) {
+        setLoading(false)
+      }
+    }
+    void fetchVaults()
+  }, [defaultObsidianVault, setDefaultObsidianVault])
+
+  useEffect(() => {
+    if (selectedVault) {
+      const fetchFiles = async () => {
+        try {
+          setLoading(true)
+          setError(null)
+          const filesData = await window.api.obsidian.getFiles(selectedVault)
+          setFiles(filesData)
+        } catch (error) {
+          logger.error('获取Obsidian文件失败:', error as Error)
+          setError(i18n.t('chat.topics.export.obsidian_fetch_folders_error'))
+        } finally {
           setLoading(false)
         }
       }
-    }
-    void fetchFiles()
-
-    return () => {
-      isActive = false
-      filesRequestSeqRef.current += 1
+      void fetchFiles()
     }
   }, [selectedVault])
 
   const handleOk = async () => {
-    if (exportingRef.current) {
-      return
-    }
-
     if (!selectedVault) {
       setError(i18n.t('chat.topics.export.obsidian_no_vault_selected'))
       return
     }
-    exportingRef.current = true
-    const requestSeq = ++exportRequestSeqRef.current
-    setExporting(true)
-    let didResolve = false
-    try {
-      let markdown = ''
-      if (rawContent) {
-        markdown = rawContent
-      } else if (topic) {
-        markdown = await topicToMarkdown(topic, exportReasoning)
-      } else if (messages && messages.length > 0) {
-        markdown = await messagesToMarkdown(messages, exportReasoning)
-      } else if (message) {
-        markdown = exportReasoning ? await messageToMarkdownWithReasoning(message) : await messageToMarkdown(message)
-      } else {
-        markdown = ''
-      }
-      if (!mountedRef.current || requestSeq !== exportRequestSeqRef.current) {
-        return
-      }
-
-      let content = ''
-      if (state.processingMethod !== ObsidianProcessingMethod.NEW_OR_OVERWRITE) {
-        content = `\n---\n${markdown}`
-      } else {
-        content = `---\ntitle: ${state.title}\ncreated: ${state.createdAt}\nsource: ${state.source}\ntags: ${state.tags}\n---\n${markdown}`
-      }
-      if (content === '') {
-        if (mountedRef.current && requestSeq === exportRequestSeqRef.current) {
-          window.toast?.error(i18n.t('chat.topics.export.obsidian_export_failed'))
-        }
-        return
-      }
-      await navigator.clipboard.writeText(content)
-      if (!mountedRef.current || requestSeq !== exportRequestSeqRef.current) {
-        return
-      }
-
-      void exportMarkdownToObsidian({
-        ...state,
-        folder: state.folder,
-        vault: selectedVault
-      })
-      setOpen(false)
-      didResolve = true
-      resolve(true)
-    } catch (error) {
-      if (mountedRef.current && requestSeq === exportRequestSeqRef.current) {
-        logger.error('Failed to prepare Obsidian export:', error as Error)
-        window.toast?.error(i18n.t('chat.topics.export.obsidian_export_failed'))
-      }
-    } finally {
-      if (mountedRef.current && requestSeq === exportRequestSeqRef.current) {
-        exportingRef.current = false
-      }
-      if (!didResolve && mountedRef.current && requestSeq === exportRequestSeqRef.current) {
-        setExporting(false)
-      }
+    let markdown = ''
+    if (rawContent) {
+      markdown = rawContent
+    } else if (topic) {
+      markdown = await topicToMarkdown(topic, exportReasoning)
+    } else if (messages && messages.length > 0) {
+      markdown = await messagesToMarkdown(messages, exportReasoning)
+    } else if (message) {
+      markdown = exportReasoning ? await messageToMarkdownWithReasoning(message) : await messageToMarkdown(message)
+    } else {
+      markdown = ''
     }
+    let content = ''
+    if (state.processingMethod !== ObsidianProcessingMethod.NEW_OR_OVERWRITE) {
+      content = `\n---\n${markdown}`
+    } else {
+      content = `---\ntitle: ${state.title}\ncreated: ${state.createdAt}\nsource: ${state.source}\ntags: ${state.tags}\n---\n${markdown}`
+    }
+    if (content === '') {
+      window.toast.error(i18n.t('chat.topics.export.obsidian_export_failed'))
+      return
+    }
+    await navigator.clipboard.writeText(content)
+    void exportMarkdownToObsidian({
+      ...state,
+      folder: state.folder,
+      vault: selectedVault
+    })
+    setOpen(false)
+    resolve(true)
   }
 
   const [openState, setOpen] = useState(open)
@@ -387,10 +299,6 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
   }, [open])
 
   const handleCancel = () => {
-    if (exportingRef.current) {
-      return
-    }
-
     setOpen(false)
     resolve(false)
   }
@@ -428,7 +336,7 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
   }
 
   const handleOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen && !exportingRef.current) {
+    if (!nextOpen) {
       handleCancel()
     }
   }
@@ -581,10 +489,10 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
           )}
         </div>
         <DialogFooter>
-          <Button type="button" variant="outline" disabled={exporting} onClick={handleCancel}>
+          <Button type="button" variant="outline" onClick={handleCancel}>
             {i18n.t('common.cancel')}
           </Button>
-          <Button type="button" disabled={vaults.length === 0 || loading || exporting || !!error} onClick={handleOk}>
+          <Button type="button" disabled={vaults.length === 0 || loading || !!error} onClick={handleOk}>
             {i18n.t('chat.topics.export.obsidian_btn')}
           </Button>
         </DialogFooter>

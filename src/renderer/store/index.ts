@@ -15,7 +15,6 @@
  * --------------------------------------------------------------------------
  */
 import { combineReducers, configureStore } from '@reduxjs/toolkit'
-import { storageV2MirrorService } from '@renderer/services/StorageV2MirrorService'
 // [v2] Removed: IpcChannel only referenced by the ReduxStoreReady signal below, which is now commented out.
 // import { IpcChannel } from '@shared/IpcChannel'
 import { useDispatch, useSelector, useStore } from 'react-redux'
@@ -108,18 +107,11 @@ const store = configureStore({
   //     serializableCheck: { ignoredActions: [FLUSH, REHYDRATE, PAUSE, PERSIST, PURGE, REGISTER] }
   //   }),
   reducer: rootReducer,
-  middleware: (getDefaultMiddleware) => getDefaultMiddleware().concat(storageV2MirrorService.createMiddleware()),
   devTools: true
 })
 
 export type RootState = ReturnType<typeof rootReducer>
 export type AppDispatch = typeof store.dispatch
-
-export const persistor = {
-  flush: async () => {
-    await storageV2MirrorService.flushStrict()
-  }
-}
 
 // [v2] redux-persist removed — no persistor. The rehydration callback below initialised the
 // legacy `note.notesPath` slice, which v2 no longer reads (notesPath now lives in the
@@ -149,12 +141,12 @@ export const useAppDispatch = useDispatch.withTypes<AppDispatch>()
 export const useAppSelector = useSelector.withTypes<RootState>()
 export const useAppStore = useStore.withTypes<typeof store>()
 window.store = store
-storageV2MirrorService.scheduleStartupMirror(() => store.getState())
 
-// [v2] Keep the legacy save hook wired to Storage v2 so backup/sync callers
-// still force pending Redux mirrors to disk before packaging local data.
-export async function handleSaveData() {
-  await persistor.flush()
-}
+// [v2] Removed: Redux persistor flush is no longer needed after v2 data refactoring
+// export async function handleSaveData() {
+//   logger.info('Flushing redux persistor data')
+//   await persistor.flush()
+//   logger.info('Flushed redux persistor data')
+// }
 
 export default store

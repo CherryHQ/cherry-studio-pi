@@ -37,7 +37,6 @@ import {
   KNOWLEDGE_BASES_DEFAULT_PAGE,
   KNOWLEDGE_BASES_MAX_LIMIT,
   KNOWLEDGE_ITEMS_DEFAULT_LIMIT,
-  KNOWLEDGE_ITEMS_DEFAULT_PAGE,
   KNOWLEDGE_ITEMS_MAX_LIMIT
 } from '@shared/data/api/schemas/knowledges'
 
@@ -279,8 +278,7 @@ describe('knowledgeHandlers', () => {
     it('should apply default pagination when query is missing', async () => {
       listKnowledgeItemsMock.mockResolvedValueOnce({
         items: [],
-        total: 0,
-        page: KNOWLEDGE_ITEMS_DEFAULT_PAGE
+        total: 0
       })
 
       await knowledgeHandlers['/knowledge-bases/:id/items'].GET({
@@ -288,7 +286,6 @@ describe('knowledgeHandlers', () => {
       })
 
       expect(listKnowledgeItemsMock).toHaveBeenCalledWith('kb-1', {
-        page: KNOWLEDGE_ITEMS_DEFAULT_PAGE,
         limit: KNOWLEDGE_ITEMS_DEFAULT_LIMIT
       })
     })
@@ -297,13 +294,13 @@ describe('knowledgeHandlers', () => {
       listKnowledgeItemsMock.mockResolvedValueOnce({
         items: [],
         total: 0,
-        page: 2
+        nextCursor: 'cursor-2'
       })
 
       await knowledgeHandlers['/knowledge-bases/:id/items'].GET({
         params: { id: 'kb-1' },
         query: {
-          page: 2,
+          cursor: 'cursor-1',
           limit: 10,
           type: 'directory',
           groupId: ITEM_ID
@@ -311,7 +308,7 @@ describe('knowledgeHandlers', () => {
       } as never)
 
       expect(listKnowledgeItemsMock).toHaveBeenCalledWith('kb-1', {
-        page: 2,
+        cursor: 'cursor-1',
         limit: 10,
         type: 'directory',
         groupId: ITEM_ID
@@ -321,8 +318,7 @@ describe('knowledgeHandlers', () => {
     it('should pass null groupId root filters to knowledge item listing', async () => {
       listKnowledgeItemsMock.mockResolvedValueOnce({
         items: [],
-        total: 0,
-        page: 1
+        total: 0
       })
 
       await knowledgeHandlers['/knowledge-bases/:id/items'].GET({
@@ -333,18 +329,17 @@ describe('knowledgeHandlers', () => {
       } as never)
 
       expect(listKnowledgeItemsMock).toHaveBeenCalledWith('kb-1', {
-        page: KNOWLEDGE_ITEMS_DEFAULT_PAGE,
         limit: KNOWLEDGE_ITEMS_DEFAULT_LIMIT,
         groupId: null
       })
     })
 
-    it('should reject non-positive page values', async () => {
+    it('should reject non-string cursor values', async () => {
       await expect(
         knowledgeHandlers['/knowledge-bases/:id/items'].GET({
           params: { id: 'kb-1' },
           query: {
-            page: 0
+            cursor: 0
           } as never
         } as never)
       ).rejects.toHaveProperty('name', 'ZodError')

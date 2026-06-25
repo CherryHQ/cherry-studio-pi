@@ -35,12 +35,12 @@ export function presentPaintingGenerationGuardFeedback(
     return
   }
   if (reason === 'catalog_error') {
-    window.toast?.error(error?.message || i18n.t('paintings.req_error_model'))
+    window.toast.error(error?.message || i18n.t('paintings.req_error_model'))
     return
   }
   if (reason === 'model_unavailable') {
-    window.toast?.error(i18n.t('paintings.req_error_model'))
+    window.toast.error(i18n.t('paintings.req_error_model'))
     return
   }
-  window.toast?.error(i18n.t('paintings.select_model'))
+  window.toast.error(i18n.t('paintings.select_model'))
 }

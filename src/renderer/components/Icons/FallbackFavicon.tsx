@@ -8,35 +8,10 @@ const FAILED_FAVICON_CACHE_PREFIX = 'failed_favicon_'
 // 失败URL的缓存时间 (24小时)
 const FAILED_FAVICON_CACHE_DURATION = 24 * 60 * 60 * 1000
 
-const getCachedValue = (key: string): string | null => {
-  try {
-    return localStorage.getItem(key)
-  } catch (error) {
-    logger.warn(`Failed to read favicon cache for ${key}`, error as Error)
-    return null
-  }
-}
-
-const setCachedValue = (key: string, value: string): void => {
-  try {
-    localStorage.setItem(key, value)
-  } catch (error) {
-    logger.warn(`Failed to write favicon cache for ${key}`, error as Error)
-  }
-}
-
-const removeCachedValue = (key: string): void => {
-  try {
-    localStorage.removeItem(key)
-  } catch (error) {
-    logger.warn(`Failed to remove favicon cache for ${key}`, error as Error)
-  }
-}
-
 // 检查URL是否在失败缓存中
 const isUrlFailedRecently = (url: string): boolean => {
   const cacheKey = `${FAILED_FAVICON_CACHE_PREFIX}${url}`
-  const cachedTimestamp = getCachedValue(cacheKey)
+  const cachedTimestamp = localStorage.getItem(cacheKey)
 
   if (!cachedTimestamp) return false
 
@@ -49,14 +24,14 @@ const isUrlFailedRecently = (url: string): boolean => {
   }
 
   // 清除过期的缓存
-  removeCachedValue(cacheKey)
+  localStorage.removeItem(cacheKey)
   return false
 }
 
 // 记录失败的URL到缓存
 const markUrlAsFailed = (url: string): void => {
   const cacheKey = `${FAILED_FAVICON_CACHE_PREFIX}${url}`
-  setCachedValue(cacheKey, Date.now().toString())
+  localStorage.setItem(cacheKey, Date.now().toString())
 }
 
 // FallbackFavicon component that tries multiple favicon sources
@@ -75,7 +50,6 @@ const FallbackFavicon: React.FC<FallbackFaviconProps> = ({ hostname, alt }) => {
   const [faviconState, setFaviconState] = useState<FaviconState>({ status: 'idle' })
 
   useEffect(() => {
-    let cancelled = false
     // Reset state when hostname changes
     setFaviconState({ status: 'loading' })
 
@@ -118,27 +92,22 @@ const FallbackFavicon: React.FC<FallbackFaviconProps> = ({ hostname, alt }) => {
           throw new Error(`Failed to fetch ${url}`)
         })
         .catch((error) => {
-          // Rethrow failures so Promise.any waits for a real successful favicon source.
+          // Rethrow aborted errors but silence other failures
           if (error.name === 'AbortError') {
             throw error
           }
-          throw error
+          return null // Return null for failed requests
         })
     )
 
-    let fallbackTimer: ReturnType<typeof setTimeout> | undefined
-    const clearFallbackTimer = () => {
-      if (fallbackTimer !== undefined) {
-        clearTimeout(fallbackTimer)
-        fallbackTimer = undefined
-      }
-    }
-
     // Create a timeout promise
     const timeoutPromise = new Promise<string>((resolve) => {
-      fallbackTimer = setTimeout(() => {
+      const timer = setTimeout(() => {
         resolve(faviconUrls[0]) // Default to first URL after timeout
       }, 2000)
+
+      // Clear timeout if signal is aborted
+      signal.addEventListener('abort', () => clearTimeout(timer))
     })
 
     // Use Promise.race to get the first successful result
@@ -150,25 +119,15 @@ const FallbackFavicon: React.FC<FallbackFaviconProps> = ({ hostname, alt }) => {
       timeoutPromise
     ])
       .then((url) => {
-        if (cancelled || signal.aborted) return
         setFaviconState({ status: 'loaded', src: url })
       })
       .catch((error) => {
-        if (cancelled || signal.aborted) return
         logger.error('All favicon requests failed:', error)
         setFaviconState({ status: 'loaded', src: faviconUrls[0] })
-      })
-      .finally(() => {
-        clearFallbackTimer()
-        if (!signal.aborted) {
-          controller.abort()
-        }
       })
 
     // Cleanup function
     return () => {
-      cancelled = true
-      clearFallbackTimer()
       controller.abort()
     }
   }, [hostname]) // Only depend on hostname

@@ -12,7 +12,7 @@ vi.mock('@renderer/i18n', () => ({
   }
 }))
 
-import { download, revokeObjectUrlLater } from '../download'
+import { download } from '../download'
 
 // Mock DOM 方法
 const mockCreateElement = vi.fn()
@@ -70,7 +70,6 @@ describe('download', () => {
     })
 
     afterEach(() => {
-      vi.useRealTimers()
       vi.restoreAllMocks()
     })
 
@@ -160,18 +159,6 @@ describe('download', () => {
         const element = mockCreateElement.mock.results[0].value
         expect(element.download).toBe(`${now}_diagram.svg`)
       })
-
-      it('should revoke owned object URLs after the click has settled', () => {
-        vi.useFakeTimers()
-
-        revokeObjectUrlLater('blob:mock-url')
-
-        expect(mockRevokeObjectURL).not.toHaveBeenCalled()
-        vi.advanceTimersByTime(999)
-        expect(mockRevokeObjectURL).not.toHaveBeenCalled()
-        vi.advanceTimersByTime(1)
-        expect(mockRevokeObjectURL).toHaveBeenCalledWith('blob:mock-url')
-      })
     })
 
     describe('Filename handling', () => {
@@ -188,14 +175,6 @@ describe('download', () => {
         const element = mockCreateElement.mock.results[0].value
         expect(element.download).toBe('文档.pdf')
       })
-
-      it('should not throw when file URL filename has malformed percent encoding', () => {
-        expect(() => download('file:///path/to/%E0%A4%A')).not.toThrow()
-
-        const element = mockCreateElement.mock.results[0].value
-        expect(element.download).toBe('%E0%A4%A')
-        expect(mockClick).toHaveBeenCalled()
-      })
     })
 
     describe('Network download', () => {
@@ -205,9 +184,7 @@ describe('download', () => {
         download('https://example.com/file.pdf', 'custom.pdf')
         await waitForAsync()
 
-        expect(mockFetch).toHaveBeenCalledWith('https://example.com/file.pdf', {
-          signal: expect.any(AbortSignal)
-        })
+        expect(mockFetch).toHaveBeenCalledWith('https://example.com/file.pdf')
         expect(mockCreateObjectURL).toHaveBeenCalledWith(expect.any(Blob))
         expect(mockClick).toHaveBeenCalled()
       })
@@ -217,23 +194,11 @@ describe('download', () => {
         headers.set('Content-Disposition', 'attachment; filename="server-file.pdf"')
         mockFetch.mockResolvedValue(createMockResponse({ headers }))
 
-        download('https://example.com/download')
+        download('https://example.com/files/document.docx')
         await waitForAsync()
 
-        const element = mockCreateElement.mock.results[0].value
-        expect(element.download).toMatch(/^\d+_server-file\.pdf$/)
-      })
-
-      it('should decode RFC 5987 filenames from Content-Disposition', async () => {
-        const headers = new Headers()
-        headers.set('Content-Disposition', "attachment; filename*=UTF-8''%E6%96%87%E6%A1%A3.pdf")
-        mockFetch.mockResolvedValue(createMockResponse({ headers }))
-
-        download('https://example.com/download')
-        await waitForAsync()
-
-        const element = mockCreateElement.mock.results[0].value
-        expect(element.download).toMatch(/^\d+_文档\.pdf$/)
+        // 验证下载被触发（具体文件名由实现决定）
+        expect(mockClick).toHaveBeenCalled()
       })
 
       it('should add timestamp to network downloaded files', async () => {
@@ -247,18 +212,6 @@ describe('download', () => {
 
         const element = mockCreateElement.mock.results[0].value
         expect(element.download).toBe(`${now}_file.pdf`)
-      })
-
-      it('should ignore query strings when extracting filename from URL', async () => {
-        const now = Date.now()
-        vi.spyOn(Date, 'now').mockReturnValue(now)
-        mockFetch.mockResolvedValue(createMockResponse())
-
-        download('https://example.com/files/report.pdf?token=secret#preview')
-        await waitForAsync()
-
-        const element = mockCreateElement.mock.results[0].value
-        expect(element.download).toBe(`${now}_report.pdf`)
       })
 
       it('should handle Content-Type when filename has no extension', async () => {
@@ -294,32 +247,10 @@ describe('download', () => {
         expect(mockedToast.error).toHaveBeenCalledWith('下载失败')
       })
 
-      it('should preserve string fetch error details', async () => {
-        mockFetch.mockRejectedValue('permission denied')
-
-        expect(() => download('https://example.com/file.pdf')).not.toThrow()
-        await waitForAsync()
-
-        expect(mockedToast.error).toHaveBeenCalledWith('下载失败：permission denied')
-      })
-
-      it('should preserve nested IPC fetch error details', async () => {
-        mockFetch.mockRejectedValue({ error: { message: 'Invalid response: 503 Service Unavailable' } })
-
-        expect(() => download('https://example.com/file.pdf')).not.toThrow()
-        await waitForAsync()
-
-        expect(mockedToast.error).toHaveBeenCalledWith('下载失败：Invalid response: 503 Service Unavailable')
-      })
-
       it('should handle HTTP errors gracefully', async () => {
         mockFetch.mockResolvedValue({ ok: false, status: 404 })
 
         expect(() => download('https://example.com/file.pdf')).not.toThrow()
-        await waitForAsync()
-
-        expect(mockedToast.error).toHaveBeenCalledWith('下载失败：HTTP error: 404')
-        expect(mockClick).not.toHaveBeenCalled()
       })
     })
   })

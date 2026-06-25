@@ -5,7 +5,6 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { useState } from 'react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
-import { Dialog, DialogContent } from '../dialog'
 import { Popover, PopoverContent, PopoverTrigger } from '../popover'
 import { PortalContainerProvider } from '../portal-container'
 
@@ -106,26 +105,6 @@ describe('PopoverContent', () => {
     portalContainer.remove()
   })
 
-  it('keeps the legacy container prop working for Cherry Studio Pi callers', () => {
-    const portalContainer = document.createElement('div')
-    document.body.appendChild(portalContainer)
-
-    try {
-      render(
-        <Popover open>
-          <PopoverTrigger>Open</PopoverTrigger>
-          <PopoverContent container={portalContainer} data-testid="content">
-            Content
-          </PopoverContent>
-        </Popover>
-      )
-
-      expect(portalContainer).toContainElement(screen.getByTestId('content'))
-    } finally {
-      portalContainer.remove()
-    }
-  })
-
   it('uses the provider portal container by default', () => {
     const portalContainer = document.createElement('div')
     document.body.appendChild(portalContainer)
@@ -144,20 +123,5 @@ describe('PopoverContent', () => {
     } finally {
       portalContainer.remove()
     }
-  })
-
-  it('does not inherit a dialog content container implicitly', () => {
-    render(
-      <Dialog open>
-        <DialogContent data-testid="dialog">
-          <Popover open>
-            <PopoverTrigger>Open</PopoverTrigger>
-            <PopoverContent data-testid="content">Content</PopoverContent>
-          </Popover>
-        </DialogContent>
-      </Dialog>
-    )
-
-    expect(screen.getByTestId('dialog')).not.toContainElement(screen.getByTestId('content'))
   })
 })

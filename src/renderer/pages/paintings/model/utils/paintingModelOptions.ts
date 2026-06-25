@@ -1,19 +1,12 @@
 import { dataApiService } from '@data/DataApiService'
-import { getRawModelId } from '@renderer/config/models/utils'
-import { ENDPOINT_TYPE, type Model, MODEL_CAPABILITY } from '@shared/data/types/model'
+import { ENDPOINT_TYPE, type Model, MODEL_CAPABILITY, parseUniqueModelId } from '@shared/data/types/model'
 
 import type { ModelOption } from '../types/paintingModel'
 
-function getModelOptionValue(model: Model): string {
-  return getRawModelId(model)
-}
-
 export function createModelOptionFromModel(model: Model): ModelOption {
-  const modelId = getModelOptionValue(model)
-
   return {
-    label: model.name || modelId,
-    value: modelId,
+    label: model.name || model.apiModelId || parseUniqueModelId(model.id).modelId,
+    value: model.apiModelId || parseUniqueModelId(model.id).modelId,
     group: model.group,
     isEnabled: model.isEnabled,
     raw: model

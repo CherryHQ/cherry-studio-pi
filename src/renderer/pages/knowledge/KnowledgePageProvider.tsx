@@ -364,7 +364,7 @@ export const KnowledgePageProvider = ({ children }: PropsWithChildren) => {
       try {
         await updateBase(baseId, { groupId })
       } catch (error) {
-        window.toast?.error(formatErrorMessageWithPrefix(error, t('knowledge.error.failed_to_move')))
+        window.toast.error(formatErrorMessageWithPrefix(error, t('knowledge.error.failed_to_move')))
       }
     },
     [t, updateBase]
@@ -375,7 +375,7 @@ export const KnowledgePageProvider = ({ children }: PropsWithChildren) => {
       try {
         await deleteBase(baseId)
       } catch (error) {
-        window.toast?.error(formatErrorMessageWithPrefix(error, t('knowledge.error.failed_to_delete')))
+        window.toast.error(formatErrorMessageWithPrefix(error, t('knowledge.error.failed_to_delete')))
       }
     },
     [deleteBase, t]
@@ -386,7 +386,7 @@ export const KnowledgePageProvider = ({ children }: PropsWithChildren) => {
       try {
         await deleteGroup(groupId)
       } catch (error) {
-        window.toast?.error(formatErrorMessageWithPrefix(error, t('knowledge.groups.error.failed_to_delete')))
+        window.toast.error(formatErrorMessageWithPrefix(error, t('knowledge.groups.error.failed_to_delete')))
       }
     },
     [deleteGroup, t]

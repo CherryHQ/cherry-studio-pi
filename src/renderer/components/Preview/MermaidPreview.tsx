@@ -53,7 +53,7 @@ const MermaidPreview = ({
         renderSvgInShadowHost(fixedSvg, container)
         // container.innerHTML = fixedSvg
       } finally {
-        measureEl.remove()
+        document.body.removeChild(measureEl)
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps

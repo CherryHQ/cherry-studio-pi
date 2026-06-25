@@ -7,7 +7,6 @@ const updateApiKeysMock = vi.fn().mockResolvedValue(undefined)
 const useProviderMock = vi.fn()
 const useProviderApiKeysMock = vi.fn()
 const useProviderMutationsMock = vi.fn()
-const updateProviderMock = vi.fn().mockResolvedValue(undefined)
 
 let apiKeysData:
   | {
@@ -38,8 +37,7 @@ describe('useProviderApiKey', () => {
       data: apiKeysData
     }))
     useProviderMutationsMock.mockReturnValue({
-      updateApiKeys: updateApiKeysMock,
-      updateProvider: updateProviderMock
+      updateApiKeys: updateApiKeysMock
     })
   })
 
@@ -155,99 +153,6 @@ describe('useProviderApiKey', () => {
     })
 
     expect(updateApiKeysMock).toHaveBeenCalledWith([{ id: expect.any(String), key: 'sk-now', isEnabled: true }])
-  })
-
-  it('auto-enables a disabled provider after saving an enabled API key', async () => {
-    useProviderMock.mockReturnValue({
-      provider: { id: 'openai', isEnabled: false }
-    })
-    const { result } = renderHook(() => useProviderApiKey('openai'))
-
-    act(() => {
-      result.current.setInputApiKey('sk-enabled')
-    })
-
-    await act(async () => {
-      vi.runAllTimers()
-      await Promise.resolve()
-    })
-
-    expect(updateApiKeysMock).toHaveBeenCalledWith([{ id: expect.any(String), key: 'sk-enabled', isEnabled: true }])
-    expect(updateProviderMock).toHaveBeenCalledWith({ isEnabled: true })
-  })
-
-  it('flushes pending keys on unmount without showing stale auto-enable failures', async () => {
-    useProviderMock.mockReturnValue({
-      provider: { id: 'openai', isEnabled: false }
-    })
-    updateProviderMock.mockRejectedValueOnce(new Error('enable failed'))
-    const { result, unmount } = renderHook(() => useProviderApiKey('openai'))
-
-    act(() => {
-      result.current.setInputApiKey('sk-on-close')
-    })
-
-    await act(async () => {
-      unmount()
-      await Promise.resolve()
-      await Promise.resolve()
-    })
-
-    expect(updateApiKeysMock).toHaveBeenCalledWith([{ id: expect.any(String), key: 'sk-on-close', isEnabled: true }])
-    expect(updateProviderMock).toHaveBeenCalledWith({ isEnabled: true })
-    expect(window.toast.error).not.toHaveBeenCalled()
-  })
-
-  it('flushes pending keys to the previous provider before switching providers', async () => {
-    const updateApiKeysByProviderMock = vi.fn().mockResolvedValue(undefined)
-    useProviderMock.mockImplementation((providerId: string) => ({
-      provider: { id: providerId, isEnabled: true }
-    }))
-    useProviderMutationsMock.mockImplementation((providerId: string) => ({
-      updateApiKeys: (entries: unknown) => updateApiKeysByProviderMock(providerId, entries),
-      updateProvider: updateProviderMock
-    }))
-
-    const { result, rerender } = renderHook(({ providerId }) => useProviderApiKey(providerId), {
-      initialProps: { providerId: 'openai' }
-    })
-
-    act(() => {
-      result.current.setInputApiKey('sk-openai')
-    })
-
-    await act(async () => {
-      rerender({ providerId: 'anthropic' })
-      await Promise.resolve()
-      await Promise.resolve()
-    })
-
-    expect(updateApiKeysByProviderMock).toHaveBeenCalledTimes(1)
-    expect(updateApiKeysByProviderMock).toHaveBeenCalledWith('openai', [
-      { id: expect.any(String), key: 'sk-openai', isEnabled: true }
-    ])
-  })
-
-  it('does not auto-enable a disabled provider when the enabled key input is empty', async () => {
-    useProviderMock.mockReturnValue({
-      provider: { id: 'openai', isEnabled: false }
-    })
-    apiKeysData = {
-      keys: [{ id: 'k1', key: 'sk-existing', isEnabled: true }]
-    }
-    const { result } = renderHook(() => useProviderApiKey('openai'))
-
-    act(() => {
-      result.current.setInputApiKey('')
-    })
-
-    await act(async () => {
-      vi.runAllTimers()
-      await Promise.resolve()
-    })
-
-    expect(updateApiKeysMock).toHaveBeenCalledWith([])
-    expect(updateProviderMock).not.toHaveBeenCalled()
   })
 
   it('keeps api key input local to each store', () => {

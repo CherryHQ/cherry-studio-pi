@@ -15,7 +15,8 @@
  * --------------------------------------------------------------------------
  */
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
-import { type McpConfig, type McpServer } from '@renderer/types'
+import type { McpConfig } from '@renderer/types/mcpTool'
+import type { McpServer } from '@shared/data/types/mcpServer'
 
 export const initialState: McpConfig = {
   servers: [],
@@ -27,12 +28,6 @@ const mcpSlice = createSlice({
   name: 'mcp',
   initialState,
   reducers: {
-    hydrateMcpState: (_state, action: PayloadAction<Partial<McpConfig>>) => {
-      return {
-        ...initialState,
-        ...action.payload
-      }
-    },
     setMcpServers: (state, action: PayloadAction<McpServer[]>) => {
       state.servers = action.payload
     },
@@ -70,7 +65,6 @@ const mcpSlice = createSlice({
 })
 
 export const {
-  hydrateMcpState,
   setMcpServers,
   addMcpServer,
   updateMcpServer,

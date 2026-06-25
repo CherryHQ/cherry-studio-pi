@@ -7,10 +7,6 @@ import { useChannels } from '../useChannels'
 import { useSession } from '../useSession'
 import { useTaskLogs, useTasks } from '../useTasks'
 
-vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key: string) => key })
-}))
-
 describe('identity-scoped agent queries', () => {
   beforeEach(() => {
     MockUseDataApiUtils.resetMocks()

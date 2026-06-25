@@ -34,14 +34,13 @@ const DATA_URL_MAP: Record<LanguageVarious, string> = {
 }
 
 const dataCache = new Map<string, Promise<EmojiRecord[]>>()
-const EMOJI_DATA_FETCH_TIMEOUT_MS = 5_000
 
 export const loadEmojiData = (locale: LanguageVarious): Promise<EmojiRecord[]> => {
   const url = DATA_URL_MAP[locale] ?? dataEN
   const cached = dataCache.get(url)
   if (cached) return cached
 
-  const promise = fetch(url, { signal: AbortSignal.timeout(EMOJI_DATA_FETCH_TIMEOUT_MS) })
+  const promise = fetch(url)
     .then((response) => {
       if (!response.ok) {
         throw new Error(`Failed to load emoji data from ${url}: ${response.status} ${response.statusText}`)

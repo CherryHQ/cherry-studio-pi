@@ -1,4 +1,6 @@
-import type { Provider } from '@renderer/types'
+import i18n from '@renderer/i18n'
+import { getProviderLabelKey } from '@renderer/i18n/label'
+import { isSystemProvider, type Provider } from '@renderer/types/provider'
 
 /**
  * 从模型 ID 中提取默认组名。
@@ -97,13 +99,12 @@ export const getLowerBaseModelName = (id: string, delimiter: string = '/'): stri
 }
 
 /**
- * 获取模型服务商名称。
- * 需要 i18n 展示名的设置页入口请使用 ProviderSettings/utils/providerDisplay。
+ * 获取模型服务商名称，根据是否内置服务商来决定要不要翻译
  * @param provider 服务商
  * @returns 描述性的名字
  */
 export const getFancyProviderName = (provider: Provider) => {
-  return provider.name
+  return isSystemProvider(provider) ? i18n.t(getProviderLabelKey(provider.id)) : provider.name
 }
 
 // \uFE0F = VS16 (emoji-presentation selector); \u20E3 = combining enclosing keycap (1️⃣);

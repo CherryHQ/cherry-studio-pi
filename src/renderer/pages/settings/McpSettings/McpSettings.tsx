@@ -41,16 +41,16 @@ import { useMcpRuntimeStatus } from '@renderer/hooks/useMcpRuntimeStatus'
 import { useMcpServer } from '@renderer/hooks/useMcpServer'
 import { useMcpServerTrust } from '@renderer/hooks/useMcpServerTrust'
 import McpDescription from '@renderer/pages/settings/McpSettings/McpDescription'
-import type { McpPrompt, McpResource, McpTool } from '@renderer/types'
+import type { McpTool } from '@renderer/types/tool'
 import { parseKeyValueString } from '@renderer/utils/env'
-import { formatErrorMessage, formatMcpError } from '@renderer/utils/error'
+import { formatMcpError } from '@renderer/utils/error'
 import { cn } from '@renderer/utils/style'
 import type { UpdateMcpServerDto } from '@shared/data/api/schemas/mcpServers'
 import type { McpServer } from '@shared/data/types/mcpServer'
-import type { McpServerLogEntry } from '@shared/types/mcp'
+import type { McpPrompt, McpResource, McpServerLogEntry } from '@shared/types/mcp'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import { ArrowLeft, ChevronDown, SaveIcon, X } from 'lucide-react'
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import * as z from 'zod'
@@ -111,13 +111,6 @@ const PipRegistry: Registry[] = [
   { name: '腾讯云', url: 'https://mirrors.cloud.tencent.com/pypi/simple/' }
 ]
 
-const getCommandRegistry = (command?: string): Registry[] | undefined => {
-  if (!command) return undefined
-  if (command.includes('uv') || command.includes('uvx')) return PipRegistry
-  if (command.includes('npx') || command.includes('bun') || command.includes('bunx')) return NpmRegistry
-  return undefined
-}
-
 type TabKey = 'settings' | 'description' | 'tools' | 'prompts' | 'resources'
 type McpTabItem = {
   key: TabKey
@@ -162,7 +155,6 @@ const McpSettings: React.FC = () => {
   const [loading, setLoading] = useState(false)
   const [isFormChanged, setIsFormChanged] = useState(false)
   const [loadingServer, setLoadingServer] = useState<string | null>(null)
-  const loadingServerCountRef = useRef(0)
   const [activeTab, setActiveTab] = useState<TabKey>('settings')
   const [toolSearchText, setToolSearchText] = useState('')
   const [tools] = useSharedCache(serverId ? mcpToolsCacheKey(serverId) : mcpToolsCacheKey('__draft__'), [] as McpTool[])
@@ -179,68 +171,44 @@ const McpSettings: React.FC = () => {
   const [serverVersion, setServerVersion] = useState<string | null>(null)
   const [logModalOpen, setLogModalOpen] = useState(false)
   const [logs, setLogs] = useState<(McpServerLogEntry & { serverId?: string })[]>([])
-  const serverIdRef = useRef<string | undefined>(server?.id)
-  const promptsRequestSeqRef = useRef(0)
-  const resourcesRequestSeqRef = useRef(0)
-  const versionRequestSeqRef = useRef(0)
-  const logsRequestSeqRef = useRef(0)
-  const deleteConfirmRef = useRef(false)
-  const deleteRunningRef = useRef(false)
 
   const { theme } = useTheme()
 
   const navigate = useNavigate()
 
-  const beginServerLoading = useCallback((id: string) => {
-    loadingServerCountRef.current += 1
-    setLoadingServer(id)
-
-    let released = false
-    return () => {
-      if (released) {
-        return
-      }
-      released = true
-      loadingServerCountRef.current = Math.max(0, loadingServerCountRef.current - 1)
-      if (loadingServerCountRef.current === 0) {
-        setLoadingServer(null)
-      }
-    }
-  }, [])
-
-  useEffect(() => {
-    serverIdRef.current = server?.id
-  }, [server?.id])
-
-  useEffect(() => {
-    promptsRequestSeqRef.current += 1
-    resourcesRequestSeqRef.current += 1
-    versionRequestSeqRef.current += 1
-    logsRequestSeqRef.current += 1
-    setPrompts([])
-    setResources([])
-    setServerVersion(null)
-    setLogs([])
-  }, [server?.id])
-
   // Initialize form values whenever the server changes
   useEffect(() => {
     if (!server) return
     const serverType: McpServer['type'] = server.type || (server.baseUrl ? 'sse' : 'stdio')
-    const commandRegistry = getCommandRegistry(server.command)
-    const commandSupportsRegistry = Boolean(commandRegistry)
     setServerType(serverType)
 
     // Set registry UI state based on command and registryUrl
-    if (commandRegistry) {
-      setIsShowRegistry(true)
-      setRegistry(commandRegistry)
+    if (server.command) {
+      handleCommandChange(server.command)
 
       // If there's a registryUrl, ensure registry UI is shown
       if (server.registryUrl) {
+        setIsShowRegistry(true)
+
+        // Determine registry type based on command
+        let currentRegistry: Registry[] = []
+        if (server.command.includes('uv') || server.command.includes('uvx')) {
+          currentRegistry = PipRegistry
+          setRegistry(PipRegistry)
+        } else if (
+          server.command.includes('npx') ||
+          server.command.includes('bun') ||
+          server.command.includes('bunx')
+        ) {
+          currentRegistry = NpmRegistry
+          setRegistry(NpmRegistry)
+        }
+
         // Check if the registryUrl is a custom URL (not in the predefined list)
         const isCustomRegistry =
-          !commandRegistry.some((reg) => reg.url === server.registryUrl) && server.registryUrl !== '' // empty string is default
+          currentRegistry.length > 0 &&
+          !currentRegistry.some((reg) => reg.url === server.registryUrl) &&
+          server.registryUrl !== '' // empty string is default
 
         if (isCustomRegistry) {
           // Set custom registry state
@@ -251,15 +219,7 @@ const McpSettings: React.FC = () => {
           setSelectedRegistryType('')
           setCustomRegistryUrl('')
         }
-      } else {
-        setSelectedRegistryType('')
-        setCustomRegistryUrl('')
       }
-    } else {
-      setIsShowRegistry(false)
-      setRegistry(undefined)
-      setSelectedRegistryType('')
-      setCustomRegistryUrl('')
     }
 
     form.reset({
@@ -268,7 +228,7 @@ const McpSettings: React.FC = () => {
       serverType: serverType,
       baseUrl: server.baseUrl || '',
       command: server.command || '',
-      registryUrl: commandSupportsRegistry ? server.registryUrl || '' : '',
+      registryUrl: server.registryUrl || '',
       isActive: server.isActive,
       longRunning: server.longRunning,
       timeout: server.timeout,
@@ -300,86 +260,64 @@ const McpSettings: React.FC = () => {
 
   const fetchTools = async () => {
     if (server?.isActive) {
-      const finishLoading = beginServerLoading(server.id)
       try {
+        setLoadingServer(server.id)
         await window.api.mcp.refreshTools(server.id)
       } catch (error) {
         logger.error('Failed to list MCP tools', error as Error)
       } finally {
-        finishLoading()
+        setLoadingServer(null)
       }
     }
   }
 
   const fetchPrompts = async () => {
     if (server?.isActive) {
-      const serverId = server.id
-      const requestSeq = ++promptsRequestSeqRef.current
-      const finishLoading = beginServerLoading(serverId)
       try {
-        const localPrompts = await window.api.mcp.listPrompts(serverId)
-        if (serverIdRef.current === serverId && requestSeq === promptsRequestSeqRef.current) {
-          setPrompts(localPrompts)
-        }
+        setLoadingServer(server.id)
+        const localPrompts = await window.api.mcp.listPrompts(server.id)
+        setPrompts(localPrompts)
       } catch (error) {
         logger.error('Failed to list MCP prompts', error as Error)
-        if (serverIdRef.current === serverId && requestSeq === promptsRequestSeqRef.current) {
-          setPrompts([])
-        }
+        setPrompts([])
       } finally {
-        finishLoading()
+        setLoadingServer(null)
       }
     }
   }
 
   const fetchResources = async () => {
     if (server?.isActive) {
-      const serverId = server.id
-      const requestSeq = ++resourcesRequestSeqRef.current
-      const finishLoading = beginServerLoading(serverId)
       try {
-        const localResources = await window.api.mcp.listResources(serverId)
-        if (serverIdRef.current === serverId && requestSeq === resourcesRequestSeqRef.current) {
-          setResources(localResources)
-        }
+        setLoadingServer(server.id)
+        const localResources = await window.api.mcp.listResources(server.id)
+        setResources(localResources)
       } catch (error) {
         logger.error('Failed to list MCP resources', error as Error)
-        if (serverIdRef.current === serverId && requestSeq === resourcesRequestSeqRef.current) {
-          setResources([])
-        }
+        setResources([])
       } finally {
-        finishLoading()
+        setLoadingServer(null)
       }
     }
   }
 
   const fetchServerVersion = async () => {
     if (server?.isActive) {
-      const serverId = server.id
-      const requestSeq = ++versionRequestSeqRef.current
       try {
-        const version = await window.api.mcp.getServerVersion(serverId)
-        if (serverIdRef.current === serverId && requestSeq === versionRequestSeqRef.current) {
-          setServerVersion(version)
-        }
+        const version = await window.api.mcp.getServerVersion(server.id)
+        setServerVersion(version)
       } catch (error) {
         logger.error('Failed to get MCP server version', error as Error)
-        if (serverIdRef.current === serverId && requestSeq === versionRequestSeqRef.current) {
-          setServerVersion(null)
-        }
+        setServerVersion(null)
       }
     }
   }
 
   const fetchServerLogs = async () => {
     if (!server) return
-    const serverId = server.id
-    const requestSeq = ++logsRequestSeqRef.current
     try {
-      const history = await window.api.mcp.getServerLogs(serverId)
-      if (serverIdRef.current === serverId && requestSeq === logsRequestSeqRef.current) {
-        setLogs(history)
-      }
+      const history = await window.api.mcp.getServerLogs(server.id)
+      setLogs(history)
     } catch (error) {
       logger.warn('Failed to load server logs', error as Error)
     }
@@ -400,6 +338,10 @@ const McpSettings: React.FC = () => {
     return () => {
       unsubscribe?.()
     }
+  }, [server?.id])
+
+  useEffect(() => {
+    setLogs([])
   }, [server?.id])
 
   useEffect(() => {
@@ -430,7 +372,7 @@ const McpSettings: React.FC = () => {
       const values = form.getValues()
 
       // set basic fields
-      const mcpServer: Omit<Partial<McpServer>, 'timeout'> & { id: string; timeout?: number | null } = {
+      const mcpServer: McpServer = {
         ...server,
         id: server.id,
         name: values.name,
@@ -439,7 +381,7 @@ const McpSettings: React.FC = () => {
         isActive: values.isActive ?? server.isActive,
         registryUrl: values.registryUrl,
         searchKey: server.searchKey,
-        timeout: values.timeout ?? null,
+        timeout: values.timeout || server.timeout,
         longRunning: values.longRunning,
         // Use nullish coalescing to allow empty strings (for deletion)
         provider: values.provider ?? server.provider,
@@ -471,18 +413,18 @@ const McpSettings: React.FC = () => {
         try {
           await updateMcpServer({ body: { ...mcpServerDto, isActive: true } })
           await window.api.mcp.restartServer(server.id)
-          window.toast?.success(t('settings.mcp.updateSuccess'))
+          window.toast.success(t('settings.mcp.updateSuccess'))
           setIsFormChanged(false)
-        } catch (error: unknown) {
+        } catch (error: any) {
           window.modal.error({
             title: t('settings.mcp.updateError'),
-            content: formatErrorMessage(error),
+            content: error.message,
             centered: true
           })
         }
       } else {
         await updateMcpServer({ body: { ...mcpServerDto, isActive: false } })
-        window.toast?.success(t('settings.mcp.updateSuccess'))
+        window.toast.success(t('settings.mcp.updateSuccess'))
         setIsFormChanged(false)
       }
       setLoading(false)
@@ -494,16 +436,15 @@ const McpSettings: React.FC = () => {
 
   // Watch for command field changes
   const handleCommandChange = (command: string) => {
-    const commandRegistry = getCommandRegistry(command)
-    if (commandRegistry) {
+    if (command.includes('uv') || command.includes('uvx')) {
       setIsShowRegistry(true)
-      setRegistry(commandRegistry)
+      setRegistry(PipRegistry)
+    } else if (command.includes('npx') || command.includes('bun') || command.includes('bunx')) {
+      setIsShowRegistry(true)
+      setRegistry(NpmRegistry)
     } else {
       setIsShowRegistry(false)
       setRegistry(undefined)
-      setSelectedRegistryType('')
-      setCustomRegistryUrl('')
-      form.setValue('registryUrl', '')
     }
   }
 
@@ -539,51 +480,21 @@ const McpSettings: React.FC = () => {
 
   const onDeleteMcpServer = useCallback(
     async (serverToDelete: McpServer) => {
-      const showDeleteError = (error: unknown) => {
-        window.toast?.error(`${t('settings.mcp.deleteError')}: ${formatErrorMessage(error)}`)
-      }
-
       try {
-        if (deleteConfirmRef.current || deleteRunningRef.current) {
-          return
-        }
-
-        const clearDeleteGuard = () => {
-          if (deleteRunningRef.current) return
-          deleteConfirmRef.current = false
-        }
-
-        deleteConfirmRef.current = true
         window.modal.confirm({
           title: t('settings.mcp.deleteServer'),
           content: t('settings.mcp.deleteServerConfirm'),
           centered: true,
           okButtonProps: { danger: true },
-          onCancel: clearDeleteGuard,
           onOk: async () => {
-            if (deleteRunningRef.current) {
-              return
-            }
-
-            deleteRunningRef.current = true
-            try {
-              await window.api.mcp.removeServer(serverToDelete.id)
-              await deleteMcpServer({})
-              window.toast?.success(t('settings.mcp.deleteSuccess'))
-              void navigate({ to: '/settings/mcp' })
-            } catch (error) {
-              showDeleteError(error)
-              throw error
-            } finally {
-              deleteRunningRef.current = false
-              deleteConfirmRef.current = false
-            }
+            await window.api.mcp.removeServer(serverToDelete.id)
+            await deleteMcpServer({})
+            window.toast.success(t('settings.mcp.deleteSuccess'))
+            void navigate({ to: '/settings/mcp' })
           }
         })
       } catch (error: any) {
-        deleteRunningRef.current = false
-        deleteConfirmRef.current = false
-        showDeleteError(error)
+        window.toast.error(`${t('settings.mcp.deleteError')}: ${error.message}`)
       }
     },
 
@@ -592,83 +503,61 @@ const McpSettings: React.FC = () => {
 
   const onToggleActive = async (active: boolean) => {
     if (!server) return
-    const initialServerId = server.id
     if (isFormChanged && active) {
       await onSave()
       return
     }
 
     const isValid = await form.trigger()
-    if (!isValid || serverIdRef.current !== initialServerId) {
+    if (!isValid) {
       return
     }
 
     let serverForUpdate = server
     if (active) {
       const trustedServer = await ensureServerTrusted(server)
-      if (!trustedServer || serverIdRef.current !== initialServerId) {
+      if (!trustedServer) {
         return
       }
       serverForUpdate = trustedServer
     }
 
-    const serverForUpdateId = serverForUpdate.id
-    const finishLoading = beginServerLoading(serverForUpdateId)
+    setLoadingServer(serverForUpdate.id)
 
     try {
       if (active) {
         await updateMcpServer({ body: { isActive: true } })
         try {
-          await window.api.mcp.refreshTools(serverForUpdateId)
+          await window.api.mcp.refreshTools(serverForUpdate.id)
 
-          const promptsRequestSeq = ++promptsRequestSeqRef.current
-          const localPrompts = await window.api.mcp.listPrompts(serverForUpdateId)
-          if (serverIdRef.current === serverForUpdateId && promptsRequestSeq === promptsRequestSeqRef.current) {
-            setPrompts(localPrompts)
-          }
+          const localPrompts = await window.api.mcp.listPrompts(serverForUpdate.id)
+          setPrompts(localPrompts)
 
-          const resourcesRequestSeq = ++resourcesRequestSeqRef.current
-          const localResources = await window.api.mcp.listResources(serverForUpdateId)
-          if (serverIdRef.current === serverForUpdateId && resourcesRequestSeq === resourcesRequestSeqRef.current) {
-            setResources(localResources)
-          }
+          const localResources = await window.api.mcp.listResources(serverForUpdate.id)
+          setResources(localResources)
 
-          const versionRequestSeq = ++versionRequestSeqRef.current
-          const version = await window.api.mcp.getServerVersion(serverForUpdateId)
-          if (serverIdRef.current === serverForUpdateId && versionRequestSeq === versionRequestSeqRef.current) {
-            setServerVersion(version)
-          }
+          const version = await window.api.mcp.getServerVersion(serverForUpdate.id)
+          setServerVersion(version)
         } catch (error: any) {
-          if (serverIdRef.current === serverForUpdateId) {
-            window.modal.error({
-              title: t('settings.mcp.startError'),
-              content: formatMcpError(error as McpError),
-              centered: true
-            })
-          }
+          window.modal.error({
+            title: t('settings.mcp.startError'),
+            content: formatMcpError(error as McpError),
+            centered: true
+          })
         }
       } else {
         await updateMcpServer({ body: { isActive: false } })
-        await window.api.mcp.stopServer(serverForUpdateId)
-        if (serverIdRef.current === serverForUpdateId) {
-          promptsRequestSeqRef.current += 1
-          resourcesRequestSeqRef.current += 1
-          versionRequestSeqRef.current += 1
-          setPrompts([])
-          setResources([])
-          setServerVersion(null)
-        }
+        await window.api.mcp.stopServer(serverForUpdate.id)
+        setServerVersion(null)
       }
     } catch (error: any) {
-      if (serverIdRef.current === serverForUpdateId) {
-        window.modal.error({
-          title: active ? t('settings.mcp.startError') : t('settings.mcp.updateError'),
-          content: formatMcpError(error as McpError),
-          centered: true
-        })
-      }
+      window.modal.error({
+        title: active ? t('settings.mcp.startError') : t('settings.mcp.updateError'),
+        content: formatMcpError(error as McpError),
+        centered: true
+      })
     } finally {
-      finishLoading()
+      setLoadingServer(null)
     }
   }
 
@@ -689,14 +578,10 @@ const McpSettings: React.FC = () => {
         }
       }
 
-      try {
-        await updateMcpServer({ body: { disabledTools } })
-      } catch (error) {
-        logger.error('Failed to update MCP tool enabled state', error as Error)
-        window.toast?.error(t('settings.mcp.updateError'))
-      }
+      // Save the updated server configuration
+      void updateMcpServer({ body: { disabledTools } })
     },
-    [server, t, updateMcpServer]
+    [server, updateMcpServer]
   )
 
   // Handle toggling auto-approve for a tool
@@ -714,14 +599,10 @@ const McpSettings: React.FC = () => {
         }
       }
 
-      try {
-        await updateMcpServer({ body: { disabledAutoApproveTools } })
-      } catch (error) {
-        logger.error('Failed to update MCP tool auto-approve state', error as Error)
-        window.toast?.error(t('settings.mcp.updateError'))
-      }
+      // Save the updated server configuration
+      void updateMcpServer({ body: { disabledAutoApproveTools } })
     },
-    [server, t, updateMcpServer]
+    [server, updateMcpServer]
   )
 
   if (!server || isServerLoading) {

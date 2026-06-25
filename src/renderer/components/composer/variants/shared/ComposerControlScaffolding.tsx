@@ -1,6 +1,6 @@
 import { ComposerActiveToolControls, ComposerToolMenu } from '@renderer/components/composer/ComposerToolRuntime'
-import type { QuickPanelInputAdapter } from '@renderer/components/composer/panelEngine'
-import { cn } from '@renderer/utils'
+import type { QuickPanelInputAdapter } from '@renderer/components/QuickPanel'
+import { cn } from '@renderer/utils/style'
 import type { ReactNode } from 'react'
 
 import { useComposerBottomToolbarIconOnly } from '../useComposerBottomToolbarIconOnly'

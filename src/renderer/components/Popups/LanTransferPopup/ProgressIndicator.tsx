@@ -30,7 +30,7 @@ export const ProgressIndicator: FC<ProgressIndicatorProps> = ({ transferState, h
       <div
         className={cn(
           'flex items-center justify-between gap-1.5 text-[11px]',
-          isFailed ? 'text-destructive' : 'text-foreground-secondary'
+          isFailed ? 'text-[var(--color-error)]' : 'text-[var(--color-text-2)]'
         )}>
         <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">{transferState.fileName}</span>
         <span className="shrink-0 whitespace-nowrap">{progressLabel}</span>
@@ -41,7 +41,11 @@ export const ProgressIndicator: FC<ProgressIndicatorProps> = ({ transferState, h
         <div
           className={cn(
             'h-full rounded-full transition-[width] duration-[120ms]',
-            isFailed ? 'bg-destructive' : isCompleted ? 'bg-success' : 'bg-[var(--color-primary)]'
+            isFailed
+              ? 'bg-[var(--color-error)]'
+              : isCompleted
+                ? 'bg-[var(--color-status-success)]'
+                : 'bg-[var(--color-primary)]'
           )}
           style={{ width: `${progressPercent}%` }}
         />

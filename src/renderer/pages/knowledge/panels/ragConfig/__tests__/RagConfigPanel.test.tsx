@@ -69,6 +69,23 @@ vi.mock('@cherrystudio/ui', async () => {
       <div {...props}>{children}</div>
     ),
     Input: (props: Record<string, unknown>) => <input {...props} />,
+    Switch: ({
+      checked,
+      onCheckedChange,
+      ...props
+    }: {
+      checked?: boolean
+      onCheckedChange?: (checked: boolean) => void
+      [key: string]: unknown
+    }) => (
+      <input
+        type="checkbox"
+        role="switch"
+        checked={checked ?? false}
+        onChange={(event) => onCheckedChange?.(event.target.checked)}
+        {...props}
+      />
+    ),
     Select: ({
       children,
       onValueChange
@@ -243,6 +260,8 @@ const createKnowledgeBase = (overrides: Partial<KnowledgeBase> = {}): KnowledgeB
   fileProcessorId: undefined,
   chunkSize: 1024,
   chunkOverlap: 200,
+  chunkStrategy: 'structured',
+  chunkSeparator: '\\n\\n',
   threshold: 0.1,
   documentCount: 6,
   status: 'completed',
@@ -270,6 +289,8 @@ describe('RagConfigPanel', () => {
         fileProcessorId: null,
         chunkSize: '512',
         chunkOverlap: '64',
+        chunkStrategy: 'structured',
+        chunkSeparator: '\\n\\n',
         embeddingModelId: 'openai::text-embedding-3-small',
         rerankModelId: null,
         documentCount: 6,
@@ -444,6 +465,8 @@ describe('RagConfigPanel', () => {
         fileProcessorId: null,
         chunkSize: '512',
         chunkOverlap: '64',
+        chunkStrategy: 'structured',
+        chunkSeparator: '\\n\\n',
         embeddingModelId: 'openai::text-embedding-3-small',
         rerankModelId: null,
         documentCount: 6,
@@ -479,6 +502,8 @@ describe('RagConfigPanel', () => {
         fileProcessorId: null,
         chunkSize: '512',
         chunkOverlap: '64',
+        chunkStrategy: 'structured',
+        chunkSeparator: '\\n\\n',
         embeddingModelId: 'openai::text-embedding-3-small',
         rerankModelId: 'jina::rerank',
         documentCount: 6,

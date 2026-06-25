@@ -26,11 +26,7 @@ import type {
   SharedCacheKey,
   UseCacheKey
 } from '@shared/data/cache/cacheSchemas'
-import {
-  DefaultRendererPersistCache,
-  RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY,
-  sanitizeRendererPersistCacheValue
-} from '@shared/data/cache/cacheSchemas'
+import { DefaultRendererPersistCache } from '@shared/data/cache/cacheSchemas'
 import type {
   CacheEntry,
   CacheEntryDetail,
@@ -41,23 +37,9 @@ import type {
 } from '@shared/data/cache/cacheTypes'
 import { isEqual } from 'lodash'
 
-import { notifyStorageV2MirroredLocalStorageKeyChanged } from '../services/StorageV2LocalStorageSnapshot'
+const STORAGE_PERSIST_KEY = 'cs_cache_persist'
 
 const logger = loggerService.withContext('CacheService')
-
-function safeRemoveLocalStorageItem(key: string): boolean {
-  if (typeof localStorage === 'undefined') {
-    return false
-  }
-
-  try {
-    localStorage.removeItem(key)
-    return true
-  } catch (error) {
-    logger.warn(`Failed to remove localStorage item ${key}`, error as Error)
-    return false
-  }
-}
 
 /**
  * Renderer process cache service
@@ -89,8 +71,6 @@ export class CacheService {
   // Persist cache debounce
   private persistSaveTimer?: NodeJS.Timeout
   private persistDirty = false
-  private cacheSyncUnsubscribe?: () => void
-  private beforeUnloadHandler?: () => void
 
   // Shared cache ready state for initialization sync
   private sharedCacheReady = false
@@ -629,28 +609,6 @@ export class CacheService {
     return this.persistCache.has(key)
   }
 
-  /**
-   * Reload persist cache from localStorage after Storage v2 restores durable
-   * renderer state. This keeps active windows in sync without requiring restart.
-   */
-  reloadPersistCacheFromStorage(): void {
-    const previousValues = new Map(this.persistCache)
-
-    this.loadPersistCache()
-
-    for (const key of Object.keys(DefaultRendererPersistCache) as RendererPersistCacheKey[]) {
-      const value = this.persistCache.get(key)
-      if (isEqual(previousValues.get(key), value)) continue
-
-      this.notifySubscribers(key)
-      this.broadcastSync({
-        type: 'persist',
-        key,
-        value
-      })
-    }
-  }
-
   // Note: No deletePersist method as discussed
 
   // ============ Hook Reference Management ============
@@ -924,7 +882,7 @@ export class CacheService {
         const existingEntry = this.sharedCache.get(key)
 
         // Compare value and expireAt to determine if update is needed
-        const valueChanged = !existingEntry || !isEqual(existingEntry.value, entry.value)
+        const valueChanged = !existingEntry || !Object.is(existingEntry.value, entry.value)
         const ttlChanged = !existingEntry || !Object.is(existingEntry.expireAt, entry.expireAt)
 
         if (valueChanged || ttlChanged) {
@@ -998,7 +956,7 @@ export class CacheService {
     }
 
     try {
-      const stored = localStorage.getItem(RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY)
+      const stored = localStorage.getItem(STORAGE_PERSIST_KEY)
       if (!stored) {
         // No stored data, save defaults to localStorage
         this.savePersistCache()
@@ -1006,7 +964,7 @@ export class CacheService {
         return
       }
 
-      const data = sanitizeRendererPersistCacheValue(stored) ?? {}
+      const data = JSON.parse(stored)
 
       // Only load keys that exist in schema, overriding defaults
       const schemaKeys = Object.keys(DefaultRendererPersistCache) as RendererPersistCacheKey[]
@@ -1021,9 +979,7 @@ export class CacheService {
       logger.debug('Loaded persist cache from localStorage with defaults')
     } catch (error) {
       logger.error('Failed to load persist cache:', error as Error)
-      if (safeRemoveLocalStorageItem(RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY)) {
-        notifyStorageV2MirroredLocalStorageKeyChanged(RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY)
-      }
+      localStorage.removeItem(STORAGE_PERSIST_KEY)
       // Fallback to defaults only
       logger.debug('Fallback to default persist cache values')
     }
@@ -1049,8 +1005,7 @@ export class CacheService {
         )
       }
 
-      localStorage.setItem(RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY, jsonData)
-      notifyStorageV2MirroredLocalStorageKeyChanged(RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY)
+      localStorage.setItem(STORAGE_PERSIST_KEY, jsonData)
       logger.verbose(`Saved persist cache to localStorage, size: ${(size / (1024 * 1024)).toFixed(2)} MB`)
     } catch (error) {
       logger.error('Failed to save persist cache:', error as Error)
@@ -1087,17 +1042,13 @@ export class CacheService {
    * Setup IPC listeners for receiving cache sync messages from other windows
    */
   private setupIpcListeners(): void {
-    if (this.cacheSyncUnsubscribe) {
-      return
-    }
-
     if (!window.api?.cache?.onSync) {
       logger.warn('Cache sync API not available')
       return
     }
 
     // Listen for cache sync messages from other windows
-    const cleanup = window.api.cache.onSync((message: CacheSyncMessage) => {
+    window.api.cache.onSync((message: CacheSyncMessage) => {
       if (message.type === 'shared') {
         if (message.value === undefined) {
           // Handle deletion
@@ -1117,24 +1068,17 @@ export class CacheService {
         this.notifySubscribers(message.key)
       }
     })
-    this.cacheSyncUnsubscribe = typeof cleanup === 'function' ? cleanup : () => {}
   }
 
   /**
    * Setup window unload handler to ensure persist cache is saved before exit
    */
   private setupWindowUnloadHandler(): void {
-    if (this.beforeUnloadHandler) {
-      return
-    }
-
-    this.beforeUnloadHandler = () => {
+    window.addEventListener('beforeunload', () => {
       if (this.persistDirty) {
         this.savePersistCache()
       }
-    }
-
-    window.addEventListener('beforeunload', this.beforeUnloadHandler)
+    })
   }
 
   /**
@@ -1149,17 +1093,6 @@ export class CacheService {
     // Clear timers
     if (this.persistSaveTimer) {
       clearTimeout(this.persistSaveTimer)
-      this.persistSaveTimer = undefined
-    }
-
-    if (this.cacheSyncUnsubscribe) {
-      this.cacheSyncUnsubscribe()
-      this.cacheSyncUnsubscribe = undefined
-    }
-
-    if (this.beforeUnloadHandler) {
-      window.removeEventListener('beforeunload', this.beforeUnloadHandler)
-      this.beforeUnloadHandler = undefined
     }
 
     // Clear caches
@@ -1170,7 +1103,6 @@ export class CacheService {
     // Clear tracking
     this.activeHookCounts.clear()
     this.subscribers.clear()
-    this.sharedCacheReadyCallbacks = []
 
     logger.debug('CacheService cleanup completed')
   }

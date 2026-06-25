@@ -32,6 +32,10 @@ const initialState: TabsState = {
     {
       id: 'home',
       path: '/'
+    },
+    {
+      id: 'agents',
+      path: '/agents'
     }
   ],
   activeTabId: 'home'
@@ -52,10 +56,6 @@ const tabsSlice = createSlice({
       state.activeTabId = action.payload.id
     },
     removeTab: (state, action: PayloadAction<string>) => {
-      if (state.tabs.length <= 1) {
-        return
-      }
-
       const index = state.tabs.findIndex((tab) => tab.id === action.payload)
       if (index !== -1) {
         state.tabs.splice(index, 1)
@@ -68,11 +68,7 @@ const tabsSlice = createSlice({
     updateTab: (state, action: PayloadAction<{ id: string; updates: Partial<Tab> }>) => {
       const tab = state.tabs.find((tab) => tab.id === action.payload.id)
       if (tab) {
-        const previousId = tab.id
         Object.assign(tab, action.payload.updates)
-        if (state.activeTabId === previousId && action.payload.updates.id) {
-          state.activeTabId = action.payload.updates.id
-        }
       }
     },
     setActiveTab: (state, action: PayloadAction<string>) => {

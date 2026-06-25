@@ -60,12 +60,6 @@ vi.mock('@renderer/hooks/useTabs', () => ({
   })
 }))
 
-vi.mock('@renderer/hooks/useNavbar', () => ({
-  useNavbarPosition: () => ({
-    isTopNavbar: false
-  })
-}))
-
 vi.mock('@cherrystudio/ui', async () => {
   const actual = await vi.importActual<typeof CherryStudioUI>('@cherrystudio/ui')
 
@@ -161,15 +155,6 @@ describe('MiniAppsPage', () => {
     expect(screen.getByText('ChatGPT')).toBeInTheDocument()
     expect(screen.queryByText('Gemini')).not.toBeInTheDocument()
     expect(screen.queryByText('1')).not.toBeInTheDocument()
-  })
-
-  it('trims and lowercases mini app search terms', () => {
-    render(<MiniAppsPage />)
-
-    fireEvent.change(screen.getByPlaceholderText('common.search'), { target: { value: '  GOOGLE  ' } })
-
-    expect(screen.getByText('Gemini')).toBeInTheDocument()
-    expect(screen.queryByText('ChatGPT')).not.toBeInTheDocument()
   })
 
   it('opens the selected mini app without changing the tab contract', () => {

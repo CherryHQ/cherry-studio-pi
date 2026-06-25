@@ -1,7 +1,5 @@
 import { loggerService } from '@logger'
 import db from '@renderer/databases'
-import { storageV2ConversationMirrorService } from '@renderer/services/StorageV2ConversationMirrorService'
-import store from '@renderer/store'
 
 import type { ImportResult } from '../types'
 
@@ -33,9 +31,4 @@ export async function saveImportToDatabase(result: ImportResult): Promise<void> 
     }
     logger.info(`Saved ${topics.length} topics`)
   })
-
-  await storageV2ConversationMirrorService.flushTopics(
-    topics.map((topic) => topic.id),
-    () => store.getState()
-  )
 }

@@ -67,27 +67,21 @@ vi.mock('@cherrystudio/ui', async (importOriginal) => ({
   MenuItem: ({
     label,
     icon,
-    labelClassName,
     suffix,
     active,
     ...props
   }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
     label: string
     icon?: React.ReactNode
-    labelClassName?: string
     suffix?: React.ReactNode
     active?: boolean
-  }) => {
-    void labelClassName
-
-    return (
-      <button type="button" data-active={active || undefined} {...props}>
-        {icon}
-        {label}
-        {suffix}
-      </button>
-    )
-  },
+  }) => (
+    <button type="button" data-active={active || undefined} {...props}>
+      {icon}
+      {label}
+      {suffix}
+    </button>
+  ),
   MenuList: ({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div {...props}>{children}</div>,
   RowFlex: ({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div {...props}>{children}</div>,
   Select: ({

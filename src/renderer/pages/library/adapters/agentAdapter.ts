@@ -1,7 +1,5 @@
 import { useMutation, useQuery } from '@data/hooks/useDataApi'
 import { AGENTS_MAX_LIMIT, type CreateAgentDto, type UpdateAgentDto } from '@shared/data/api/schemas/agents'
-import type { CreateAgentSessionDto } from '@shared/data/api/schemas/agentSessions'
-import type { AgentWorkspaceEntity, CreateAgentWorkspaceDto } from '@shared/data/api/schemas/agentWorkspaces'
 import { useCallback } from 'react'
 
 import type { AgentDetail } from '../types'
@@ -53,31 +51,6 @@ export function useAgentMutations() {
   return { createAgent }
 }
 
-/** Mutations used by the guided agent create flow after the agent row exists. */
-export function useAgentCreateCompanionMutations() {
-  const { trigger: createWorkspaceTrigger } = useMutation('POST', '/agent-workspaces', {
-    refresh: ['/agent-workspaces']
-  })
-  const { trigger: createSessionTrigger } = useMutation('POST', '/agent-sessions', {
-    refresh: ['/agent-sessions']
-  })
-
-  const createWorkspaceByPath = useCallback(
-    (path: string, name?: string): Promise<AgentWorkspaceEntity> => {
-      const body: CreateAgentWorkspaceDto = { path, ...(name ? { name } : {}) }
-      return createWorkspaceTrigger({ body })
-    },
-    [createWorkspaceTrigger]
-  )
-
-  const createInitialSession = useCallback(
-    (dto: CreateAgentSessionDto) => createSessionTrigger({ body: dto }),
-    [createSessionTrigger]
-  )
-
-  return { createWorkspaceByPath, createInitialSession }
-}
-
 /**
  * Mutation hook scoped to a single agent id. PATCH accepts any `AgentBase`
  * subset (typed as `UpdateAgentDto`); the backend merges at the row level.
@@ -90,7 +63,7 @@ export function useAgentMutationsById(id: string) {
     refresh: ['/agents', '/agents/*']
   })
   const { trigger: deleteTrigger } = useMutation('DELETE', path, {
-    refresh: ['/agents', '/agents/*', '/agent-sessions', '/pins']
+    refresh: ['/agents', '/agents/*']
   })
 
   const updateAgent = useCallback(

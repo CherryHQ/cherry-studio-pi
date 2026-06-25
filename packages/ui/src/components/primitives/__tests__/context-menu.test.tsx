@@ -212,29 +212,5 @@ describe('ContextMenu primitive', () => {
         portalContainer.remove()
       }
     })
-
-    it('keeps the legacy container prop working for existing callers', () => {
-      const portalContainer = document.createElement('div')
-      document.body.appendChild(portalContainer)
-
-      try {
-        render(
-          <ContextMenu>
-            <ContextMenuTrigger asChild>
-              <button type="button">Trigger</button>
-            </ContextMenuTrigger>
-            <ContextMenuContent container={portalContainer}>
-              <ContextMenuItem>Delete</ContextMenuItem>
-            </ContextMenuContent>
-          </ContextMenu>
-        )
-
-        openMenu(screen.getByText('Trigger'))
-
-        expect(portalContainer).toContainElement(screen.getByText('Delete'))
-      } finally {
-        portalContainer.remove()
-      }
-    })
   })
 })

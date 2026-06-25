@@ -34,12 +34,6 @@ const minAppsSlice = createSlice({
   name: 'minApps',
   initialState,
   reducers: {
-    hydrateMinAppsState: (_state, action: PayloadAction<Partial<MinAppsState>>) => {
-      return {
-        ...initialState,
-        ...action.payload
-      }
-    },
     setMinApps: (state, action: PayloadAction<MiniAppType[]>) => {
       state.enabled = action.payload.map((app) => ({ ...app, logo: undefined }))
     },
@@ -55,6 +49,6 @@ const minAppsSlice = createSlice({
   }
 })
 
-export const { hydrateMinAppsState, setMinApps, addMinApp, setDisabledMinApps, setPinnedMinApps } = minAppsSlice.actions
+export const { setMinApps, addMinApp, setDisabledMinApps, setPinnedMinApps } = minAppsSlice.actions
 
 export default minAppsSlice.reducer

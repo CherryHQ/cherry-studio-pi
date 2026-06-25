@@ -1,10 +1,11 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@cherrystudio/ui'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { NutstorePathSelector } from '../NutstorePathSelector'
 import { TopView } from '../TopView'
-import { useTopViewClose } from './useTopViewClose'
+
+const CLOSE_ANIMATION_MS = 200
 
 interface Props {
   fs: Nutstore.Fs
@@ -13,11 +14,20 @@ interface Props {
 
 const PopupContainer: React.FC<Props> = ({ resolve, fs }) => {
   const [open, setOpen] = useState(true)
+  const resolvedRef = useRef(false)
   const { t } = useTranslation()
-  const close = useTopViewClose<string | null>({ resolve, setOpen, topViewKey: TopViewKey })
+
+  const resolveAfterClose = () => {
+    if (resolvedRef.current) return
+    resolvedRef.current = true
+    window.setTimeout(() => {
+      resolve(null)
+    }, CLOSE_ANIMATION_MS)
+  }
 
   const onCancel = () => {
-    close(null)
+    setOpen(false)
+    resolveAfterClose()
   }
 
   const onOpenChange = (next: boolean) => {
@@ -26,15 +36,13 @@ const PopupContainer: React.FC<Props> = ({ resolve, fs }) => {
     }
   }
 
-  NutstorePathPopup.hide = onCancel
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{t('settings.data.nutstore.pathSelector.title')}</DialogTitle>
         </DialogHeader>
-        <NutstorePathSelector fs={fs} onConfirm={close} onCancel={onCancel} />
+        <NutstorePathSelector fs={fs} onConfirm={resolve} onCancel={onCancel} />
       </DialogContent>
     </Dialog>
   )
@@ -48,8 +56,17 @@ export default class NutstorePathPopup {
     TopView.hide(TopViewKey)
   }
   static show(fs: Nutstore.Fs) {
-    return new Promise<string | null>((resolve) => {
-      TopView.show(<PopupContainer fs={fs} resolve={resolve} />, TopViewKey)
+    return new Promise<any>((resolve) => {
+      TopView.show(
+        <PopupContainer
+          fs={fs}
+          resolve={(v) => {
+            resolve(v)
+            TopView.hide(TopViewKey)
+          }}
+        />,
+        TopViewKey
+      )
     })
   }
 }

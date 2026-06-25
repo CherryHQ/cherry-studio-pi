@@ -1,7 +1,6 @@
 import { loggerService } from '@logger'
 import { useProviderApiKeys } from '@renderer/hooks/useProvider'
-import { getErrorMessage } from '@renderer/utils/error'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { buildModelListSyncPreview } from '../ModelList/buildModelListSyncPreview'
@@ -32,43 +31,26 @@ export function useProviderPullReconcile(providerId: string) {
     [apiKeysData]
   )
 
-  const requestSignature = `${providerId}::${enabledKeySignature}`
-
-  // Single-flight is keyed by provider + concrete enabled-key fingerprint:
-  // rapid blur/paste of the *same* key on the same provider dedupes onto one
-  // upstream call, but switching providers or keys starts a fresh fetch. A
+  // Single-flight is keyed by the concrete enabled-key fingerprint: rapid
+  // blur/paste of the *same* key dedupes onto one upstream call, but a key
+  // change starts a fresh fetch instead of returning the stale promise. A
   // monotonic sequence guard ensures a superseded fetch never overwrites the
-  // preview produced for the newer provider/key.
+  // preview produced for the newer key.
   const inflightRef = useRef<{ signature: string; promise: Promise<ModelSyncPreviewResponse | null> } | null>(null)
   const seqRef = useRef(0)
-  const mountedRef = useRef(true)
-
-  useEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
-
-  useEffect(() => {
-    seqRef.current += 1
-    inflightRef.current = null
-    setPreview(null)
-    setIsPreviewLoading(false)
-  }, [requestSignature])
 
   const reset = useCallback(() => {
     setPreview(null)
   }, [])
 
   const fetchPreview = useCallback(async (): Promise<ModelSyncPreviewResponse | null> => {
-    const signature = requestSignature
+    const signature = enabledKeySignature
     const inflight = inflightRef.current
     if (inflight && inflight.signature === signature) {
       return inflight.promise
     }
     const seq = ++seqRef.current
-    const isCurrent = () => mountedRef.current && seqRef.current === seq
+    const isCurrent = () => seqRef.current === seq
     setIsPreviewLoading(true)
     const promise = (async () => {
       try {
@@ -76,16 +58,16 @@ export function useProviderPullReconcile(providerId: string) {
         if (isCurrent()) setPreview(next)
         return next
       } catch (error) {
+        logger.error('Pull reconcile preview failed', { providerId, error })
         if (isCurrent()) {
-          logger.error('Pull reconcile preview failed', { providerId, error })
           setPreview(null)
           if (error instanceof ModelSyncError && error.code === 'NO_ENABLED_API_KEY') {
-            window.toast?.error(t('settings.models.check.no_api_keys'))
+            window.toast.error(t('settings.models.check.no_api_keys'))
           } else {
-            window.toast?.error(t('settings.models.manage.sync_pull_failed'))
+            window.toast.error(t('settings.models.manage.sync_pull_failed'))
           }
         }
-        throw error instanceof Error ? error : new Error(getErrorMessage(error), { cause: error })
+        throw error instanceof Error ? error : new Error(String(error))
       } finally {
         if (isCurrent()) {
           setIsPreviewLoading(false)
@@ -95,7 +77,7 @@ export function useProviderPullReconcile(providerId: string) {
     })()
     inflightRef.current = { signature, promise }
     return promise
-  }, [providerId, t, requestSignature])
+  }, [providerId, t, enabledKeySignature])
 
   return {
     preview,

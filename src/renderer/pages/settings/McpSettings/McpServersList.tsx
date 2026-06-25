@@ -28,7 +28,6 @@ import { useTranslation } from 'react-i18next'
 import { SettingTitle } from '..'
 import AddMcpServerModal from './AddMcpServerModal'
 import EnvironmentDependencies from './EnvironmentDependencies'
-import { readMcpListScrollTop, writeMcpListScrollTop } from './mcpScrollStorage'
 import McpServerCard from './McpServerCard'
 
 type ImportMethod = 'json' | 'dxt' | 'mcpb'
@@ -42,9 +41,6 @@ const McpServersList: FC = () => {
   const [modalType, setModalType] = useState<ImportMethod>('json')
   const [isEditing, setIsEditing] = useState(false)
   const [filter, setFilter] = useState<'all' | 'enabled' | 'disabled' | 'stdio' | 'sse' | 'builtin'>('all')
-  const [manualAdding, setManualAdding] = useState(false)
-  const mountedRef = useRef(true)
-  const manualAddRef = useRef(false)
 
   const [searchText, _setSearchText] = useState('')
 
@@ -82,25 +78,18 @@ const McpServersList: FC = () => {
 
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
-
   // 简单的滚动位置记忆
   useEffect(() => {
     // 恢复滚动位置
-    const savedScrollTop = readMcpListScrollTop()
-    if (savedScrollTop !== null && scrollRef.current) {
-      scrollRef.current.scrollTop = savedScrollTop
+    const savedScroll = sessionStorage.getItem('mcp-list-scroll')
+    if (savedScroll && scrollRef.current) {
+      scrollRef.current.scrollTop = Number(savedScroll)
     }
 
     // 保存滚动位置
     const handleScroll = () => {
       if (scrollRef.current) {
-        writeMcpListScrollTop(scrollRef.current.scrollTop)
+        sessionStorage.setItem('mcp-list-scroll', String(scrollRef.current.scrollTop))
       }
     }
 
@@ -110,46 +99,24 @@ const McpServersList: FC = () => {
   }, [])
 
   const onAddMcpServer = useCallback(async () => {
-    if (manualAddRef.current) {
-      return
-    }
-
-    manualAddRef.current = true
-    setManualAdding(true)
-
-    try {
-      const newServer = await addMcpServer({
-        name: t('settings.mcp.newServer'),
-        description: '',
-        baseUrl: '',
-        command: '',
-        args: [],
-        env: {},
-        isActive: false
-      })
-      if (mountedRef.current) {
-        void navigate({ to: `/settings/mcp/settings/${newServer.id}` })
-        window.toast?.success(t('settings.mcp.addSuccess'))
-      }
-    } catch {
-      if (mountedRef.current) {
-        window.toast?.error(t('settings.mcp.addError'))
-      }
-    } finally {
-      manualAddRef.current = false
-      if (mountedRef.current) {
-        setManualAdding(false)
-      }
-    }
+    const newServer = await addMcpServer({
+      name: t('settings.mcp.newServer'),
+      description: '',
+      baseUrl: '',
+      command: '',
+      args: [],
+      env: {},
+      isActive: false
+    })
+    void navigate({ to: `/settings/mcp/settings/${newServer.id}` })
+    window.toast.success(t('settings.mcp.addSuccess'))
   }, [addMcpServer, navigate, t])
 
   const handleAddServerSuccess = useCallback(
     async (dto: CreateMcpServerDto): Promise<McpServer> => {
       const created = await addMcpServer(dto)
-      if (mountedRef.current) {
-        setIsAddModalVisible(false)
-        window.toast?.success(t('settings.mcp.addSuccess'))
-      }
+      setIsAddModalVisible(false)
+      window.toast.success(t('settings.mcp.addSuccess'))
       return created
     },
     [addMcpServer, t]
@@ -198,12 +165,7 @@ const McpServersList: FC = () => {
             </Button>
             <Popover open={isAddMenuOpen} onOpenChange={setIsAddMenuOpen}>
               <PopoverTrigger asChild>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="rounded-lg text-xs shadow-none"
-                  disabled={manualAdding}
-                  loading={manualAdding}>
+                <Button variant="secondary" size="sm" className="rounded-lg text-xs shadow-none">
                   <Plus size={15} />
                   {t('common.add')}
                 </Button>

@@ -74,9 +74,9 @@ const ActiveRagConfigPanel = ({ base, onRestoreBase }: RagConfigPanelProps) => {
 
     try {
       await save(values)
-      window.toast?.success(t('knowledge.rag.saved'))
+      window.toast.success(t('knowledge.rag.saved'))
     } catch (error) {
-      window.toast?.error(formatErrorMessageWithPrefix(error, t('knowledge.error.failed_to_edit')))
+      window.toast.error(formatErrorMessageWithPrefix(error, t('knowledge.error.failed_to_edit')))
     }
   }
 
@@ -97,10 +97,19 @@ const ActiveRagConfigPanel = ({ base, onRestoreBase }: RagConfigPanelProps) => {
           />
 
           <ChunkingSection
+            chunkStrategy={values.chunkStrategy}
+            chunkSeparator={values.chunkSeparator}
             chunkSize={values.chunkSize}
             chunkOverlap={values.chunkOverlap}
             chunkSizeErrorCode={validationErrorCodes.chunkSize}
             chunkOverlapErrorCode={validationErrorCodes.chunkOverlap}
+            chunkSeparatorErrorCode={validationErrorCodes.chunkSeparator}
+            onChunkStrategyChange={(chunkStrategy) =>
+              setValues((currentValues) => ({ ...currentValues, chunkStrategy }))
+            }
+            onChunkSeparatorChange={(chunkSeparator) =>
+              setValues((currentValues) => ({ ...currentValues, chunkSeparator }))
+            }
             onChunkSizeChange={(chunkSize) =>
               setValues((currentValues) => ({ ...currentValues, chunkSize: chunkSize.replace(/\D/g, '') }))
             }

@@ -151,9 +151,13 @@ describe('Hyperlink', () => {
       </Hyperlink>
     )
 
-    expect(screen.queryByTestId('popover')).toBeNull()
+    fireEvent.mouseEnter(screen.getByTestId('popover-trigger'))
+
+    // decodeURIComponent succeeds => "not/url" is displayed
     expect(screen.queryByTestId('favicon')).toBeNull()
-    expect(screen.getByText('child')).toBeInTheDocument()
+    // Since there's no hostname and no og:title, title shows empty, but text shows the URL
+    expect(screen.getByTestId('title')).toBeEmptyDOMElement()
+    expect(screen.getByTestId('text')).toHaveTextContent('not/url')
   })
 
   it('should not render favicon for non-http(s) scheme without hostname (mailto:)', () => {
@@ -163,21 +167,13 @@ describe('Hyperlink', () => {
       </Hyperlink>
     )
 
-    expect(screen.queryByTestId('popover')).toBeNull()
-    expect(screen.queryByTestId('favicon')).toBeNull()
-    expect(screen.getByText('child')).toBeInTheDocument()
-  })
+    fireEvent.mouseEnter(screen.getByTestId('popover-trigger'))
 
-  it('should not create a preview request for private network urls', () => {
-    render(
-      <Hyperlink href="http://192.168.1.100:8080/">
-        <span>child</span>
-      </Hyperlink>
-    )
-
-    expect(screen.queryByTestId('popover')).toBeNull()
+    // Decoded to mailto:test@example.com, hostname is empty => no favicon
     expect(screen.queryByTestId('favicon')).toBeNull()
-    expect(screen.getByText('child')).toBeInTheDocument()
+    // Since there's no hostname and no og:title, title shows empty, but text shows the decoded URL
+    expect(screen.getByTestId('title')).toBeEmptyDOMElement()
+    expect(screen.getByTestId('text')).toHaveTextContent('mailto:test@example.com')
   })
 
   it('should open the popover when hovering the link trigger', () => {

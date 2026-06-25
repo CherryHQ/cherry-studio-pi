@@ -10,7 +10,7 @@ import {
 import { getRestoreProgressLabelKey } from '@renderer/i18n/label'
 import { restore } from '@renderer/services/BackupService'
 import { IpcChannel } from '@shared/IpcChannel'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { TopView } from '../TopView'
@@ -29,64 +29,25 @@ interface ProgressData {
 const PopupContainer: React.FC<Props> = ({ resolve }) => {
   const [open, setOpen] = useState(true)
   const [progressData, setProgressData] = useState<ProgressData>()
-  const [running, setRunning] = useState(false)
-  const mountedRef = useRef(true)
-  const operationSeqRef = useRef(0)
-  const runningRef = useRef(false)
   const { t } = useTranslation()
   const close = useTopViewClose({ resolve, setOpen, topViewKey: TopViewKey })
 
   useEffect(() => {
-    mountedRef.current = true
-
     const removeListener = window.electron.ipcRenderer.on(IpcChannel.RestoreProgress, (_, data: ProgressData) => {
-      if (mountedRef.current) {
-        setProgressData(data)
-      }
+      setProgressData(data)
     })
 
     return () => {
-      mountedRef.current = false
-      operationSeqRef.current += 1
-      runningRef.current = false
       removeListener()
     }
   }, [])
 
-  const isCurrentRestore = (operationSeq: number) => mountedRef.current && operationSeqRef.current === operationSeq
-
   const onOk = async () => {
-    if (runningRef.current) {
-      return
-    }
-
-    const operationSeq = ++operationSeqRef.current
-    runningRef.current = true
-    setRunning(true)
-    let didClose = false
-    try {
-      await restore()
-      if (!isCurrentRestore(operationSeq)) {
-        return
-      }
-
-      didClose = true
-      close({})
-    } finally {
-      if (operationSeqRef.current === operationSeq) {
-        runningRef.current = false
-      }
-      if (!didClose && isCurrentRestore(operationSeq)) {
-        setRunning(false)
-      }
-    }
+    await restore()
+    close({})
   }
 
   const onCancel = () => {
-    if (runningRef.current) {
-      return
-    }
-
     close({})
   }
 
@@ -106,8 +67,11 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
   const isDisabled = progressData ? progressData.stage !== 'completed' : false
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && !runningRef.current && onCancel()}>
-      <DialogContent className="sm:max-w-[520px]" onPointerDownOutside={(event) => event.preventDefault()}>
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onCancel()}>
+      <DialogContent
+        closeOnOverlayClick={false}
+        className="sm:max-w-[520px]"
+        onPointerDownOutside={(event) => event.preventDefault()}>
         <DialogHeader>
           <DialogTitle>{t('restore.title')}</DialogTitle>
         </DialogHeader>
@@ -125,10 +89,10 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
           </div>
         )}
         <DialogFooter>
-          <Button variant="outline" disabled={isDisabled || running} onClick={onCancel}>
+          <Button variant="outline" disabled={isDisabled} onClick={onCancel}>
             {t('common.cancel')}
           </Button>
-          <Button disabled={isDisabled || running} loading={running} onClick={onOk}>
+          <Button disabled={isDisabled} onClick={onOk}>
             {t('restore.confirm.button')}
           </Button>
         </DialogFooter>

@@ -1,6 +1,6 @@
 import { useQuery } from '@data/hooks/useDataApi'
 import { MockCacheUtils } from '@test-mocks/renderer/CacheService'
-import { MockUseDataApiUtils, mockUseMutation } from '@test-mocks/renderer/useDataApi'
+import { MockUseDataApiUtils } from '@test-mocks/renderer/useDataApi'
 import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -48,7 +48,6 @@ describe('useAgent', () => {
       name: 'Test Agent',
       model: 'claude-3',
       type: 'claude-code',
-      disabledTools: [],
       configuration: { permission_mode: 'default', max_turns: 100, env_vars: {} },
       createdAt: '2024-01-01T00:00:00Z',
       updatedAt: '2024-01-01T00:00:00Z'
@@ -75,7 +74,6 @@ describe('useAgent', () => {
       name: 'Test Agent',
       model: 'claude-3',
       type: 'claude-code',
-      disabledTools: [],
       configuration: { avatar: '🤖' },
       createdAt: '2024-01-01T00:00:00Z',
       updatedAt: '2024-01-01T00:00:00Z'
@@ -96,7 +94,6 @@ describe('useAgent', () => {
       name: 'Test Agent',
       model: 'claude-3',
       type: 'claude-code',
-      disabledTools: [],
       // permission_mode/'invalid' fails enum check; env_vars/null fails record check.
       // max_turns/200 is well-typed and must survive.
       configuration: { permission_mode: 'invalid', env_vars: null, max_turns: 200 },
@@ -175,8 +172,7 @@ describe('useAgents', () => {
         result.current.addAgent({
           name: 'New Agent',
           model: 'anthropic::claude-3',
-          type: 'claude-code',
-          disabledTools: []
+          type: 'claude-code'
         })
       )
 
@@ -198,8 +194,7 @@ describe('useAgents', () => {
         result.current.addAgent({
           name: 'New Agent',
           model: 'anthropic::claude-3',
-          type: 'claude-code',
-          disabledTools: []
+          type: 'claude-code'
         })
       )
 
@@ -227,9 +222,6 @@ describe('useAgents', () => {
       await act(async () => result.current.deleteAgent('agent-1'))
 
       expect(mockTrigger).toHaveBeenCalledWith({ params: { agentId: 'agent-1' } })
-      expect(mockUseMutation).toHaveBeenCalledWith('DELETE', '/agents/:agentId', {
-        refresh: ['/agents', '/agent-sessions', '/pins']
-      })
       expect(mockToast.success).toHaveBeenCalledWith('common.delete_success')
     })
 
@@ -259,7 +251,6 @@ describe('useUpdateAgent', () => {
         name: 'Updated',
         model: 'claude-3',
         type: 'claude-code',
-        disabledTools: [],
         configuration: { avatar: '🤖' },
         createdAt: '2024-01-01T00:00:00Z',
         updatedAt: '2024-01-01T00:00:00Z'
@@ -282,7 +273,6 @@ describe('useUpdateAgent', () => {
         name: 'Updated',
         model: 'claude-3',
         type: 'claude-code',
-        disabledTools: [],
         configuration: {},
         createdAt: '',
         updatedAt: ''
@@ -315,7 +305,6 @@ describe('useUpdateAgent', () => {
         name: 'A',
         model: 'anthropic::new-model',
         type: 'claude-code',
-        disabledTools: [],
         configuration: {},
         createdAt: '',
         updatedAt: ''
@@ -323,13 +312,12 @@ describe('useUpdateAgent', () => {
       MockUseDataApiUtils.mockMutationWithTrigger('PATCH', '/agents/:agentId', mockTrigger)
 
       const { result } = renderHook(() => useUpdateAgent())
-      const updated = await act(async () => result.current.updateModel('agent-1', 'anthropic::new-model'))
+      await act(async () => result.current.updateModel('agent-1', 'anthropic::new-model'))
 
       expect(mockTrigger).toHaveBeenCalledWith({
         params: { agentId: 'agent-1' },
         body: { model: 'anthropic::new-model' }
       })
-      expect(updated?.model).toBe('anthropic::new-model')
     })
   })
 })

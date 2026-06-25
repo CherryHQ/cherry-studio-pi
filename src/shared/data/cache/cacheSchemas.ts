@@ -308,12 +308,27 @@ export const DefaultSharedCache: SharedCacheSchema = {
  */
 export type RendererPersistCacheSchema = {
   'ui.tab.pinned_tabs': CacheValueTypes.Tab[]
+  'ui.global_search.recent_items': CacheValueTypes.GlobalSearchRecentEntry[]
   'ui.sidebar.docked_tabs': CacheValueTypes.Tab[]
   'ui.sidebar.width': number
+  'ui.chat.sidebar.width': number
+  'ui.chat.artifact_pane.width': number
+  'ui.chat.artifact_pane.file_tree.width': number
+  'ui.chat.last_used_assistant_id': string | null
+  'ui.chat.last_used_topic_id': string | null
+  'ui.topic.expansion.time': string[]
+  'ui.topic.expansion.assistant': string[]
+  'ui.agent.last_used_session_id': string | null
+  'ui.agent.last_used_agent_id': string | null
+  'ui.agent.last_used_workspace_id': string | null
+  'ui.agent.session.expansion.time': string[]
+  'ui.agent.session.expansion.agent': string[]
+  'ui.agent.session.expansion.workdir': string[]
   'settings.provider.last_selected_provider_id': string | null
   'settings.provider.openai.alert.dismissed': boolean
   'feature.mcp.is_uv_installed': boolean
   'feature.mcp.is_bun_installed': boolean
+  'agent.open_external_app.last_used_target': CacheValueTypes.AgentOpenExternalAppTarget
   // Multi-model list for @mention parallel answering, keyed by assistantId
   // This is UI-level state, not core assistant config (default model is assistant.modelId)
   'ui.assistant.multi_model_ids': Record<string, string[]>
@@ -323,12 +338,27 @@ export type RendererPersistCacheSchema = {
 
 export const DefaultRendererPersistCache: RendererPersistCacheSchema = {
   'ui.tab.pinned_tabs': [],
+  'ui.global_search.recent_items': [],
   'ui.sidebar.docked_tabs': [],
   'ui.sidebar.width': 50, // keep in sync with SIDEBAR_ICON_WIDTH (renderer Sidebar/constants.ts)
+  'ui.chat.sidebar.width': 275,
+  'ui.chat.artifact_pane.width': 460,
+  'ui.chat.artifact_pane.file_tree.width': 160,
+  'ui.chat.last_used_assistant_id': null,
+  'ui.chat.last_used_topic_id': null,
+  'ui.topic.expansion.time': [],
+  'ui.topic.expansion.assistant': [],
+  'ui.agent.last_used_session_id': null,
+  'ui.agent.last_used_agent_id': null,
+  'ui.agent.last_used_workspace_id': null,
+  'ui.agent.session.expansion.time': [],
+  'ui.agent.session.expansion.agent': [],
+  'ui.agent.session.expansion.workdir': [],
   'settings.provider.last_selected_provider_id': null,
   'settings.provider.openai.alert.dismissed': false,
   'feature.mcp.is_uv_installed': false,
   'feature.mcp.is_bun_installed': false,
+  'agent.open_external_app.last_used_target': null,
   'ui.assistant.multi_model_ids': {},
   'ui.emoji.recently_used': []
 }
@@ -424,6 +454,49 @@ function sanitizeStringArray(value: unknown): string[] | null {
   return value.filter((item): item is string => typeof item === 'string' && item.length > 0)
 }
 
+function sanitizeNullableString(value: unknown): string | null | undefined {
+  if (value === null || typeof value === 'string') return value
+  return undefined
+}
+
+function sanitizeGlobalSearchRecentEntries(value: unknown): CacheValueTypes.GlobalSearchRecentEntry[] | null {
+  if (!Array.isArray(value)) return null
+
+  return value.flatMap((item): CacheValueTypes.GlobalSearchRecentEntry[] => {
+    if (!isRecordValue(item) || typeof item.kind !== 'string') return []
+    if (typeof item.title !== 'string') return []
+    if (typeof item.lastAccessTime !== 'number' || !Number.isFinite(item.lastAccessTime)) return []
+
+    switch (item.kind) {
+      case 'route':
+        if (typeof item.url !== 'string') return []
+        return [
+          {
+            kind: 'route',
+            url: item.url,
+            title: item.title,
+            icon: typeof item.icon === 'string' ? item.icon : undefined,
+            lastAccessTime: item.lastAccessTime
+          }
+        ]
+      case 'topic':
+        if (typeof item.topicId !== 'string') return []
+        return [{ kind: 'topic', topicId: item.topicId, title: item.title, lastAccessTime: item.lastAccessTime }]
+      case 'session':
+        if (typeof item.sessionId !== 'string') return []
+        return [{ kind: 'session', sessionId: item.sessionId, title: item.title, lastAccessTime: item.lastAccessTime }]
+      default:
+        return []
+    }
+  })
+}
+
+function sanitizeOpenExternalAppTarget(value: unknown): CacheValueTypes.AgentOpenExternalAppTarget | undefined {
+  if (value === null) return null
+  if (value === 'vscode' || value === 'cursor' || value === 'zed' || value === 'file_manager') return value
+  return undefined
+}
+
 function sanitizeMultiModelIds(value: unknown): Record<string, string[]> | null {
   if (!isRecordValue(value)) return null
 
@@ -444,14 +517,32 @@ function sanitizeRendererPersistCacheEntry(key: RendererPersistCacheKey, value: 
     case 'ui.tab.pinned_tabs':
     case 'ui.sidebar.docked_tabs':
       return sanitizePersistTabs(value)
+    case 'ui.global_search.recent_items':
+      return sanitizeGlobalSearchRecentEntries(value)
     case 'ui.sidebar.width':
+    case 'ui.chat.sidebar.width':
+    case 'ui.chat.artifact_pane.width':
+    case 'ui.chat.artifact_pane.file_tree.width':
       return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined
+    case 'ui.chat.last_used_assistant_id':
+    case 'ui.chat.last_used_topic_id':
+    case 'ui.agent.last_used_session_id':
+    case 'ui.agent.last_used_agent_id':
+    case 'ui.agent.last_used_workspace_id':
     case 'settings.provider.last_selected_provider_id':
-      return value === null || typeof value === 'string' ? value : undefined
+      return sanitizeNullableString(value)
     case 'settings.provider.openai.alert.dismissed':
     case 'feature.mcp.is_uv_installed':
     case 'feature.mcp.is_bun_installed':
       return typeof value === 'boolean' ? value : undefined
+    case 'ui.topic.expansion.time':
+    case 'ui.topic.expansion.assistant':
+    case 'ui.agent.session.expansion.time':
+    case 'ui.agent.session.expansion.agent':
+    case 'ui.agent.session.expansion.workdir':
+      return sanitizeStringArray(value)
+    case 'agent.open_external_app.last_used_target':
+      return sanitizeOpenExternalAppTarget(value)
     case 'ui.assistant.multi_model_ids':
       return sanitizeMultiModelIds(value)
     case 'ui.emoji.recently_used':

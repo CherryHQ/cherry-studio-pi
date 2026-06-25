@@ -8,18 +8,16 @@ import { useTheme } from '@renderer/context/ThemeProvider'
 import { useAppUpdateState } from '@renderer/hooks/useAppUpdate'
 import { useMiniAppPopup } from '@renderer/hooks/useMiniAppPopup'
 import i18n from '@renderer/i18n'
-import { runAsyncFunction } from '@renderer/utils'
-import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
-import { UpgradeChannel } from '@shared/data/preference/preferenceTypes'
+import { ipcApi } from '@renderer/ipc'
+import { ThemeMode, UpgradeChannel } from '@shared/data/preference/preferenceTypes'
 import { debounce } from 'lodash'
 import { BadgeQuestionMark, Briefcase, Bug, Building2, Github, Globe, Mail, Rss } from 'lucide-react'
 import type { FC, ReactNode } from 'react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Streamdown } from 'streamdown'
 
 import { SettingGroup, SettingRow, SettingRowTitle, SettingsContentColumn, SettingTitle } from '.'
-import { buildAboutReleaseNotesUrl } from './aboutReleaseNotesUrl'
 
 const AboutSettings: FC = () => {
   const [autoCheckUpdate, setAutoCheckUpdate] = usePreference('app.dist.auto_update.enabled')
@@ -34,60 +32,34 @@ const AboutSettings: FC = () => {
 
   const { appUpdateState, updateAppUpdateState } = useAppUpdateState()
 
-  const showSaveFailed = useCallback(
-    (error: unknown) => {
-      window.toast?.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+  const onCheckUpdate = debounce(
+    async () => {
+      if (appUpdateState.checking || appUpdateState.downloading) {
+        return
+      }
+
+      if (appUpdateState.downloaded) {
+        void UpdateDialogPopup.show({ releaseInfo: appUpdateState.info || null })
+        return
+      }
+
+      updateAppUpdateState({ checking: true, manualCheck: true })
+
+      try {
+        await ipcApi.request('app.updater.check_for_update')
+      } catch {
+        updateAppUpdateState({ manualCheck: false })
+        window.toast.error(t('settings.about.updateError'))
+      }
+
+      updateAppUpdateState({ checking: false })
     },
-    [t]
+    2000,
+    { leading: true, trailing: false }
   )
-  const showOperationFailed = useCallback(
-    (error: unknown) => {
-      window.toast?.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
-    },
-    [t]
-  )
-
-  const onCheckUpdate = useMemo(
-    () =>
-      debounce(
-        async () => {
-          if (appUpdateState.checking || appUpdateState.downloading) {
-            return
-          }
-
-          if (appUpdateState.downloaded) {
-            void UpdateDialogPopup.show({ releaseInfo: appUpdateState.info || null })
-            return
-          }
-
-          updateAppUpdateState({ checking: true, manualCheck: true })
-
-          try {
-            await window.api.checkForUpdate()
-          } catch {
-            updateAppUpdateState({ manualCheck: false })
-            window.toast?.error(t('settings.about.updateError'))
-          }
-
-          updateAppUpdateState({ checking: false })
-        },
-        2000,
-        { leading: true, trailing: false }
-      ),
-    [
-      appUpdateState.checking,
-      appUpdateState.downloading,
-      appUpdateState.downloaded,
-      appUpdateState.info,
-      t,
-      updateAppUpdateState
-    ]
-  )
-
-  useEffect(() => () => onCheckUpdate.cancel(), [onCheckUpdate])
 
   const onOpenWebsite = (url: string) => {
-    void window.api.openWebsite(url).catch(showOperationFailed)
+    void window.api.openWebsite(url)
   }
 
   const mailto = async () => {
@@ -110,9 +82,9 @@ const AboutSettings: FC = () => {
   const showReleases = async () => {
     const { appPath } = await window.api.getAppInfo()
     openSmartMiniApp({
-      appId: 'cherrystudio-pi-releases',
+      appId: 'cherrystudio-releases',
       name: t('settings.about.releases.title'),
-      url: buildAboutReleaseNotesUrl(appPath, theme),
+      url: `file://${appPath}/resources/cherry-studio/releases.html?theme=${theme === ThemeMode.dark ? 'dark' : 'light'}`,
       logo: AppLogo
     })
   }
@@ -125,21 +97,17 @@ const AboutSettings: FC = () => {
 
   const handleTestChannelChange = async (value: UpgradeChannel) => {
     if (testPlan && currentChannelByVersion !== UpgradeChannel.LATEST && value !== currentChannelByVersion) {
-      window.toast?.warning(t('settings.general.test_plan.version_channel_not_match'))
+      window.toast.warning(t('settings.general.test_plan.version_channel_not_match'))
     }
-    try {
-      await setTestChannel(value)
-      updateAppUpdateState({
-        available: false,
-        info: null,
-        downloaded: false,
-        checking: false,
-        downloading: false,
-        downloadProgress: 0
-      })
-    } catch (error) {
-      showSaveFailed(error)
-    }
+    void setTestChannel(value)
+    updateAppUpdateState({
+      available: false,
+      info: null,
+      downloaded: false,
+      checking: false,
+      downloading: false,
+      downloadProgress: 0
+    })
   }
 
   const getAvailableTestChannels = () => {
@@ -157,24 +125,19 @@ const AboutSettings: FC = () => {
     ]
   }
 
-  const handleSetTestPlan = async (value: boolean) => {
-    try {
-      await setTestPlan(value)
+  const handleSetTestPlan = (value: boolean) => {
+    void setTestPlan(value)
+    updateAppUpdateState({
+      available: false,
+      info: null,
+      downloaded: false,
+      checking: false,
+      downloading: false,
+      downloadProgress: 0
+    })
 
-      if (value === true) {
-        await setTestChannel(getTestChannel())
-      }
-
-      updateAppUpdateState({
-        available: false,
-        info: null,
-        downloaded: false,
-        checking: false,
-        downloading: false,
-        downloadProgress: 0
-      })
-    } catch (error) {
-      showSaveFailed(error)
+    if (value === true) {
+      void setTestChannel(getTestChannel())
     }
   }
 
@@ -186,26 +149,16 @@ const AboutSettings: FC = () => {
   }
 
   useEffect(() => {
-    void runAsyncFunction(async () => {
+    void (async () => {
       const appInfo = await window.api.getAppInfo()
       setVersion(appInfo.version)
       setIsPortable(appInfo.isPortable)
-    })
+    })()
   }, [])
-
-  const handleAutoCheckUpdateChange = async (value: boolean) => {
-    try {
-      await setAutoCheckUpdate(value)
-    } catch (error) {
-      showSaveFailed(error)
-    }
-  }
 
   const onOpenDocs = () => {
     const isChinese = i18n.language.startsWith('zh')
-    void window.api
-      .openWebsite(isChinese ? 'https://docs.cherry-ai.com/' : 'https://docs.cherry-ai.com/docs/en-us')
-      .catch(showOperationFailed)
+    void window.api.openWebsite(isChinese ? 'https://docs.cherry-ai.com/' : 'https://docs.cherry-ai.com/docs/en-us')
   }
 
   const testChannels = getAvailableTestChannels()
@@ -217,8 +170,8 @@ const AboutSettings: FC = () => {
           <span className="font-semibold text-[15px]">{t('settings.about.title')}</span>
           <button
             type="button"
-            onClick={() => onOpenWebsite('https://github.com/CherryHQ/cherry-studio-pi')}
-            className="inline-flex items-center justify-center rounded-md p-1 text-(--color-foreground) transition-colors hover:bg-(--color-muted)">
+            onClick={() => onOpenWebsite('https://github.com/CherryHQ/cherry-studio')}
+            className="inline-flex items-center justify-center rounded-md p-1 text-foreground transition-colors hover:bg-muted">
             <Github className="size-5" />
           </button>
         </SettingTitle>
@@ -229,7 +182,7 @@ const AboutSettings: FC = () => {
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <button
               type="button"
-              onClick={() => onOpenWebsite('https://github.com/CherryHQ/cherry-studio-pi')}
+              onClick={() => onOpenWebsite('https://github.com/CherryHQ/cherry-studio')}
               className="relative cursor-pointer">
               {appUpdateState.downloadProgress > 0 && (
                 <div className="-top-0.5 -left-0.5 pointer-events-none absolute">
@@ -251,7 +204,7 @@ const AboutSettings: FC = () => {
               <div className="text-foreground-secondary text-sm">{t('settings.about.description')}</div>
               <button
                 type="button"
-                onClick={() => onOpenWebsite('https://github.com/CherryHQ/cherry-studio-pi/releases')}
+                onClick={() => onOpenWebsite('https://github.com/CherryHQ/cherry-studio/releases')}
                 className="mt-1.5">
                 <Badge className="cursor-pointer rounded-md border-primary/20 bg-primary/10 px-1.5 py-0 font-medium text-[11px] text-primary leading-4 transition-colors hover:bg-primary/15">
                   v{version}
@@ -284,7 +237,7 @@ const AboutSettings: FC = () => {
             <Divider className="my-3" />
             <SettingRow className="gap-3">
               <SettingRowTitle>{t('settings.general.auto_check_update.title')}</SettingRowTitle>
-              <Switch checked={autoCheckUpdate} onCheckedChange={handleAutoCheckUpdateChange} />
+              <Switch checked={autoCheckUpdate} onCheckedChange={(v) => setAutoCheckUpdate(v)} />
             </SettingRow>
 
             <Divider className="my-3" />
@@ -364,7 +317,7 @@ const AboutSettings: FC = () => {
           icon={<Github className="size-4.5" />}
           title={t('settings.about.feedback.title')}
           actionLabel={t('settings.about.feedback.button')}
-          onAction={() => onOpenWebsite('https://github.com/CherryHQ/cherry-studio-pi/issues/new/choose')}
+          onAction={() => onOpenWebsite('https://github.com/CherryHQ/cherry-studio/issues/new/choose')}
         />
         <Divider className="my-3" />
         <AboutActionRow
@@ -410,24 +363,13 @@ function AboutActionRow({
   onAction: () => void | Promise<void>
   title: string
 }) {
-  const handleAction = async () => {
-    await onAction()
-  }
-
   return (
     <SettingRow className="gap-3">
       <SettingRowTitle className="gap-2.5">
         {icon}
         {title}
       </SettingRowTitle>
-      <Button
-        size="sm"
-        onClick={() => {
-          void handleAction().catch((error) => {
-            window.toast?.error(formatErrorMessageWithPrefix(error, i18n.t('common.operation_failed')))
-          })
-        }}
-        variant="outline">
+      <Button size="sm" onClick={() => void onAction()} variant="outline">
         {actionLabel}
       </Button>
     </SettingRow>

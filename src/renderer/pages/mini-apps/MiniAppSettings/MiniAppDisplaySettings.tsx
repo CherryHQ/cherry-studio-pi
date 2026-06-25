@@ -1,7 +1,6 @@
 import { Button, PageSidePanelItem, PageSidePanelSection, Slider, Switch, Tooltip } from '@cherrystudio/ui'
 import { usePreference } from '@data/hooks/usePreference'
 import Selector from '@renderer/components/Selector'
-import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import type { MiniAppRegionFilter } from '@shared/data/types/miniApp'
 import { Undo2 } from 'lucide-react'
 import type { FC } from 'react'
@@ -22,8 +21,6 @@ const MiniAppDisplaySettings: FC = () => {
   const [region = 'auto', setRegion] = usePreference('feature.mini_app.region')
 
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const showSaveFailed = useSaveFailedToast()
-
   useEffect(
     () => () => {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
@@ -33,25 +30,19 @@ const MiniAppDisplaySettings: FC = () => {
 
   const handleResetCacheLimit = useCallback(() => {
     void setMaxKeepAlive(DEFAULT_MAX_KEEPALIVE)
-      .then(() => {
-        window.toast?.info(t('settings.miniApps.cache_change_notice'))
-      })
-      .catch(showSaveFailed)
-  }, [t, setMaxKeepAlive, showSaveFailed])
+    window.toast.info(t('settings.miniApps.cache_change_notice'))
+  }, [t, setMaxKeepAlive])
 
   const handleCacheChange = useCallback(
     (value: number) => {
       void setMaxKeepAlive(value)
-        .then(() => {
-          if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
-          debounceTimerRef.current = setTimeout(() => {
-            window.toast?.info(t('settings.miniApps.cache_change_notice'))
-            debounceTimerRef.current = null
-          }, 500)
-        })
-        .catch(showSaveFailed)
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+      debounceTimerRef.current = setTimeout(() => {
+        window.toast.info(t('settings.miniApps.cache_change_notice'))
+        debounceTimerRef.current = null
+      }, 500)
     },
-    [t, setMaxKeepAlive, showSaveFailed]
+    [t, setMaxKeepAlive]
   )
 
   const regionOptions: { value: MiniAppRegionFilter; label: string }[] = [
@@ -71,7 +62,7 @@ const MiniAppDisplaySettings: FC = () => {
             <Selector
               size={14}
               value={region}
-              onChange={(v: MiniAppRegionFilter) => void setRegion(v).catch(showSaveFailed)}
+              onChange={(v: MiniAppRegionFilter) => setRegion(v)}
               options={regionOptions}
             />
           }
@@ -80,12 +71,7 @@ const MiniAppDisplaySettings: FC = () => {
         <PageSidePanelItem
           title={t('settings.miniApps.open_link_external.title')}
           description={t('settings.miniApps.open_link_external.description')}
-          action={
-            <Switch
-              checked={openLinkExternal}
-              onCheckedChange={(v) => void setOpenLinkExternal(v).catch(showSaveFailed)}
-            />
-          }
+          action={<Switch checked={openLinkExternal} onCheckedChange={(v) => setOpenLinkExternal(v)} />}
         />
 
         <PageSidePanelItem

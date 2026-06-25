@@ -1,10 +1,8 @@
 import type { SerializedError } from '@renderer/types/error'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-// Mock fetchGenerate and fetchModels
 vi.mock('../ApiService', () => ({
-  fetchGenerate: vi.fn(),
-  fetchModels: vi.fn().mockResolvedValue([])
+  fetchGenerate: vi.fn()
 }))
 
 // `readDefaultModel` now reads from preferenceService + dataApiService, not Redux.
@@ -13,17 +11,9 @@ vi.mock('../ModelService', () => ({
   readDefaultModel: vi.fn().mockResolvedValue(undefined)
 }))
 
-vi.mock('@renderer/store', () => ({
-  default: {
-    getState: vi.fn()
-  }
-}))
-
 // Mock CHERRYAI_PROVIDER
 vi.mock('@renderer/config/providers', () => ({
-  CHERRYAI_PROVIDER: { id: 'cherryai', type: 'openai', apiHost: 'https://api.cherry-ai.com', models: [] },
-  INITIAL_STATE_EXCLUDED_PROVIDER_IDS: [],
-  SYSTEM_PROVIDERS_CONFIG: {}
+  CHERRYAI_PROVIDER: { id: 'cherryai', type: 'openai', apiHost: 'https://api.cherry-ai.com', models: [] }
 }))
 
 // Mock LoggerService
@@ -38,15 +28,11 @@ vi.mock('@renderer/services/LoggerService', () => ({
   }
 }))
 
-import store from '@renderer/store'
-
-import { fetchGenerate, fetchModels } from '../ApiService'
+import { fetchGenerate } from '../ApiService'
 import { diagnoseError } from '../ErrorDiagnosisService'
 import { readDefaultModel } from '../ModelService'
 
 const mockFetchGenerate = vi.mocked(fetchGenerate)
-const mockFetchModels = vi.mocked(fetchModels)
-const mockGetState = vi.mocked(store.getState)
 const mockReadDefaultModel = vi.mocked(readDefaultModel)
 
 function makeError(overrides: Partial<SerializedError> = {}): SerializedError {
@@ -62,11 +48,6 @@ vi.mock('@renderer/ipc', () => ({
 describe('ErrorDiagnosisService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockGetState.mockReturnValue({
-      llm: { defaultModel: null }
-    } as any)
-    // Default: CherryAI returns a free model as fallback
-    mockFetchModels.mockResolvedValue([{ id: 'qwen', name: 'Qwen', provider: 'cherryai' }] as any)
     mockListModels.mockResolvedValue([{ id: 'qwen', name: 'Qwen', provider: 'cherryai' }])
   })
 
@@ -104,17 +85,9 @@ describe('ErrorDiagnosisService', () => {
       await expect(diagnoseError(makeError(), 'en')).rejects.toThrow()
     })
 
-    it('returns a readable fallback when the model responds with non-JSON text', async () => {
-      mockFetchGenerate.mockResolvedValue('The API key looks invalid. Check provider settings.')
-
-      const result = await diagnoseError(makeError(), 'en')
-
-      expect(result).toEqual({
-        summary: 'The API key looks invalid. Check provider settings.',
-        category: 'unknown',
-        explanation: 'The API key looks invalid. Check provider settings.',
-        steps: []
-      })
+    it('throws on invalid JSON from all models', async () => {
+      mockFetchGenerate.mockResolvedValue('not valid json')
+      await expect(diagnoseError(makeError(), 'en')).rejects.toThrow()
     })
 
     it('throws on missing required fields', async () => {
@@ -139,7 +112,6 @@ describe('ErrorDiagnosisService', () => {
     })
 
     it('falls back to defaultModel when CherryAI is unavailable', async () => {
-      mockFetchModels.mockResolvedValue([])
       mockListModels.mockResolvedValue([])
       const customModel = { id: 'gpt-4', name: 'GPT-4', provider: 'openai' }
       mockReadDefaultModel.mockResolvedValueOnce(customModel as any)
@@ -170,25 +142,6 @@ describe('ErrorDiagnosisService', () => {
         expect.objectContaining({
           model: expect.objectContaining({ id: 'qwen' })
         })
-      )
-    })
-
-    it('still diagnoses with CherryAI when reading the default model fails', async () => {
-      mockReadDefaultModel.mockRejectedValueOnce(new Error('default model unavailable'))
-      mockFetchGenerate.mockResolvedValue(
-        JSON.stringify({
-          summary: 'Error',
-          category: 'unknown',
-          explanation: 'Something went wrong.',
-          steps: []
-        })
-      )
-
-      const result = await diagnoseError(makeError(), 'en')
-
-      expect(result.summary).toBe('Error')
-      expect(mockFetchGenerate.mock.calls[0][0]).toEqual(
-        expect.objectContaining({ model: expect.objectContaining({ id: 'qwen' }) })
       )
     })
 
@@ -224,21 +177,6 @@ describe('ErrorDiagnosisService', () => {
 
       const result = await diagnoseError(makeError(), 'en')
       expect(result.category).toBe('unknown')
-    })
-
-    it('drops malformed diagnosis steps instead of passing undefined text to the UI', async () => {
-      mockFetchGenerate.mockResolvedValue(
-        JSON.stringify({
-          summary: 'Error',
-          category: 'unknown',
-          explanation: 'Something went wrong.',
-          steps: ['Check settings', { text: 'Retry sync' }, { text: '   ' }, {}, null]
-        })
-      )
-
-      const result = await diagnoseError(makeError(), 'en')
-
-      expect(result.steps).toEqual([{ text: 'Check settings' }, { text: 'Retry sync' }])
     })
   })
 })

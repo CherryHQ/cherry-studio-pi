@@ -1,6 +1,5 @@
 import { loggerService } from '@logger'
 import { getBackupData } from '@renderer/services/BackupService'
-import { getErrorMessage } from '@renderer/utils/error'
 import type { LanTransferPeer } from '@shared/types/lanTransfer'
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -211,17 +210,11 @@ export function useLanTransfer(): UseLanTransferReturn {
         } else {
           dispatch({
             type: 'UPDATE_TRANSFER_STATE',
-            payload: {
-              peerId,
-              state: {
-                status: 'failed',
-                error: getErrorMessage(result.error, t('settings.data.export_to_phone.lan.transfer_failed'))
-              }
-            }
+            payload: { peerId, state: { status: 'failed', error: result.error } }
           })
         }
       } catch (error) {
-        const message = getErrorMessage(error, t('settings.data.export_to_phone.lan.transfer_failed'))
+        const message = error instanceof Error ? error.message : String(error)
         dispatch({
           type: 'UPDATE_TRANSFER_STATE',
           payload: { peerId, state: { status: 'failed', error: message } }

@@ -1,6 +1,6 @@
 import { Tooltip } from '@cherrystudio/ui'
 import { Icon } from '@iconify/react'
-import type { McpToolResponse, NormalToolResponse } from '@renderer/types'
+import type { McpToolResponse, NormalToolResponse } from '@renderer/types/mcpTool'
 import { getFileIconName } from '@renderer/utils/fileIconName'
 import { REPORT_ARTIFACTS_TOOL_NAME, reportArtifactsInputSchema } from '@shared/ai/builtinTools'
 import { ExternalLink } from 'lucide-react'
@@ -128,7 +128,10 @@ export const MessageReportArtifacts = ({
 }: {
   toolResponses: readonly ReportArtifactsToolResponse[]
 }) => {
-  const viewModel = getReportArtifactsViewModel(toolResponses)
+  // Memoised: `getReportArtifactsViewModel` zod-parses each response, and this
+  // card re-renders on every streaming tick. `toolResponses` is already a stable
+  // memoised ref from `MessagePartsRenderer`, so this skips re-parsing per tick.
+  const viewModel = useMemo(() => getReportArtifactsViewModel(toolResponses), [toolResponses])
   if (!viewModel) return null
 
   return (

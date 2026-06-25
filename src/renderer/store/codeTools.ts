@@ -16,7 +16,7 @@
  */
 import type { PayloadAction } from '@reduxjs/toolkit'
 import { createSlice } from '@reduxjs/toolkit'
-import type { Model } from '@renderer/types'
+import type { Model } from '@renderer/types/model'
 import { codeCLI, terminalApps } from '@shared/types/codeCli'
 
 // 常量定义
@@ -66,12 +66,6 @@ const codeToolsSlice = createSlice({
   name: 'codeTools',
   initialState,
   reducers: {
-    hydrateCodeToolsState: (_state, action: PayloadAction<Partial<CodeToolsState>>) => {
-      return {
-        ...initialState,
-        ...action.payload
-      }
-    },
     // 设置选择的 CLI 工具
     setSelectedCliTool: (state, action: PayloadAction<codeCLI>) => {
       state.selectedCliTool = action.payload
@@ -161,7 +155,6 @@ const codeToolsSlice = createSlice({
 })
 
 export const {
-  hydrateCodeToolsState,
   setSelectedCliTool,
   setSelectedTerminal,
   setSelectedModel,

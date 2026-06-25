@@ -1,29 +1,19 @@
 import { useCache } from '@data/hooks/useCache'
 import UpdateDialogPopup from '@renderer/components/Popups/UpdateDialogPopup'
-import { notificationService } from '@renderer/services/NotificationService'
-import { uuid } from '@renderer/utils'
+import { notificationService } from '@renderer/services/notification'
+import { uuid } from '@renderer/utils/uuid'
 import type { CacheAppUpdateState } from '@shared/data/cache/cacheValueTypes'
 import { IpcChannel } from '@shared/IpcChannel'
 import type { ProgressInfo, UpdateInfo } from 'builder-util-runtime'
-import { useCallback, useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 export const useAppUpdateState = () => {
   const [appUpdateState, setAppUpdateState] = useCache('app.dist.update_state')
-  const appUpdateStateRef = useRef(appUpdateState)
 
-  useEffect(() => {
-    appUpdateStateRef.current = appUpdateState
-  }, [appUpdateState])
-
-  const updateAppUpdateState = useCallback(
-    (state: Partial<CacheAppUpdateState>) => {
-      const nextState = { ...appUpdateStateRef.current, ...state }
-      appUpdateStateRef.current = nextState
-      setAppUpdateState(nextState)
-    },
-    [setAppUpdateState]
-  )
+  const updateAppUpdateState = (state: Partial<CacheAppUpdateState>) => {
+    setAppUpdateState({ ...appUpdateState, ...state })
+  }
 
   return {
     appUpdateState,
@@ -34,8 +24,9 @@ export const useAppUpdateState = () => {
 //TODO: 这个函数是从useUpdateHandler中复制过来的，是v2数据重构时调整的，但这个函数本身需要重构和优化（并不需要用在use中）。by fullex
 export function useAppUpdateHandler() {
   const { t } = useTranslation()
-  const { appUpdateState, updateAppUpdateState } = useAppUpdateState()
+  const { updateAppUpdateState } = useAppUpdateState()
   // notificationService is imported as a module-level singleton
+  const { appUpdateState } = useAppUpdateState()
   const manualCheckRef = useRef(appUpdateState.manualCheck)
 
   // Keep ref in sync with current state
@@ -52,7 +43,7 @@ export function useAppUpdateHandler() {
       ipcRenderer.on(IpcChannel.UpdateNotAvailable, () => {
         updateAppUpdateState({ checking: false, manualCheck: false })
         if (window.location.hash.includes('settings/about')) {
-          window.toast?.success(t('settings.about.updateNotAvailable'))
+          window.toast.success(t('settings.about.updateNotAvailable'))
         }
       }),
       ipcRenderer.on(IpcChannel.UpdateAvailable, (_, releaseInfo: UpdateInfo) => {

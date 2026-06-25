@@ -23,7 +23,6 @@ vi.mock('@cherrystudio/ui', () => {
     DialogContent: ({ children, ...props }) => {
       delete props.showCloseButton
       delete props.onInteractOutside
-      delete props.overlayClassName
 
       return React.createElement('div', { role: 'dialog', ...props }, children)
     },
@@ -110,78 +109,6 @@ describe('AppModalProvider', () => {
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
 
     await expect(confirmed!).resolves.toBe(false)
-  })
-
-  it('keeps the modal usable when onOk rejects before toast is available', async () => {
-    const user = userEvent.setup()
-    Object.defineProperty(window, 'toast', {
-      configurable: true,
-      value: undefined
-    })
-    const modal = await renderModalProvider()
-    const onOk = vi.fn().mockRejectedValue(new Error('failed'))
-
-    let confirmed: ReturnType<AppModalApi['confirm']>
-    act(() => {
-      confirmed = modal.confirm({
-        title: 'Retry action',
-        content: 'The first attempt fails.',
-        okText: 'Run',
-        cancelText: 'Cancel',
-        onOk
-      })
-    })
-
-    await user.click(await screen.findByRole('button', { name: 'Run' }))
-
-    await waitFor(() => {
-      expect(onOk).toHaveBeenCalledOnce()
-    })
-    expect(screen.getByText('Retry action')).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Cancel' }))
-
-    await expect(confirmed!).resolves.toBe(false)
-  })
-
-  it('does not run onOk more than once while confirmation is pending', async () => {
-    const user = userEvent.setup()
-    const modal = await renderModalProvider()
-    let resolveOk: () => void = () => {}
-    const onOk = vi.fn(
-      () =>
-        new Promise<void>((resolve) => {
-          resolveOk = resolve
-        })
-    )
-
-    let confirmed: ReturnType<AppModalApi['confirm']>
-    act(() => {
-      confirmed = modal.confirm({
-        title: 'Upload backup',
-        content: 'This may take a while.',
-        okText: 'Upload',
-        cancelText: 'Cancel',
-        onOk
-      })
-    })
-
-    const okButton = await screen.findByRole('button', { name: 'Upload' })
-    await act(async () => {
-      await user.dblClick(okButton)
-    })
-
-    await waitFor(() => {
-      expect(onOk).toHaveBeenCalledOnce()
-    })
-    expect(screen.getByRole('button', { name: 'Upload' })).toBeDisabled()
-
-    await act(async () => {
-      resolveOk()
-      await Promise.resolve()
-    })
-
-    await expect(confirmed!).resolves.toBe(true)
   })
 
   it('resolves confirm as false when cancelled', async () => {
@@ -300,30 +227,6 @@ describe('AppModalProvider', () => {
 
     await expect(first!).resolves.toBe(false)
     await expect(second!).resolves.toBe(false)
-  })
-
-  it('resolves open modals as cancelled when the provider unmounts', async () => {
-    let modal: AppModalApi | undefined
-    const afterClose = vi.fn()
-    const view = render(<AppModalProvider onReady={(api) => (modal = api)} />)
-
-    await waitFor(() => {
-      expect(modal).toBeDefined()
-    })
-
-    let pendingModal: ReturnType<AppModalApi['info']>
-    act(() => {
-      pendingModal = modal!.info({ title: 'Unmounted modal', afterClose })
-    })
-
-    await waitFor(() => {
-      expect(screen.getByText('Unmounted modal')).toBeInTheDocument()
-    })
-
-    view.unmount()
-
-    await expect(pendingModal!).resolves.toBe(false)
-    expect(afterClose).toHaveBeenCalledTimes(1)
   })
 
   it('keeps the modal mounted until the close animation finishes', async () => {

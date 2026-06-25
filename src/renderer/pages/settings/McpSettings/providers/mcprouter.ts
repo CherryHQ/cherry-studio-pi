@@ -1,11 +1,7 @@
 import { loggerService } from '@logger'
-import type { McpServer } from '@renderer/types'
-import { APP_NAME } from '@shared/config/constant'
+import type { McpServer } from '@shared/data/types/mcpServer'
 import i18next from 'i18next'
 import { nanoid } from 'nanoid'
-
-import { fetchWithProviderTimeout, getProviderSyncErrorDetails, getProviderSyncErrorMessage } from './request'
-import { clearMcpProviderToken, getMcpProviderToken, saveMcpProviderToken } from './tokenStorage'
 
 const logger = loggerService.withContext('McpRouterSyncUtils')
 
@@ -14,15 +10,15 @@ const TOKEN_STORAGE_KEY = 'mcprouter_token'
 export const McpROUTER_HOST = 'https://mcprouter.co'
 
 export const saveMcpRouterToken = (token: string): void => {
-  saveMcpProviderToken(TOKEN_STORAGE_KEY, token)
+  localStorage.setItem(TOKEN_STORAGE_KEY, token)
 }
 
 export const getMcpRouterToken = (): string | null => {
-  return getMcpProviderToken(TOKEN_STORAGE_KEY)
+  return localStorage.getItem(TOKEN_STORAGE_KEY)
 }
 
 export const clearMcpRouterToken = (): void => {
-  clearMcpProviderToken(TOKEN_STORAGE_KEY)
+  localStorage.removeItem(TOKEN_STORAGE_KEY)
 }
 
 export const hasMcpRouterToken = (): boolean => {
@@ -54,13 +50,13 @@ export const syncMcpRouterServers = async (token: string): Promise<McpRouterSync
   const t = i18next.t
 
   try {
-    const response = await fetchWithProviderTimeout('https://api.mcprouter.to/v1/list-servers', {
+    const response = await fetch('https://api.mcprouter.to/v1/list-servers', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
         'HTTP-Referer': 'https://cherry-ai.com',
-        'X-Title': APP_NAME
+        'X-Title': 'Cherry Studio'
       },
       body: JSON.stringify({})
     })
@@ -131,9 +127,9 @@ export const syncMcpRouterServers = async (token: string): Promise<McpRouterSync
     logger.error('McpRouter sync error:', error as Error)
     return {
       success: false,
-      message: getProviderSyncErrorMessage(t, error),
+      message: t('settings.mcp.sync.error'),
       allServers: [],
-      errorDetails: getProviderSyncErrorDetails(error)
+      errorDetails: String(error)
     }
   }
 }

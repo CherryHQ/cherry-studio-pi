@@ -12,10 +12,10 @@ import {
   SettingRowTitle,
   SettingTitle
 } from '@renderer/pages/settings'
-import type { EditorView } from '@renderer/types'
+import type { EditorView } from '@renderer/types/app'
 import { FolderOpen } from 'lucide-react'
 import type { FC } from 'react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 const logger = loggerService.withContext('NotesSettings')
@@ -26,15 +26,6 @@ const NotesSettings: FC = () => {
   const { settings, updateSettings, notesPath, updateNotesPath } = useNotesSettings()
   const [tempPath, setTempPath] = useState<string>(notesPath || '')
   const [isSelecting, setIsSelecting] = useState(false)
-  const mountedRef = useRef(true)
-
-  useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
 
   // Update tempPath when notesPath changes (e.g., after initialization)
   useEffect(() => {
@@ -50,26 +41,20 @@ const NotesSettings: FC = () => {
         title: t('notes.settings.data.current_work_directory')
       })
 
-      if (!mountedRef.current) return
-
       if (result) {
         setTempPath(result)
       }
     } catch (error) {
       logger.error('Failed to select directory:', error as Error)
-      if (mountedRef.current) {
-        window.toast?.error(t('notes.settings.data.select_directory_failed'))
-      }
+      window.toast.error(t('notes.settings.data.select_directory_failed'))
     } finally {
-      if (mountedRef.current) {
-        setIsSelecting(false)
-      }
+      setIsSelecting(false)
     }
   }
 
   const handleApplyPath = async () => {
     if (!tempPath) {
-      window.toast?.error(t('notes.settings.data.path_required'))
+      window.toast.error(t('notes.settings.data.path_required'))
       return
     }
 
@@ -77,35 +62,28 @@ const NotesSettings: FC = () => {
       // 验证目录是否可用
       const isValidDir = await window.api.file.validateNotesDirectory(tempPath)
 
-      if (!mountedRef.current) return
-
       if (!isValidDir) {
-        window.toast?.error(t('notes.settings.data.invalid_directory'))
+        window.toast.error(t('notes.settings.data.invalid_directory'))
         return
       }
 
       updateNotesPath(tempPath)
-      window.toast?.success(t('notes.settings.data.path_updated'))
+      window.toast.success(t('notes.settings.data.path_updated'))
     } catch (error) {
       logger.error('Failed to apply notes path:', error as Error)
-      if (mountedRef.current) {
-        window.toast?.error(t('notes.settings.data.apply_path_failed'))
-      }
+      window.toast.error(t('notes.settings.data.apply_path_failed'))
     }
   }
 
   const handleResetToDefault = async () => {
     try {
       const info = await window.api.getAppInfo()
-      if (!mountedRef.current) return
       setTempPath(info.notesPath)
       updateNotesPath(info.notesPath)
-      window.toast?.success(t('notes.settings.data.reset_to_default'))
+      window.toast.success(t('notes.settings.data.reset_to_default'))
     } catch (error) {
       logger.error('Failed to reset to default:', error as Error)
-      if (mountedRef.current) {
-        window.toast?.error(t('notes.settings.data.reset_failed'))
-      }
+      window.toast.error(t('notes.settings.data.reset_failed'))
     }
   }
 
@@ -126,6 +104,7 @@ const NotesSettings: FC = () => {
               onChange={(e) => setTempPath(e.target.value)}
               placeholder={t('notes.settings.data.work_directory_placeholder')}
               readOnly
+              tabIndex={-1}
             />
             <Button variant="default" onClick={handleSelectWorkDirectory} disabled={isSelecting} className="ml-2">
               <FolderOpen size={16} />

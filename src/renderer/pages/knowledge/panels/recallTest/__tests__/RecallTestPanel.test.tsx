@@ -26,23 +26,6 @@ const mockCache = vi.hoisted(() => ({
   set: vi.fn()
 }))
 
-type Deferred<T> = {
-  promise: Promise<T>
-  resolve: (value: T | PromiseLike<T>) => void
-  reject: (reason?: unknown) => void
-}
-
-function deferred<T>(): Deferred<T> {
-  let resolve!: Deferred<T>['resolve']
-  let reject!: Deferred<T>['reject']
-  const promise = new Promise<T>((promiseResolve, promiseReject) => {
-    resolve = promiseResolve
-    reject = promiseReject
-  })
-
-  return { promise, resolve, reject }
-}
-
 const realSearchResults = [
   {
     pageContent: 'real result from file name',
@@ -363,32 +346,6 @@ describe('RecallTestPanel', () => {
     })
 
     expect(copyButton.querySelector('.lucide-copy')).toBeInTheDocument()
-  })
-
-  it('ignores delayed copy feedback after unmounting recall results', async () => {
-    const copyOperation = deferred<void>()
-    mockClipboardWriteText.mockReturnValueOnce(copyOperation.promise)
-    const { unmount } = render(<RecallTestPanel baseId="base-1" />)
-
-    fireEvent.change(screen.getByPlaceholderText('输入测试 Query...'), {
-      target: { value: 'RAG 检索增强生成原理' }
-    })
-    fireEvent.click(screen.getByRole('button', { name: '检索' }))
-
-    await waitFor(() => {
-      expect(screen.getAllByRole('button', { name: '复制片段' })).toHaveLength(2)
-    })
-
-    fireEvent.click(screen.getAllByRole('button', { name: '复制片段' })[0])
-    await waitFor(() => expect(mockClipboardWriteText).toHaveBeenCalledWith('real result from file name'))
-    unmount()
-
-    await act(async () => {
-      copyOperation.resolve()
-      await copyOperation.promise
-    })
-
-    expect(mockToastError).not.toHaveBeenCalled()
   })
 
   it('shows a searching state while runtime IPC is pending', async () => {

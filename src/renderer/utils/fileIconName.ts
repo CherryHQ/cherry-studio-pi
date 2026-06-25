@@ -238,7 +238,7 @@ const DEFAULT_ICON = 'document'
 export function getFileIconName(filePath: string): string {
   if (!filePath) return DEFAULT_ICON
 
-  const filename = filePath.split(/[/\\]/).pop() ?? ''
+  const filename = filePath.split('/').pop() ?? ''
   const lowerFilename = filename.toLowerCase()
 
   // Check exact filename match first
@@ -248,7 +248,7 @@ export function getFileIconName(filePath: string): string {
   // Check compound extensions (e.g. .d.ts, .spec.ts)
   const parts = filename.split('.')
   if (parts.length > 2) {
-    const compoundExt = parts.slice(-2).join('.')
+    const compoundExt = parts.slice(-2).join('.').toLowerCase()
     if (extensionMap[compoundExt]) return extensionMap[compoundExt]
   }
 

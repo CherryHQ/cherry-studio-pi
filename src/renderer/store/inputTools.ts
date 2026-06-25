@@ -17,13 +17,21 @@
 import type { PayloadAction } from '@reduxjs/toolkit'
 import { createSlice } from '@reduxjs/toolkit'
 import type { ComposerToolScope } from '@renderer/components/composer/tools/types'
-import { TopicType } from '@renderer/types'
 import type { InputBarToolType } from '@renderer/types/chat'
+import { TopicType } from '@renderer/types/topic'
 
 type ToolOrder = {
-  visible: InputBarToolType[]
-  hidden: InputBarToolType[]
+  visible: LegacyInputBarToolType[]
+  hidden: LegacyInputBarToolType[]
 }
+
+type LegacyInputBarToolType =
+  | InputBarToolType
+  | 'mcp_tools'
+  | 'mention_models'
+  | 'clear_topic'
+  | 'toggle_expand'
+  | 'new_context'
 
 export const DEFAULT_TOOL_ORDER: ToolOrder = {
   visible: [
@@ -44,7 +52,7 @@ export const DEFAULT_TOOL_ORDER: ToolOrder = {
 // Note: New tools not listed here will auto-show at the end.
 // Tools are filtered by visibleInScopes first, so this only controls order/visibility of available tools.
 //
-// The 'mini-window' key is legacy — InputbarScope has been renamed to 'quick-assistant' upstream.
+// The 'mini-window' key is legacy — ComposerToolScope has been renamed to 'quick-assistant' upstream.
 // It is retained here so Redux-persisted state carrying the old key still typechecks.
 // Both entries will be collapsed to 'quick-assistant' alone when Redux is removed and the
 // corresponding persisted data is migrated out.
@@ -71,7 +79,7 @@ export const DEFAULT_TOOL_ORDER_BY_SCOPE: Record<ComposerToolScope | 'mini-windo
   }
 }
 
-export type InputToolsState = {
+type InputToolsState = {
   toolOrder: ToolOrder
   sessionToolOrder: ToolOrder
   isCollapsed: boolean
@@ -87,12 +95,6 @@ const inputToolsSlice = createSlice({
   name: 'inputTools',
   initialState,
   reducers: {
-    hydrateInputToolsState: (_state, action: PayloadAction<Partial<InputToolsState>>) => {
-      return {
-        ...initialState,
-        ...action.payload
-      }
-    },
     setToolOrder: (state, action: PayloadAction<{ scope: ComposerToolScope; toolOrder: ToolOrder }>) => {
       if (action.payload.scope === TopicType.Session) {
         state.sessionToolOrder = action.payload.toolOrder
@@ -106,7 +108,7 @@ const inputToolsSlice = createSlice({
   }
 })
 
-export const { hydrateInputToolsState, setToolOrder, setIsCollapsed } = inputToolsSlice.actions
+export const { setToolOrder, setIsCollapsed } = inputToolsSlice.actions
 
 // Selector to get tool order for a specific scope
 export const selectToolOrderForScope = (

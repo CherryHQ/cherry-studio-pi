@@ -1,14 +1,14 @@
+// @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest'
 
 // Import the real component from its source path: the `@cherrystudio/ui` barrel
-// is mocked below for renderer layout tests, but this deeper specifier is not.
+// is globally mocked for renderer tests, but this deeper specifier is not.
 import { PageSidePanel } from '@cherrystudio/ui/components/composites/page-side-panel'
 import type { Tab } from '@shared/data/cache/cacheValueTypes'
 import { createMemoryHistory } from '@tanstack/react-router'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
-import type { ReactNode } from 'react'
 import * as React from 'react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 const knobs = vi.hoisted(() => ({
   isMac: false,
@@ -30,7 +30,7 @@ vi.mock('@renderer/config/constant', () => ({
 }))
 
 vi.mock('@cherrystudio/ui', () => ({
-  PortalContainerProvider: ({ children, container }: { children: ReactNode; container: HTMLElement | null }) => {
+  PortalContainerProvider: ({ children, container }: { children: React.ReactNode; container: HTMLElement | null }) => {
     routerMocks.portalContainer.current = container
     return (
       <div
@@ -44,10 +44,11 @@ vi.mock('@cherrystudio/ui', () => ({
   usePortalContainer: () => routerMocks.portalContainer.current
 }))
 
-vi.mock('@renderer/routeTree.gen', () => ({
-  routeTree: {}
-}))
+vi.mock('@renderer/routeTree.gen', () => ({ routeTree: {} }))
 
+// Stub the router so TabRouter can mount without the real route tree. Each tab's
+// history carries its url so the injected page can tell tabs apart, and the
+// provider exposes the resolved portal container for the scoping assertions.
 vi.mock('@tanstack/react-router', async () => {
   const { usePortalContainer } = await import('@cherrystudio/ui')
 
@@ -81,75 +82,79 @@ import { TabRouter } from '../TabRouter'
 
 const tab = (id: string, url: string): Tab => ({ id, url, title: url, type: 'route' }) as Tab
 
+beforeAll(() => {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver
+})
+
 afterEach(() => {
   cleanup()
+  knobs.isMac = false
+  knobs.renderPage = () => null
+  routerMocks.portalContainer.current = null
+  vi.clearAllMocks()
+})
+
+describe('TabRouter page side panel root', () => {
+  it('exposes the scoped root on the active tab subtree outside macOS', () => {
+    const { container } = render(<TabRouter tab={tab('a', '/a')} isActive onUrlChange={() => {}} />)
+    expect(container.querySelector('[data-page-side-panel-root="true"]')).toBeInTheDocument()
+  })
+
+  it('does not expose the scoped root on an inactive tab', () => {
+    const { container } = render(<TabRouter tab={tab('a', '/a')} isActive={false} onUrlChange={() => {}} />)
+    expect(container.querySelector('[data-page-side-panel-root="true"]')).not.toBeInTheDocument()
+  })
+
+  it('does not expose a scoped root on macOS', () => {
+    knobs.isMac = true
+    const { container } = render(<TabRouter tab={tab('a', '/a')} isActive onUrlChange={() => {}} />)
+    expect(container.querySelector('[data-page-side-panel-root="true"]')).not.toBeInTheDocument()
+  })
+})
+
+describe('TabRouter PageSidePanel portal isolation', () => {
+  // Regression for the non-mac scoped portal: a PageSidePanel opened in one tab
+  // must not stay visible after switching to another tab.
+  it('hides a still-open panel from the previous tab after switching tabs', () => {
+    function Page({ url }: { url: string }) {
+      const [open] = React.useState(url === '/a')
+      return <PageSidePanel open={open} onClose={() => {}} title={`panel ${url}`} />
+    }
+    knobs.renderPage = (url) => <Page url={url} />
+
+    function Shell({ activeId }: { activeId: string }) {
+      return (
+        <main>
+          <TabRouter tab={tab('a', '/a')} isActive={activeId === 'a'} onUrlChange={() => {}} />
+          <TabRouter tab={tab('b', '/b')} isActive={activeId === 'b'} onUrlChange={() => {}} />
+        </main>
+      )
+    }
+
+    const { rerender } = render(<Shell activeId="a" />)
+
+    let roots = document.querySelectorAll('[data-page-side-panel-root="true"]')
+    expect(roots).toHaveLength(1)
+    const aRoot = roots[0] as HTMLElement
+    expect(aRoot.querySelector('[role="dialog"]')).toBeInTheDocument()
+
+    rerender(<Shell activeId="b" />)
+
+    roots = document.querySelectorAll('[data-page-side-panel-root="true"]')
+    expect(roots).toHaveLength(1)
+    expect(roots[0]).not.toBe(aRoot)
+
+    expect(aRoot.querySelector('[role="dialog"]')).toBeInTheDocument()
+    expect(aRoot.style.display).toBe('none')
+    expect(roots[0].querySelector('[role="dialog"]')).not.toBeInTheDocument()
+  })
 })
 
 describe('TabRouter', () => {
-  beforeEach(() => {
-    knobs.isMac = false
-    knobs.renderPage = () => null
-    routerMocks.portalContainer.current = null
-    routerMocks.navigate.mockClear()
-    routerMocks.subscribe.mockClear()
-    vi.mocked(createMemoryHistory).mockClear()
-  })
-
-  describe('page side panel root', () => {
-    it('exposes the scoped root on the active tab subtree outside macOS', () => {
-      const { container } = render(<TabRouter tab={tab('a', '/a')} isActive onUrlChange={() => {}} />)
-      expect(container.querySelector('[data-page-side-panel-root="true"]')).toBeInTheDocument()
-    })
-
-    it('does not expose the scoped root on an inactive tab', () => {
-      const { container } = render(<TabRouter tab={tab('a', '/a')} isActive={false} onUrlChange={() => {}} />)
-      expect(container.querySelector('[data-page-side-panel-root="true"]')).not.toBeInTheDocument()
-    })
-
-    it('does not expose a scoped root on macOS', () => {
-      knobs.isMac = true
-      const { container } = render(<TabRouter tab={tab('a', '/a')} isActive onUrlChange={() => {}} />)
-      expect(container.querySelector('[data-page-side-panel-root="true"]')).not.toBeInTheDocument()
-    })
-  })
-
-  describe('PageSidePanel portal isolation', () => {
-    it('hides a still-open panel from the previous tab after switching tabs', () => {
-      function Page({ url }: { url: string }) {
-        const [open] = React.useState(url === '/a')
-        return <PageSidePanel open={open} onClose={() => {}} title={`panel ${url}`} />
-      }
-
-      function Shell({ activeId }: { activeId: string }) {
-        knobs.renderPage = (url) => <Page url={url} />
-
-        return (
-          <main>
-            <TabRouter tab={tab('a', '/a')} isActive={activeId === 'a'} onUrlChange={() => {}} />
-            <TabRouter tab={tab('b', '/b')} isActive={activeId === 'b'} onUrlChange={() => {}} />
-          </main>
-        )
-      }
-
-      const { rerender } = render(<Shell activeId="a" />)
-
-      let roots = document.querySelectorAll('[data-page-side-panel-root="true"]')
-      expect(roots).toHaveLength(1)
-      const aRoot = roots[0] as HTMLElement
-      expect(aRoot.querySelector('[role="dialog"]')).toBeInTheDocument()
-
-      rerender(<Shell activeId="b" />)
-
-      roots = document.querySelectorAll('[data-page-side-panel-root="true"]')
-      expect(roots).toHaveLength(1)
-      expect(roots[0]).not.toBe(aRoot)
-
-      expect(aRoot.querySelector('[role="dialog"]')).toBeInTheDocument()
-      expect(aRoot.style.display).toBe('none')
-      expect(roots[0].querySelector('[role="dialog"]')).not.toBeInTheDocument()
-    })
-  })
-
   it('provides the tab root as scoped portal containers', async () => {
     render(
       <TabRouter

@@ -45,33 +45,9 @@ const VertexAiSettings: FC<Props> = ({ providerId }) => {
   const [dropdownOpen, setDropdownOpen] = useState(false)
 
   const isDraftDirtyRef = useRef(false)
-  const draftVersionRef = useRef(0)
   const activeSaveRequestsRef = useRef(0)
-  const saveRequestSeqRef = useRef(0)
-  const mountedRef = useRef(true)
-  const clearJsonTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isJsonImportingRef = useRef(false)
   const isSelectingLocationRef = useRef(false)
-
-  useEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
-      saveRequestSeqRef.current += 1
-      if (clearJsonTimerRef.current) {
-        clearTimeout(clearJsonTimerRef.current)
-        clearJsonTimerRef.current = null
-      }
-    }
-  }, [])
-
-  useEffect(() => {
-    saveRequestSeqRef.current += 1
-    if (clearJsonTimerRef.current) {
-      clearTimeout(clearJsonTimerRef.current)
-      clearJsonTimerRef.current = null
-    }
-  }, [providerId])
 
   const resetLocalAuthConfig = useCallback(() => {
     setLocalProjectId(gcpConfig?.project ?? '')
@@ -97,31 +73,13 @@ const VertexAiSettings: FC<Props> = ({ providerId }) => {
   }, [resetLocalAuthConfig])
 
   const markDraftDirty = () => {
-    draftVersionRef.current += 1
     isDraftDirtyRef.current = true
   }
 
   const apiKeyWebsite = provider?.websites?.apiKey
 
-  const beginSaveRequest = () => {
-    activeSaveRequestsRef.current++
-    return {
-      requestSeq: ++saveRequestSeqRef.current,
-      draftVersion: draftVersionRef.current
-    }
-  }
-
-  const isCurrentSaveRequest = (requestSeq: number) => mountedRef.current && requestSeq === saveRequestSeqRef.current
-
-  const canMarkDraftClean = (requestSeq: number, draftVersion: number) =>
-    isCurrentSaveRequest(requestSeq) && draftVersionRef.current === draftVersion
-
-  const finishSaveRequest = () => {
-    activeSaveRequestsRef.current = Math.max(0, activeSaveRequestsRef.current - 1)
-  }
-
   const saveAuthConfig = async () => {
-    const saveRequest = beginSaveRequest()
+    activeSaveRequestsRef.current++
     try {
       await saveAuthConfigToServer({
         type: 'iam-gcp' as const,
@@ -132,24 +90,23 @@ const VertexAiSettings: FC<Props> = ({ providerId }) => {
           clientEmail: localClientEmail
         }
       })
-      if (canMarkDraftClean(saveRequest.requestSeq, saveRequest.draftVersion)) {
+      if (activeSaveRequestsRef.current === 1) {
         isDraftDirtyRef.current = false
       }
     } catch (error) {
       logger.error('Failed to save Vertex AI auth config', { providerId, error })
-      if (canMarkDraftClean(saveRequest.requestSeq, saveRequest.draftVersion)) {
-        window.toast?.error(t('settings.provider.save_failed'))
+      window.toast.error(t('settings.provider.save_failed'))
+      if (activeSaveRequestsRef.current === 1) {
         isDraftDirtyRef.current = false
         resetLocalAuthConfig()
       }
     } finally {
-      finishSaveRequest()
+      activeSaveRequestsRef.current--
     }
   }
 
   const handleServiceAccountJsonChange = async (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value
-    markDraftDirty()
     setServiceAccountJson(value)
     if (serviceAccountJsonError) {
       setServiceAccountJsonError(false)
@@ -169,7 +126,7 @@ const VertexAiSettings: FC<Props> = ({ providerId }) => {
       }
 
       isJsonImportingRef.current = true
-      const saveRequest = beginSaveRequest()
+      activeSaveRequestsRef.current++
       try {
         await saveAuthConfigToServer({
           type: 'iam-gcp' as const,
@@ -182,38 +139,23 @@ const VertexAiSettings: FC<Props> = ({ providerId }) => {
         })
         // Defer clearing to avoid being overwritten by Textarea.Input's
         // internal useControllableState handleChange firing after us.
-        if (isCurrentSaveRequest(saveRequest.requestSeq)) {
-          if (clearJsonTimerRef.current) {
-            clearTimeout(clearJsonTimerRef.current)
-          }
-          clearJsonTimerRef.current = setTimeout(() => {
-            if (isCurrentSaveRequest(saveRequest.requestSeq)) {
-              setServiceAccountJson('')
-            }
-            clearJsonTimerRef.current = null
-          }, 0)
-          setServiceAccountJsonError(false)
-        }
+        setTimeout(() => {
+          setServiceAccountJson('')
+        }, 0)
+        setServiceAccountJsonError(false)
         // Intentionally do NOT clear isDraftDirtyRef here: the useEffect reset
         // will run on the next server refetch and re-sync local state from
         // gcpConfig (which already contains the values we just saved). Clearing
         // here would clobber a concurrent user edit in another field.
-        if (canMarkDraftClean(saveRequest.requestSeq, saveRequest.draftVersion)) {
-          isDraftDirtyRef.current = false
-        }
-        if (isCurrentSaveRequest(saveRequest.requestSeq)) {
-          window.toast?.success(t('settings.provider.vertex_ai.service_account.json_parse_success'))
-        }
+        window.toast.success(t('settings.provider.vertex_ai.service_account.json_parse_success'))
       } catch (error) {
         logger.error('Failed to save Vertex AI auth config from JSON import', { providerId, error })
-        if (canMarkDraftClean(saveRequest.requestSeq, saveRequest.draftVersion)) {
-          window.toast?.error(t('settings.provider.save_failed'))
-          // Preserve user-pasted JSON so they can correct and retry;
-          // do not call resetLocalAuthConfig — it would clear the textarea.
-          setServiceAccountJsonError(true)
-        }
+        window.toast.error(t('settings.provider.save_failed'))
+        // Preserve user-pasted JSON so they can correct and retry;
+        // do not call resetLocalAuthConfig — it would clear the textarea.
+        setServiceAccountJsonError(true)
       } finally {
-        finishSaveRequest()
+        activeSaveRequestsRef.current--
         isJsonImportingRef.current = false
       }
     }
@@ -231,7 +173,7 @@ const VertexAiSettings: FC<Props> = ({ providerId }) => {
 
     const parsed = parseVertexAIServiceAccountJson(value)
     if (!parsed) {
-      window.toast?.error(t('settings.provider.vertex_ai.service_account.json_parse_error'))
+      window.toast.error(t('settings.provider.vertex_ai.service_account.json_parse_error'))
       setServiceAccountJsonError(true)
       return
     }
@@ -242,7 +184,7 @@ const VertexAiSettings: FC<Props> = ({ providerId }) => {
       setLocalProjectId(parsed.projectId)
     }
 
-    const saveRequest = beginSaveRequest()
+    activeSaveRequestsRef.current++
     try {
       await saveAuthConfigToServer({
         type: 'iam-gcp' as const,
@@ -253,29 +195,21 @@ const VertexAiSettings: FC<Props> = ({ providerId }) => {
           clientEmail: parsed.clientEmail
         }
       })
-      if (isCurrentSaveRequest(saveRequest.requestSeq)) {
-        setServiceAccountJson('')
-        setServiceAccountJsonError(false)
-        window.toast?.success(t('settings.provider.vertex_ai.service_account.json_parse_success'))
-      }
-      if (canMarkDraftClean(saveRequest.requestSeq, saveRequest.draftVersion)) {
-        isDraftDirtyRef.current = false
-      }
+      setServiceAccountJson('')
+      setServiceAccountJsonError(false)
+      window.toast.success(t('settings.provider.vertex_ai.service_account.json_parse_success'))
     } catch (error) {
       logger.error('Failed to save Vertex AI auth config from JSON import', { providerId, error })
-      if (canMarkDraftClean(saveRequest.requestSeq, saveRequest.draftVersion)) {
-        window.toast?.error(t('settings.provider.save_failed'))
-        // Preserve user-pasted JSON so they can correct and retry;
-        // do not call resetLocalAuthConfig — it would clear the textarea.
-        setServiceAccountJsonError(true)
-      }
+      window.toast.error(t('settings.provider.save_failed'))
+      // Preserve user-pasted JSON so they can correct and retry;
+      // do not call resetLocalAuthConfig — it would clear the textarea.
+      setServiceAccountJsonError(true)
     } finally {
-      finishSaveRequest()
+      activeSaveRequestsRef.current--
     }
   }
 
   const handleLocationSelect = (value: string) => {
-    markDraftDirty()
     setLocalLocation(value)
     setDropdownOpen(false)
     void saveAuthConfigWithLocation(value)
@@ -285,7 +219,7 @@ const VertexAiSettings: FC<Props> = ({ providerId }) => {
   const saveAuthConfigWithLocation = async (locationValue: string) => {
     const trimmedLocation = locationValue.trim()
     const previousLocation = localLocation
-    const saveRequest = beginSaveRequest()
+    activeSaveRequestsRef.current++
     try {
       await saveAuthConfigToServer({
         type: 'iam-gcp' as const,
@@ -296,19 +230,19 @@ const VertexAiSettings: FC<Props> = ({ providerId }) => {
           clientEmail: localClientEmail
         }
       })
-      if (canMarkDraftClean(saveRequest.requestSeq, saveRequest.draftVersion)) {
+      if (activeSaveRequestsRef.current === 1) {
         isDraftDirtyRef.current = false
       }
     } catch (error) {
       logger.error('Failed to save Vertex AI auth config with location', { providerId, error })
-      if (canMarkDraftClean(saveRequest.requestSeq, saveRequest.draftVersion)) {
-        window.toast?.error(t('settings.provider.save_failed'))
-        // Only roll back location — do not clear credentials the user already confirmed.
-        setLocalLocation(previousLocation)
+      window.toast.error(t('settings.provider.save_failed'))
+      // Only roll back location — do not clear credentials the user already confirmed.
+      setLocalLocation(previousLocation)
+      if (activeSaveRequestsRef.current === 1) {
         isDraftDirtyRef.current = false
       }
     } finally {
-      finishSaveRequest()
+      activeSaveRequestsRef.current--
     }
   }
 

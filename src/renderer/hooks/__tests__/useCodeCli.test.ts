@@ -20,20 +20,6 @@ function setupOverridesMock(overrides: Record<string, any>) {
   return mockSetOverrides
 }
 
-type Deferred<T> = {
-  promise: Promise<T>
-  resolve: (value: T) => void
-}
-
-function createDeferred<T>(): Deferred<T> {
-  let resolve!: (value: T) => void
-  const promise = new Promise<T>((promiseResolve) => {
-    resolve = promiseResolve
-  })
-
-  return { promise, resolve }
-}
-
 describe('useCodeCli', () => {
   beforeEach(() => {
     MockUsePreferenceUtils.resetMocks()
@@ -289,84 +275,6 @@ describe('useCodeCli', () => {
           })
         })
       )
-    })
-  })
-
-  describe('selectFolder', () => {
-    it('sets the selected directory when the hook is still mounted', async () => {
-      const mockSetter = setupOverridesMock({ 'qwen-code': { enabled: true } })
-      const originalApi = window.api
-      const selectFolder = vi.fn().mockResolvedValue('/selected/project')
-      Object.defineProperty(window, 'api', {
-        configurable: true,
-        value: {
-          ...originalApi,
-          file: {
-            ...originalApi?.file,
-            selectFolder
-          }
-        }
-      })
-
-      try {
-        const { result } = renderHook(() => useCodeCli())
-        let selected: string | null = null
-
-        await act(async () => {
-          selected = await result.current.selectFolder()
-        })
-
-        expect(selected).toBe('/selected/project')
-        expect(mockSetter).toHaveBeenCalledWith(
-          expect.objectContaining({
-            'qwen-code': expect.objectContaining({
-              currentDirectory: '/selected/project',
-              directories: ['/selected/project']
-            })
-          })
-        )
-      } finally {
-        Object.defineProperty(window, 'api', { configurable: true, value: originalApi })
-      }
-    })
-
-    it('ignores a late folder picker result after the hook unmounts', async () => {
-      const mockSetter = setupOverridesMock({ 'qwen-code': { enabled: true } })
-      const originalApi = window.api
-      const folderPicker = createDeferred<string | null>()
-      const selectFolder = vi.fn().mockReturnValue(folderPicker.promise)
-      Object.defineProperty(window, 'api', {
-        configurable: true,
-        value: {
-          ...originalApi,
-          file: {
-            ...originalApi?.file,
-            selectFolder
-          }
-        }
-      })
-
-      try {
-        const { result, unmount } = renderHook(() => useCodeCli())
-        let selected: string | null = '/not-resolved'
-
-        const selectPromise = result.current.selectFolder().then((value) => {
-          selected = value
-        })
-
-        expect(selectFolder).toHaveBeenCalledTimes(1)
-        unmount()
-
-        await act(async () => {
-          folderPicker.resolve('/selected/project')
-          await selectPromise
-        })
-
-        expect(selected).toBeNull()
-        expect(mockSetter).not.toHaveBeenCalled()
-      } finally {
-        Object.defineProperty(window, 'api', { configurable: true, value: originalApi })
-      }
     })
   })
 })

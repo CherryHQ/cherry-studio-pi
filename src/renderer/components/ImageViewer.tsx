@@ -1,11 +1,11 @@
 import {
   type ImagePreviewAction,
-  ImagePreviewContextMenu,
   ImagePreviewDialog,
   type ImagePreviewItem,
   type ImagePreviewLabels
 } from '@cherrystudio/ui'
 import { loggerService } from '@logger'
+import { CommandContextMenu, type CommandContextMenuExtraItem } from '@renderer/components/command'
 import { download } from '@renderer/utils/download'
 import { convertImageToPng } from '@renderer/utils/image'
 import { parseDataUrl } from '@shared/utils/dataUrl'
@@ -16,8 +16,6 @@ import React from 'react'
 import { useTranslation } from 'react-i18next'
 
 const logger = loggerService.withContext('ImageViewer')
-const REMOTE_IMAGE_FETCH_TIMEOUT_MS = 15_000
-const UNKNOWN_COPY_ERROR_MESSAGE = 'Unknown clipboard error'
 
 export interface ImageViewerPreviewConfig {
   activeIndex?: number
@@ -53,10 +51,7 @@ export async function getImageBlobFromSource(src: string): Promise<Blob> {
     return new Blob([bytes], { type: mimeType })
   }
 
-  const response = await fetch(src, { signal: AbortSignal.timeout(REMOTE_IMAGE_FETCH_TIMEOUT_MS) })
-  if (!response.ok) {
-    throw new Error(`Failed to fetch image: HTTP ${response.status}`)
-  }
+  const response = await fetch(src)
   return response.blob()
 }
 
@@ -73,62 +68,6 @@ export async function copyImageToClipboard(src: string): Promise<void> {
 const getPreviewIndex = (items: ImagePreviewItem[], src: string, fallbackIndex = 0) => {
   const matchedIndex = items.findIndex((item) => item.src === src)
   return matchedIndex >= 0 ? matchedIndex : fallbackIndex
-}
-
-function getCopyErrorMessage(error: unknown, seen = new WeakSet<object>()): string {
-  if (error instanceof Error && error.message) {
-    return error.message
-  }
-  if (typeof error === 'string' && error.trim()) {
-    return error
-  }
-  if (!error || typeof error !== 'object') {
-    return UNKNOWN_COPY_ERROR_MESSAGE
-  }
-  if (seen.has(error)) {
-    return UNKNOWN_COPY_ERROR_MESSAGE
-  }
-
-  seen.add(error)
-
-  const nestedError = (error as { error?: unknown }).error
-  if (nestedError) {
-    const nestedMessage = getCopyErrorMessage(nestedError, seen)
-    if (nestedMessage !== UNKNOWN_COPY_ERROR_MESSAGE) {
-      return nestedMessage
-    }
-  }
-
-  const message = (error as { message?: unknown }).message
-  if (typeof message === 'string' && message.trim()) {
-    return message
-  }
-
-  try {
-    const serialized = JSON.stringify(error)
-    return serialized || UNKNOWN_COPY_ERROR_MESSAGE
-  } catch {
-    return UNKNOWN_COPY_ERROR_MESSAGE
-  }
-}
-
-function getCopyErrorStack(error: unknown, seen = new WeakSet<object>()): string | undefined {
-  if (error instanceof Error) {
-    return error.stack
-  }
-  if (!error || typeof error !== 'object' || seen.has(error)) {
-    return undefined
-  }
-
-  seen.add(error)
-
-  const stack = (error as { stack?: unknown }).stack
-  if (typeof stack === 'string' && stack) {
-    return stack
-  }
-
-  const nestedError = (error as { error?: unknown }).error
-  return getCopyErrorStack(nestedError, seen)
 }
 
 const ImageViewer: React.FC<ImageViewerProps> = ({ alt, onClick, onContextMenu, preview, src, ...props }) => {
@@ -154,17 +93,8 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ alt, onClick, onContextMenu, 
   )
   const [localOpen, setLocalOpen] = React.useState(false)
   const [localActiveIndex, setLocalActiveIndex] = React.useState(initialIndex)
-  const mountedRef = React.useRef(true)
   const open = previewConfig?.visible ?? localOpen
   const activeIndex = previewConfig?.activeIndex ?? localActiveIndex
-
-  React.useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
 
   React.useEffect(() => {
     setLocalActiveIndex(initialIndex)
@@ -211,17 +141,11 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ alt, onClick, onContextMenu, 
     async (item: ImagePreviewItem) => {
       try {
         await copyImageToClipboard(item.src)
-        if (mountedRef.current) {
-          window.toast?.success(t('message.copy.success'))
-        }
+        window.toast.success(t('message.copy.success'))
       } catch (error) {
-        logger.error('Failed to copy image', {
-          error: getCopyErrorMessage(error),
-          stack: getCopyErrorStack(error)
-        })
-        if (mountedRef.current) {
-          window.toast?.error(t('message.copy.failed'))
-        }
+        const err = error as Error
+        logger.error(`Failed to copy image: ${err.message}`, { stack: err.stack })
+        window.toast.error(t('message.copy.failed'))
       }
     },
     [t]
@@ -231,17 +155,11 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ alt, onClick, onContextMenu, 
     async (item: ImagePreviewItem) => {
       try {
         await navigator.clipboard.writeText(item.src)
-        if (mountedRef.current) {
-          window.toast?.success(t('message.copy.success'))
-        }
+        window.toast.success(t('message.copy.success'))
       } catch (error) {
-        logger.error('Failed to copy image source', {
-          error: getCopyErrorMessage(error),
-          stack: getCopyErrorStack(error)
-        })
-        if (mountedRef.current) {
-          window.toast?.error(t('message.copy.failed'))
-        }
+        const err = error as Error
+        logger.error(`Failed to copy image source: ${err.message}`, { stack: err.stack })
+        window.toast.error(t('message.copy.failed'))
       }
     },
     [t]
@@ -301,10 +219,28 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ alt, onClick, onContextMenu, 
   )
   const onActionError = React.useCallback((error: unknown, action: ImagePreviewAction, item: ImagePreviewItem) => {
     logger.error(`Image preview action failed: ${action.id}`, {
-      error: getCopyErrorMessage(error),
+      error: error instanceof Error ? error.message : String(error),
       itemId: item.id
     })
   }, [])
+
+  const imageMenuItems = contextActions.map(
+    (action): CommandContextMenuExtraItem => ({
+      type: 'item',
+      id: action.id,
+      label: action.label,
+      icon: action.icon,
+      enabled: !action.disabled,
+      onSelect: () => {
+        try {
+          const result = action.onSelect(displayItem, contextMenuActionContext)
+          void Promise.resolve(result).catch((error) => onActionError(error, action, displayItem))
+        } catch (error) {
+          onActionError(error, action, displayItem)
+        }
+      }
+    })
+  )
 
   const image = (
     <img
@@ -316,10 +252,7 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ alt, onClick, onContextMenu, 
           setOpen(true)
         }
       }}
-      onContextMenu={(event) => {
-        event.stopPropagation()
-        onContextMenu?.(event)
-      }}
+      onContextMenu={onContextMenu}
       src={src}
       {...props}
     />
@@ -327,13 +260,9 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ alt, onClick, onContextMenu, 
 
   return (
     <>
-      <ImagePreviewContextMenu
-        actions={contextActions}
-        context={contextMenuActionContext}
-        item={displayItem}
-        onActionError={onActionError}>
+      <CommandContextMenu location="webcontents.context" extraItems={imageMenuItems}>
         {image}
-      </ImagePreviewContextMenu>
+      </CommandContextMenu>
       {previewEnabled && (
         <ImagePreviewDialog
           actions={contextActions}

@@ -1,6 +1,6 @@
 import type { ToolLauncherApi } from '@renderer/components/composer/tools/types'
 import { filterSupportedFiles } from '@renderer/utils/file'
-import { type ComposerAttachment, toComposerAttachments } from '@renderer/utils/messageUtils/composerAttachment'
+import { type ComposerAttachment, toComposerAttachments } from '@renderer/utils/message/composerAttachment'
 import { Paperclip } from 'lucide-react'
 import type { Dispatch, FC, SetStateAction } from 'react'
 import { useCallback, useEffect, useState } from 'react'
@@ -49,7 +49,7 @@ const useAttachmentToolController = ({ launcher, couldAddImageFile, extensions, 
       }
 
       if (supportedFiles.length !== _files.length) {
-        window.toast?.info?.(
+        window.toast.info(
           t('chat.input.file_not_supported_count', {
             count: _files.length - supportedFiles.length
           })

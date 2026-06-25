@@ -6,15 +6,14 @@ import { LocalBackupManager } from '@renderer/components/LocalBackupManager'
 import { LocalBackupModal, useLocalBackupModal } from '@renderer/components/LocalBackupModals'
 import Selector from '@renderer/components/Selector'
 import { useTheme } from '@renderer/context/ThemeProvider'
-import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
-import { startAutoSync, stopAutoSync } from '@renderer/services/BackupService'
-import { useAppSelector } from '@renderer/store'
-import type { AppInfo } from '@renderer/types'
+import { getBackupSyncState, startAutoSync, stopAutoSync } from '@renderer/services/BackupService'
+import type { AppInfo } from '@renderer/types/app'
 import dayjs from 'dayjs'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingHelpText, SettingRow, SettingRowTitle, SettingTitle } from '..'
+
 const logger = loggerService.withContext('LocalBackupSettings')
 
 const LocalBackupSettings: React.FC = () => {
@@ -28,55 +27,14 @@ const LocalBackupSettings: React.FC = () => {
   const [backupManagerVisible, setBackupManagerVisible] = useState(false)
 
   const [appInfo, setAppInfo] = useState<AppInfo>()
-  const mountedRef = useRef(true)
-  const directoryChangeSeqRef = useRef(0)
 
   useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-      directoryChangeSeqRef.current += 1
-    }
-  }, [])
-
-  const isDirectoryChangeCurrent = useCallback(
-    (requestSeq: number) => mountedRef.current && requestSeq === directoryChangeSeqRef.current,
-    []
-  )
-
-  useEffect(() => {
-    let cancelled = false
-    void window.api
-      .getAppInfo()
-      .then((info) => {
-        if (!cancelled) setAppInfo(info)
-      })
-      .catch((error) => {
-        logger.warn('Failed to read app info for local backup settings', error as Error)
-      })
-    return () => {
-      cancelled = true
-    }
+    void window.api.getAppInfo().then(setAppInfo)
   }, [])
 
   useEffect(() => {
-    let cancelled = false
-    if (!localBackupDir) {
-      setResolvedLocalBackupDir(undefined)
-      return
-    }
-    void window.api
-      .resolvePath(localBackupDir)
-      .then((resolvedDir) => {
-        if (!cancelled) setResolvedLocalBackupDir(resolvedDir)
-      })
-      .catch((error) => {
-        logger.warn('Failed to resolve local backup directory', error as Error, { localBackupDir })
-        if (!cancelled) setResolvedLocalBackupDir(undefined)
-      })
-    return () => {
-      cancelled = true
+    if (localBackupDir) {
+      void window.api.resolvePath(localBackupDir).then(setResolvedLocalBackupDir)
     }
   }, [localBackupDir])
 
@@ -84,170 +42,104 @@ const LocalBackupSettings: React.FC = () => {
 
   const { t } = useTranslation()
 
-  const { localBackupSync } = useAppSelector((state) => state.backup)
-  const showSaveFailed = useSaveFailedToast()
+  const { localBackupSync } = getBackupSyncState()
 
-  const onSyncIntervalChange = async (value: number) => {
-    try {
-      await setLocalBackupSyncInterval(value)
-      if (value === 0) {
-        await setLocalBackupAutoSync(false)
-        stopAutoSync('local')
-      } else {
-        await setLocalBackupAutoSync(true)
-        startAutoSync(false, 'local')
-      }
-    } catch (error) {
-      showSaveFailed(error)
+  const onSyncIntervalChange = (value: number) => {
+    void setLocalBackupSyncInterval(value)
+    if (value === 0) {
+      void setLocalBackupAutoSync(false)
+      stopAutoSync('local')
+    } else {
+      void setLocalBackupAutoSync(true)
+      void startAutoSync(false, 'local')
     }
   }
 
-  const checkLocalBackupDirValid = async (dir: string, requestSeq: number) => {
+  const checkLocalBackupDirValid = async (dir: string) => {
     if (dir === '') {
       return false
     }
 
-    const info = appInfo ?? (await window.api.getAppInfo())
-    if (!isDirectoryChangeCurrent(requestSeq)) {
-      return false
-    }
-
-    if (!appInfo) {
-      setAppInfo(info)
-    }
-
     const resolvedDir = await window.api.resolvePath(dir)
-    if (!isDirectoryChangeCurrent(requestSeq)) {
-      return false
-    }
 
     // check new local backup dir is not in app data path
     // if is in app data path, show error
-    const isInAppDataPath = await window.api.isPathInside(resolvedDir, info.appDataPath)
-    if (!isDirectoryChangeCurrent(requestSeq)) {
-      return false
-    }
-    if (isInAppDataPath) {
-      window.toast?.error(t('settings.data.local.directory.select_error_app_data_path'))
+    if (await window.api.isPathInside(resolvedDir, appInfo!.appDataPath)) {
+      window.toast.error(t('settings.data.local.directory.select_error_app_data_path'))
       return false
     }
 
     // check new local backup dir is not in app install path
     // if is in app install path, show error
-    const isInInstallPath = await window.api.isPathInside(resolvedDir, info.installPath)
-    if (!isDirectoryChangeCurrent(requestSeq)) {
-      return false
-    }
-    if (isInInstallPath) {
-      window.toast?.error(t('settings.data.local.directory.select_error_in_app_install_path'))
+    if (await window.api.isPathInside(resolvedDir, appInfo!.installPath)) {
+      window.toast.error(t('settings.data.local.directory.select_error_in_app_install_path'))
       return false
     }
 
     // check new app data path has write permission
     const hasWritePermission = await window.api.hasWritePermission(resolvedDir)
-    if (!isDirectoryChangeCurrent(requestSeq)) {
-      return false
-    }
     if (!hasWritePermission) {
-      window.toast?.error(t('settings.data.local.directory.select_error_write_permission'))
+      window.toast.error(t('settings.data.local.directory.select_error_write_permission'))
       return false
     }
 
     return true
   }
 
-  const clearLocalBackupDirectory = async (requestSeq: number) => {
-    await setLocalBackupDir('')
-    if (!isDirectoryChangeCurrent(requestSeq)) {
+  const handleLocalBackupDirChange = async (value: string) => {
+    if (value === localBackupDir) {
       return
     }
 
-    await setLocalBackupAutoSync(false)
-    if (!isDirectoryChangeCurrent(requestSeq)) {
+    if (value === '') {
+      void handleClearDirectory()
       return
     }
 
-    stopAutoSync('local')
-  }
+    if (await checkLocalBackupDirValid(value)) {
+      await setLocalBackupDir(value)
+      setResolvedLocalBackupDir(await window.api.resolvePath(value))
 
-  const handleLocalBackupDirChange = async (value: string, requestSeq = ++directoryChangeSeqRef.current) => {
-    try {
-      if (value === localBackupDir) {
-        return
-      }
+      await setLocalBackupAutoSync(true)
+      void startAutoSync(true, 'local')
+      return
+    }
 
-      if (value === '') {
-        await clearLocalBackupDirectory(requestSeq)
-        return
-      }
-
-      if (await checkLocalBackupDirValid(value, requestSeq)) {
-        if (!isDirectoryChangeCurrent(requestSeq)) {
-          return
-        }
-
-        await setLocalBackupDir(value)
-        if (!isDirectoryChangeCurrent(requestSeq)) {
-          return
-        }
-
-        const resolvedDir = await window.api.resolvePath(value)
-        if (!isDirectoryChangeCurrent(requestSeq)) {
-          return
-        }
-        setResolvedLocalBackupDir(resolvedDir)
-
-        await setLocalBackupAutoSync(true)
-        if (!isDirectoryChangeCurrent(requestSeq)) {
-          return
-        }
-
-        startAutoSync(true, 'local')
-        return
-      }
-
-      if (localBackupDir && isDirectoryChangeCurrent(requestSeq)) {
-        await setLocalBackupDir(localBackupDir)
-        return
-      }
-    } catch (error) {
-      logger.error('Failed to change local backup directory:', error as Error)
-      if (isDirectoryChangeCurrent(requestSeq)) {
-        window.toast?.error(t('settings.data.app_data.select_error'))
-      }
+    if (localBackupDir) {
+      await setLocalBackupDir(localBackupDir)
+      return
     }
   }
 
   const onMaxBackupsChange = (value: number) => {
-    void setLocalBackupMaxBackups(value).catch(showSaveFailed)
+    void setLocalBackupMaxBackups(value)
   }
 
   const onSkipBackupFilesChange = (value: boolean) => {
-    void setLocalBackupSkipBackupFile(value).catch(showSaveFailed)
+    void setLocalBackupSkipBackupFile(value)
   }
 
   const handleBrowseDirectory = async () => {
-    const requestSeq = ++directoryChangeSeqRef.current
-
     try {
       const newLocalBackupDir = await window.api.select({
         properties: ['openDirectory', 'createDirectory'],
         title: t('settings.data.local.directory.select_title')
       })
 
-      if (!isDirectoryChangeCurrent(requestSeq) || !newLocalBackupDir) {
+      if (!newLocalBackupDir) {
         return
       }
 
-      await handleLocalBackupDirChange(newLocalBackupDir, requestSeq)
+      await handleLocalBackupDirChange(newLocalBackupDir)
     } catch (error) {
       logger.error('Failed to select directory:', error as Error)
     }
   }
 
   const handleClearDirectory = async () => {
-    const requestSeq = ++directoryChangeSeqRef.current
-    await clearLocalBackupDirectory(requestSeq)
+    await setLocalBackupDir('')
+    await setLocalBackupAutoSync(false)
+    stopAutoSync('local')
   }
 
   const renderSyncStatus = () => {

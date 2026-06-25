@@ -1,5 +1,4 @@
 import { loggerService } from '@logger'
-import { summarizeTextForLog } from '@renderer/aiCore/utils/logging'
 import type { NotesTreeNode } from '@renderer/types/note'
 
 const logger = loggerService.withContext('NotesSearchService')
@@ -76,8 +75,7 @@ export function calculateRelevanceScore(node: NotesTreeNode, keyword: string, ma
 export async function searchFileContent(
   node: NotesTreeNode,
   keyword: string,
-  options: SearchOptions = {},
-  signal?: AbortSignal
+  options: SearchOptions = {}
 ): Promise<SearchResult | null> {
   const {
     caseSensitive = false,
@@ -88,63 +86,33 @@ export async function searchFileContent(
   } = options
 
   try {
-    if (signal?.aborted) {
-      return null
-    }
-
     if (node.type !== 'file') {
       return null
     }
 
-    const normalizedKeyword = keyword.trim()
-    if (!normalizedKeyword) {
-      return null
-    }
-
     const content = await window.api.file.readExternal(node.externalPath)
-
-    if (signal?.aborted) {
-      return null
-    }
 
     if (!content) {
       return null
     }
 
     if (content.length > maxFileSize) {
-      logger.warn('File too large to search', {
-        externalPath: summarizeTextForLog(node.externalPath),
-        size: content.length,
-        maxFileSize
-      })
+      logger.warn(`File too large to search: ${node.externalPath} (${content.length} bytes)`)
       return null
     }
 
     const flags = caseSensitive ? 'g' : 'gi'
-    const pattern = useRegex ? new RegExp(normalizedKeyword, flags) : new RegExp(escapeRegex(normalizedKeyword), flags)
+    const pattern = useRegex ? new RegExp(keyword, flags) : new RegExp(escapeRegex(keyword), flags)
 
     const lines = content.split('\n')
     const matches: SearchMatch[] = []
 
     for (let i = 0; i < lines.length; i++) {
-      if (signal?.aborted) {
-        return null
-      }
-
       const line = lines[i]
       pattern.lastIndex = 0
 
       let match: RegExpExecArray | null
       while ((match = pattern.exec(line)) !== null) {
-        if (signal?.aborted) {
-          return null
-        }
-
-        if (match[0].length === 0) {
-          pattern.lastIndex += 1
-          continue
-        }
-
         const matchStart = match.index
         const matchEnd = matchStart + match[0].length
 
@@ -179,7 +147,7 @@ export async function searchFileContent(
       return null
     }
 
-    const score = calculateRelevanceScore(node, normalizedKeyword, matches)
+    const score = calculateRelevanceScore(node, keyword, matches)
 
     return {
       ...node,
@@ -188,11 +156,7 @@ export async function searchFileContent(
       score
     }
   } catch (error) {
-    if (signal?.aborted) {
-      return null
-    }
-
-    logger.error('Failed to search file content', { externalPath: summarizeTextForLog(node.externalPath), error })
+    logger.error(`Failed to search file content for ${node.externalPath}:`, error as Error)
     return null
   }
 }
@@ -201,11 +165,8 @@ export async function searchFileContent(
  * Check if filename matches keyword
  */
 export function matchFileName(node: NotesTreeNode, keyword: string, caseSensitive = false): boolean {
-  const normalizedKeyword = keyword.trim()
-  if (!normalizedKeyword) return false
-
   const name = caseSensitive ? node.name : node.name.toLowerCase()
-  const key = caseSensitive ? normalizedKeyword : normalizedKeyword.toLowerCase()
+  const key = caseSensitive ? keyword : keyword.toLowerCase()
   return name.includes(key)
 }
 
@@ -214,23 +175,19 @@ export function matchFileName(node: NotesTreeNode, keyword: string, caseSensitiv
  */
 export function flattenTreeToFiles(nodes: NotesTreeNode[]): NotesTreeNode[] {
   const result: NotesTreeNode[] = []
-  const stack = [...nodes].reverse()
 
-  while (stack.length > 0) {
-    const node = stack.pop()
-    if (!node) continue
-
-    if (node.type === 'file') {
-      result.push(node)
-    }
-
-    if (node.children && node.children.length > 0) {
-      for (let index = node.children.length - 1; index >= 0; index -= 1) {
-        stack.push(node.children[index])
+  function traverse(nodes: NotesTreeNode[]) {
+    for (const node of nodes) {
+      if (node.type === 'file') {
+        result.push(node)
+      }
+      if (node.children && node.children.length > 0) {
+        traverse(node.children)
       }
     }
   }
 
+  traverse(nodes)
   return result
 }
 
@@ -246,37 +203,26 @@ export async function searchAllFiles(
   const startTime = performance.now()
   const CONCURRENCY = 5
   const results: SearchResult[] = []
-  const normalizedKeyword = keyword.trim()
-
-  if (!normalizedKeyword) {
-    return []
-  }
 
   const fileNodes = flattenTreeToFiles(nodes)
 
-  logger.debug('Starting full-text search', {
-    keyword: summarizeTextForLog(normalizedKeyword),
-    totalFiles: fileNodes.length,
-    options
-  })
+  logger.debug(
+    `Starting full-text search: keyword="${keyword}", totalFiles=${fileNodes.length}, options=${JSON.stringify(options)}`
+  )
 
-  let nextFileIndex = 0
+  const queue = [...fileNodes]
 
   const worker = async () => {
-    while (nextFileIndex < fileNodes.length) {
+    while (queue.length > 0) {
       if (signal?.aborted) {
         break
       }
 
-      const node = fileNodes[nextFileIndex++]
+      const node = queue.shift()
       if (!node) break
 
-      const nameMatch = matchFileName(node, normalizedKeyword, options.caseSensitive)
-      const contentResult = await searchFileContent(node, normalizedKeyword, options, signal)
-
-      if (signal?.aborted) {
-        break
-      }
+      const nameMatch = matchFileName(node, keyword, options.caseSensitive)
+      const contentResult = await searchFileContent(node, keyword, options)
 
       if (nameMatch && contentResult) {
         results.push({
@@ -299,35 +245,18 @@ export async function searchAllFiles(
 
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, fileNodes.length) }, () => worker()))
 
-  if (signal?.aborted) {
-    logger.debug('Full-text search cancelled', {
-      keyword: summarizeTextForLog(normalizedKeyword),
-      totalFiles: fileNodes.length
-    })
-    return []
-  }
-
   const sortedResults = results.sort((a, b) => b.score - a.score)
 
   const endTime = performance.now()
   const duration = (endTime - startTime).toFixed(2)
-  const matchCounts = sortedResults.reduce(
-    (counts, result) => {
-      counts[result.matchType] += 1
-      return counts
-    },
-    { filename: 0, content: 0, both: 0 }
-  )
 
-  logger.debug('Full-text search completed', {
-    keyword: summarizeTextForLog(normalizedKeyword),
-    durationMs: Number(duration),
-    totalFiles: fileNodes.length,
-    resultsFound: sortedResults.length,
-    filenameMatches: matchCounts.filename,
-    contentMatches: matchCounts.content,
-    bothMatches: matchCounts.both
-  })
+  logger.debug(
+    `Full-text search completed: keyword="${keyword}", duration=${duration}ms, ` +
+      `totalFiles=${fileNodes.length}, resultsFound=${sortedResults.length}, ` +
+      `filenameMatches=${sortedResults.filter((r) => r.matchType === 'filename').length}, ` +
+      `contentMatches=${sortedResults.filter((r) => r.matchType === 'content').length}, ` +
+      `bothMatches=${sortedResults.filter((r) => r.matchType === 'both').length}`
+  )
 
   return sortedResults
 }

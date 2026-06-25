@@ -2,9 +2,8 @@ import { Button, Scrollbar, Skeleton } from '@cherrystudio/ui'
 import Favicon from '@renderer/components/Icons/FallbackFavicon'
 import SelectionContextMenu from '@renderer/components/SelectionContextMenu'
 import { useTemporaryValue } from '@renderer/hooks/useTemporaryValue'
-import type { Citation } from '@renderer/types'
+import type { Citation } from '@renderer/types/message'
 import { fetchWebContent, fetchXOEmbed, isXPostUrl } from '@renderer/utils/fetch'
-import { getFileName } from '@renderer/utils/file'
 import { cleanMarkdownContent } from '@renderer/utils/formats'
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { Check, Copy, FileSearch } from 'lucide-react'
@@ -220,8 +219,8 @@ const WebSearchCitation: React.FC<{ citation: Citation; actions?: CitationPanelA
     <SelectionContextMenu>
       <div className="group relative flex w-full flex-col py-3 transition-all duration-300">
         <div className="relative mb-1.5 flex w-full flex-row items-center gap-2">
-          {citation.showFavicon && citation.url && (
-            <Favicon hostname={new URL(citation.url).hostname} alt={citation.title || citation.hostname || ''} />
+          {citation.showFavicon && getCitationHostname(citation) && (
+            <Favicon hostname={getCitationHostname(citation)!} alt={citation.title || citation.hostname || ''} />
           )}
           {citation.url ? (
             <a
@@ -271,7 +270,7 @@ const KnowledgeCitation: React.FC<{ citation: Citation; actions?: CitationPanelA
             href={citation.url}
             onClick={(e) => handleLinkClick(citation.url, e, linkActions)}>
             {/* example title: User/path/example.pdf */}
-            {citation.title ? getFileName(citation.title) || citation.title : undefined}
+            {citation.title?.split('/').pop()}
           </a>
           <div className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[10px] text-primary leading-[1.6] opacity-100 transition-opacity duration-300 group-hover:opacity-0">
             {citation.number}

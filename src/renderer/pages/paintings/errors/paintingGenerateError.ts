@@ -49,9 +49,9 @@ export function presentPaintingGenerateError(error: unknown) {
 
   if (normalized instanceof PaintingGenerateError && normalized.presentation === 'toast') {
     if (normalized.severity === 'warning') {
-      window.toast?.warning(message)
+      window.toast.warning(message)
     } else {
-      window.toast?.error(message)
+      window.toast.error(message)
     }
     return
   }

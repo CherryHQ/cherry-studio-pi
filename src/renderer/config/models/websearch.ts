@@ -1,6 +1,6 @@
 import { getLowerBaseModelName } from '@renderer/utils/naming'
 import type { Model } from '@shared/data/types/model'
-import { isUniqueModelId, parseUniqueModelId } from '@shared/data/types/model'
+import { parseUniqueModelId } from '@shared/data/types/model'
 import {
   isHunyuanSearchModel as sharedIsHunyuanSearchModel,
   isOpenAIWebSearchChatCompletionOnlyModel as sharedIsOpenAIWebSearchChatCompletionOnlyModel,
@@ -8,19 +8,9 @@ import {
   isWebSearchModel as sharedIsWebSearchModel
 } from '@shared/utils/model'
 
-import { getRawModelId } from './utils'
-
 export { GEMINI_FLASH_MODEL_REGEX } from './utils'
 
 const PERPLEXITY_SEARCH_MODELS = ['sonar-pro', 'sonar', 'sonar-reasoning', 'sonar-reasoning-pro', 'sonar-deep-research']
-
-function getModelRouteParts(model: Model): { providerId: string; modelId: string } {
-  const parsed = isUniqueModelId(model.id) ? parseUniqueModelId(model.id) : undefined
-  return {
-    providerId: parsed?.providerId || model.providerId,
-    modelId: getRawModelId(model)
-  }
-}
 
 // ── Pure ID / capability checks delegated to shared ────────────────────────
 export const isOpenAIWebSearchModel = (model: Model): boolean => sharedIsOpenAIWebSearchModel(model)
@@ -43,7 +33,7 @@ export function isWebSearchModel(model: Model): boolean {
 /** Provider-host forces web search on every request (Perplexity / OpenRouter sonar). */
 export function isMandatoryWebSearchModel(model: Model): boolean {
   if (!model) return false
-  const { providerId, modelId } = getModelRouteParts(model)
+  const { providerId, modelId } = parseUniqueModelId(model.id)
   if (providerId !== 'perplexity' && providerId !== 'openrouter') return false
   return PERPLEXITY_SEARCH_MODELS.includes(getLowerBaseModelName(modelId))
 }
@@ -51,7 +41,7 @@ export function isMandatoryWebSearchModel(model: Model): boolean {
 /** OpenRouter exposes native web search for OpenAI's search-preview SKUs and sonar. */
 export function isOpenRouterBuiltInWebSearchModel(model: Model): boolean {
   if (!model) return false
-  const { providerId, modelId } = getModelRouteParts(model)
+  const { providerId, modelId } = parseUniqueModelId(model.id)
   if (providerId !== 'openrouter') return false
   return isOpenAIWebSearchChatCompletionOnlyModel(model) || getLowerBaseModelName(modelId).includes('sonar')
 }

@@ -8,7 +8,6 @@
  * scenarios the upgrade actually changes: object/array/record values that
  * are reconstructed as new references on every write.
  */
-import { RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY } from '@shared/data/cache/cacheSchemas'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Undo the global mock from renderer.setup.ts — we want the REAL CacheService
@@ -16,16 +15,12 @@ vi.unmock('@data/CacheService')
 
 const broadcastSync = vi.fn()
 const onSync = vi.fn()
-const onSyncCleanup = vi.fn()
 const getAllShared = vi.fn(async () => ({}))
 
 beforeEach(() => {
   broadcastSync.mockClear()
   onSync.mockClear()
-  onSyncCleanup.mockClear()
   getAllShared.mockClear()
-  onSync.mockReturnValue(onSyncCleanup)
-  localStorage.clear()
 
   Object.defineProperty(window, 'api', {
     configurable: true,
@@ -40,7 +35,6 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  localStorage.clear()
   vi.restoreAllMocks()
 })
 
@@ -49,44 +43,7 @@ async function createService() {
   return new CacheService()
 }
 
-function getBeforeUnloadCalls(calls: readonly unknown[][]) {
-  return calls.filter((call) => call[0] === 'beforeunload')
-}
-
 describe('renderer CacheService equality semantics', () => {
-  describe('lifecycle cleanup', () => {
-    it('removes IPC and beforeunload listeners during cleanup', async () => {
-      const addEventListenerSpy = vi.spyOn(window, 'addEventListener')
-      const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener')
-
-      const service = await createService()
-      const beforeUnloadCall = getBeforeUnloadCalls(addEventListenerSpy.mock.calls).at(-1)
-      const beforeUnloadHandler = beforeUnloadCall?.[1]
-
-      expect(onSync).toHaveBeenCalled()
-      expect(typeof beforeUnloadHandler).toBe('function')
-
-      service.cleanup()
-
-      expect(onSyncCleanup).toHaveBeenCalledTimes(1)
-      expect(removeEventListenerSpy).toHaveBeenCalledWith('beforeunload', beforeUnloadHandler)
-    })
-
-    it('does not duplicate lifecycle listeners when initialized again', async () => {
-      const addEventListenerSpy = vi.spyOn(window, 'addEventListener')
-      const service = await createService()
-      const onSyncCallsAfterConstruction = onSync.mock.calls.length
-      const beforeUnloadCallsAfterConstruction = getBeforeUnloadCalls(addEventListenerSpy.mock.calls).length
-
-      service.initialize()
-
-      expect(onSync).toHaveBeenCalledTimes(onSyncCallsAfterConstruction)
-      expect(getBeforeUnloadCalls(addEventListenerSpy.mock.calls)).toHaveLength(beforeUnloadCallsAfterConstruction)
-
-      service.cleanup()
-    })
-  })
-
   describe('setInternal (memory cache)', () => {
     it('skips subscriber notification when object value has same content (new reference)', async () => {
       const service = await createService()
@@ -137,28 +94,6 @@ describe('renderer CacheService equality semantics', () => {
       service.setShared(key, { topic1: { status: 'done' } } as any)
       expect(broadcastSync).toHaveBeenCalledTimes(1)
     })
-
-    it('does not notify subscribers when main sync returns an equal object value', async () => {
-      const service = await createService()
-      await vi.waitFor(() => expect(service.isSharedCacheReady()).toBe(true))
-
-      const key = 'chat.web_search.active_searches'
-      service.setShared(key, { topic1: { status: 'running' } } as any)
-      const sub = vi.fn()
-      service.subscribe(key, sub)
-      sub.mockClear()
-
-      getAllShared.mockResolvedValueOnce({
-        [key]: {
-          value: { topic1: { status: 'running' } }
-        }
-      })
-
-      service.initialize()
-
-      await vi.waitFor(() => expect(getAllShared).toHaveBeenCalledTimes(2))
-      expect(sub).not.toHaveBeenCalled()
-    })
   })
 
   describe('setPersist', () => {
@@ -182,87 +117,6 @@ describe('renderer CacheService equality semantics', () => {
 
       service.setPersist(key, [{ id: 't1' }, { id: 't2' }] as any)
       expect(broadcastSync).toHaveBeenCalledTimes(1)
-    })
-
-    it('reloads restored persist cache from localStorage into active windows', async () => {
-      const service = await createService()
-      const key = 'ui.sidebar.width'
-      const sub = vi.fn()
-
-      service.subscribe(key, sub)
-      localStorage.setItem(
-        RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY,
-        JSON.stringify({
-          [key]: 320
-        })
-      )
-      broadcastSync.mockClear()
-
-      service.reloadPersistCacheFromStorage()
-
-      expect(service.getPersist(key)).toBe(320)
-      expect(sub).toHaveBeenCalledTimes(1)
-      expect(broadcastSync).toHaveBeenCalledWith({
-        type: 'persist',
-        key,
-        value: 320
-      })
-    })
-
-    it('drops invalid persisted localStorage values while loading defaults', async () => {
-      localStorage.setItem(
-        RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY,
-        JSON.stringify({
-          'ui.sidebar.width': 'wide',
-          'settings.provider.openai.alert.dismissed': 'true',
-          'ui.emoji.recently_used': ['🧠', 42],
-          'ui.tab.pinned_tabs': [
-            {
-              id: 'valid-tab',
-              type: 'route',
-              url: '/home',
-              title: 'Home'
-            },
-            {
-              id: 'broken-tab'
-            }
-          ]
-        })
-      )
-
-      const service = await createService()
-
-      expect(service.getPersist('ui.sidebar.width')).toBe(50)
-      expect(service.getPersist('settings.provider.openai.alert.dismissed')).toBe(false)
-      expect(service.getPersist('ui.emoji.recently_used')).toEqual(['🧠'])
-      expect(service.getPersist('ui.tab.pinned_tabs')).toEqual([
-        {
-          id: 'valid-tab',
-          type: 'route',
-          url: '/home',
-          title: 'Home'
-        }
-      ])
-    })
-
-    it('falls back to defaults when localStorage read and cleanup are blocked', async () => {
-      vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
-        throw new DOMException('Blocked', 'SecurityError')
-      })
-      const removeItemSpy = vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
-        throw new DOMException('Blocked', 'SecurityError')
-      })
-
-      const service = await createService()
-
-      expect(service.getPersist('ui.sidebar.width')).toBe(50)
-      expect(removeItemSpy).toHaveBeenCalledWith(RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY)
-      expect(broadcastSync).not.toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'persist',
-          key: RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY
-        })
-      )
     })
   })
 })

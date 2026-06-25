@@ -1,5 +1,5 @@
 import AwsBedrockSettings from '@renderer/pages/settings/ProviderSettings/ProviderSpecific/AwsBedrockSettings'
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const updateAuthConfigMock = vi.fn()
@@ -55,22 +55,10 @@ vi.mock('react-i18next', () => ({
   })
 }))
 
-function createDeferred<T>() {
-  let resolve!: (value: T) => void
-  let reject!: (reason?: unknown) => void
-  const promise = new Promise<T>((promiseResolve, promiseReject) => {
-    resolve = promiseResolve
-    reject = promiseReject
-  })
-
-  return { promise, resolve, reject }
-}
-
 describe('AwsBedrockSettings', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     radioGroupPropsSpy.mockClear()
-    updateAuthConfigMock.mockResolvedValue(undefined)
     useProviderAuthConfigMock.mockReturnValue({ data: null })
     window.toast = { success: vi.fn(), error: vi.fn(), warning: vi.fn() } as any
   })
@@ -181,64 +169,5 @@ describe('AwsBedrockSettings', () => {
 
     expect(updateAuthConfigMock).not.toHaveBeenCalled()
     expect(window.toast.warning).toHaveBeenCalledWith('settings.provider.aws-bedrock.region_required')
-  })
-
-  it('does not show stale auth-mode save errors after unmount', async () => {
-    const save = createDeferred<void>()
-    updateAuthConfigMock.mockReturnValueOnce(save.promise)
-    useProviderMock.mockReturnValue({
-      provider: { id: 'aws-bedrock', authType: 'iam-aws' },
-      updateAuthConfig: updateAuthConfigMock
-    })
-    useProviderAuthConfigMock.mockReturnValue({
-      data: { type: 'iam-aws', region: 'us-east-2', accessKeyId: 'a', secretAccessKey: 's' }
-    })
-
-    const { unmount } = render(<AwsBedrockSettings providerId="aws-bedrock" />)
-
-    const { onValueChange } = radioGroupPropsSpy.mock.calls[0][0]
-    act(() => {
-      void onValueChange('apiKey')
-    })
-    unmount()
-
-    await act(async () => {
-      save.reject(new Error('closed'))
-      await save.promise.catch(() => undefined)
-    })
-
-    expect(window.toast.error).not.toHaveBeenCalled()
-  })
-
-  it('does not let an older failed IAM save roll back a newer edit', async () => {
-    const firstSave = createDeferred<void>()
-    updateAuthConfigMock.mockReturnValueOnce(firstSave.promise).mockResolvedValueOnce(undefined)
-    useProviderMock.mockReturnValue({
-      provider: { id: 'aws-bedrock', authType: 'iam-aws' },
-      updateAuthConfig: updateAuthConfigMock
-    })
-    useProviderAuthConfigMock.mockReturnValue({
-      data: { type: 'iam-aws', region: 'us-east-1', accessKeyId: 'a', secretAccessKey: 's' }
-    })
-
-    render(<AwsBedrockSettings providerId="aws-bedrock" />)
-
-    const accessKey = screen.getByDisplayValue('a')
-    fireEvent.change(accessKey, { target: { value: 'a1' } })
-    fireEvent.blur(accessKey)
-
-    fireEvent.change(accessKey, { target: { value: 'a2' } })
-    await act(async () => {
-      fireEvent.blur(accessKey)
-      await Promise.resolve()
-    })
-
-    await act(async () => {
-      firstSave.reject(new Error('first save failed late'))
-      await firstSave.promise.catch(() => undefined)
-    })
-
-    expect(window.toast.error).not.toHaveBeenCalled()
-    expect(screen.getByDisplayValue('a2')).toBeInTheDocument()
   })
 })

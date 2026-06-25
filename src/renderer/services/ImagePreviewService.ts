@@ -18,58 +18,32 @@ export interface ImagePreviewOptions {
  * 提供统一的图像预览功能，支持多种输入类型
  */
 export class ImagePreviewService {
-  private static currentObjectUrl: string | undefined
-
-  private static rememberObjectUrl(url: string) {
-    if (url.startsWith('blob:')) {
-      this.currentObjectUrl = url
-    } else {
-      this.currentObjectUrl = undefined
-    }
-  }
-
-  private static revokeObjectUrl(url: string | undefined) {
-    if (url?.startsWith('blob:')) {
-      URL.revokeObjectURL(url)
-      if (this.currentObjectUrl === url) {
-        this.currentObjectUrl = undefined
-      }
-    }
-  }
-
-  private static closeCurrentPreview() {
-    this.revokeObjectUrl(this.currentObjectUrl)
-    TopView.hide('image-preview')
-  }
-
   /**
    * 显示图像预览
    * @param input 图像输入源
    * @param options 预览选项
    */
   static async show(input: ImageInput, options: ImagePreviewOptions = {}): Promise<void> {
-    let imageUrl: string | undefined
     try {
-      const processedImageUrl = await this.processInput(input, options)
-      imageUrl = processedImageUrl
+      const imageUrl = await this.processInput(input, options)
 
       // 动态导入 ImageViewer 避免循环依赖
       const { default: ImageViewer } = await import('@renderer/components/ImageViewer')
 
       const handleVisibilityChange = (visible: boolean) => {
         if (!visible) {
-          this.revokeObjectUrl(processedImageUrl)
+          // 清理创建的 URL
+          if (imageUrl.startsWith('blob:')) {
+            URL.revokeObjectURL(imageUrl)
+          }
           TopView.hide('image-preview')
         }
       }
 
-      this.closeCurrentPreview()
-      this.rememberObjectUrl(processedImageUrl)
-
       TopView.show(
         () =>
           React.createElement(ImageViewer, {
-            src: processedImageUrl,
+            src: imageUrl,
             style: { display: 'none' }, // 隐藏图片本身，只显示预览对话框
             preview: {
               visible: true,
@@ -79,7 +53,6 @@ export class ImagePreviewService {
         'image-preview'
       )
     } catch (error) {
-      this.revokeObjectUrl(imageUrl)
       logger.error('Failed to show image preview:', error as Error)
       throw error
     }

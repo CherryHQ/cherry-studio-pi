@@ -4,10 +4,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useMiniAppVisibility } from '../useMiniAppVisibility'
 
-vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key: string) => key })
-}))
-
 const stubApp = (id: string): MiniApp => ({
   appId: id,
   name: id,

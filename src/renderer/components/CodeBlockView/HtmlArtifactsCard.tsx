@@ -1,7 +1,7 @@
 import { Button } from '@cherrystudio/ui'
 import { cn } from '@cherrystudio/ui/lib/utils'
 import { loggerService } from '@logger'
-import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { extractHtmlTitle, getFileNameFromHtmlTitle } from '@renderer/utils/formats'
 import { Code, DownloadIcon, Globe, LinkIcon, Sparkles } from 'lucide-react'
 import type { FC } from 'react'
@@ -24,31 +24,31 @@ const HtmlArtifactsCard: FC<Props> = ({ html, onSave, editable = true, isStreami
   const { t } = useTranslation()
   const title = extractHtmlTitle(html) || 'HTML Artifacts'
   const [isPopupOpen, setIsPopupOpen] = useState(false)
-  const showSaveFailed = useSaveFailedToast()
 
   const htmlContent = html || ''
   const hasContent = htmlContent.trim().length > 0
 
   const handleOpenExternal = async () => {
     try {
-      const path = await window.api.file.createTempFile('artifacts-preview.html')
-      await window.api.file.write(path, htmlContent)
-      await window.api.file.openPath(path)
+      const tempPath = await window.api.file.createTempFile('artifacts-preview.html')
+      await window.api.file.write(tempPath, htmlContent)
+      await window.api.file.openPath(tempPath)
     } catch (error) {
       logger.error('Failed to open HTML artifact externally', error as Error)
-      window.toast?.error(t('chat.artifacts.preview.openExternal.error.content'))
+      window.toast.error(formatErrorMessageWithPrefix(error, t('chat.artifacts.preview.openExternal.error.content')))
     }
   }
 
   const handleDownload = async () => {
-    const fileName = `${getFileNameFromHtmlTitle(title) || 'html-artifact'}.html`
     try {
+      const fileName = `${getFileNameFromHtmlTitle(title) || 'html-artifact'}.html`
       const savedPath = await window.api.file.save(fileName, htmlContent)
       if (!savedPath) return
-      window.toast?.success(t('message.download.success'))
+
+      window.toast.success(t('message.download.success'))
     } catch (error) {
       logger.error('Failed to download HTML artifact', error as Error)
-      showSaveFailed(error)
+      window.toast.error(formatErrorMessageWithPrefix(error, t('message.download.failed')))
     }
   }
 

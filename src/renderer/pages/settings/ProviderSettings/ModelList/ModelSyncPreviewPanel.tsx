@@ -1,6 +1,7 @@
 import { Alert, Button, Checkbox } from '@cherrystudio/ui'
 import { getModelLogo } from '@renderer/config/models'
 import type { Model } from '@shared/data/types/model'
+import { parseUniqueModelId, type UniqueModelId } from '@shared/data/types/model'
 import { CheckCircle2, Plus, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -8,7 +9,6 @@ import ModelTagsWithLabel, { type ModelTagsWithLabelModel } from '../components/
 import { modelSyncClasses } from '../primitives/ProviderSettingsPrimitives'
 import type { ModelSyncPreviewResponse } from './modelSyncPreviewTypes'
 import type { useModelListSyncSelections } from './useModelListSyncSelections'
-import { getProviderModelApiId } from './utils'
 
 export type ModelSyncPreviewSelections = ReturnType<typeof useModelListSyncSelections>
 
@@ -27,8 +27,8 @@ interface ModelSyncPreviewFooterProps {
   onCancel: () => void
 }
 
-function modelIdLine(model: Model) {
-  return getProviderModelApiId(model)
+function modelIdLine(uniqueModelId: UniqueModelId, apiModelId?: string) {
+  return apiModelId ?? parseUniqueModelId(uniqueModelId).modelId
 }
 
 function ModelGlyph({ model }: { model: Model }) {
@@ -137,7 +137,7 @@ export default function ModelSyncPreviewPanel({
                   <ModelGlyph model={model} />
                   <div className="min-w-0 flex-1">
                     <p className={modelSyncClasses.fetchRowTitle}>{model.name}</p>
-                    <p className={modelSyncClasses.fetchRowId}>{modelIdLine(model)}</p>
+                    <p className={modelSyncClasses.fetchRowId}>{modelIdLine(model.id, model.apiModelId)}</p>
                   </div>
                   <div className={modelSyncClasses.fetchCapabilityStrip}>
                     <ModelTagsWithLabel model={model as ModelTagsWithLabelModel} size={8} />
@@ -212,7 +212,9 @@ export default function ModelSyncPreviewPanel({
                   <ModelGlyph model={item.model} />
                   <div className="min-w-0 flex-1">
                     <p className={modelSyncClasses.fetchRowTitleStrike}>{item.model.name}</p>
-                    <p className={modelSyncClasses.fetchRowIdStrike}>{modelIdLine(item.model)}</p>
+                    <p className={modelSyncClasses.fetchRowIdStrike}>
+                      {modelIdLine(item.model.id, item.model.apiModelId)}
+                    </p>
                   </div>
                   <div className={modelSyncClasses.fetchCapabilityStrip}>
                     <ModelTagsWithLabel model={item.model as ModelTagsWithLabelModel} size={8} />

@@ -2,8 +2,7 @@ import { ConfirmDialog, EmptyState, PageSidePanel } from '@cherrystudio/ui'
 import { loggerService } from '@logger'
 import { DynamicVirtualList } from '@renderer/components/VirtualList'
 import { useLanguages, useTranslateHistories, useTranslateHistory } from '@renderer/hooks/translate'
-import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
-import { cn } from '@renderer/utils'
+import { cn } from '@renderer/utils/style'
 import type { TranslateLangCode } from '@shared/data/preference/preferenceTypes'
 import type { TranslateHistory, TranslateLanguage } from '@shared/data/types/translate'
 import { ArrowRight, ChevronRight, Clock, Copy, Repeat, Star, Trash2 } from 'lucide-react'
@@ -58,16 +57,6 @@ const TranslateHistoryList: FC<Props> = ({ isOpen, onHistoryItemClick, onClose }
   const { getLanguage, getLabel } = useLanguageLabels()
   const { clear: clearHistory, update: updateHistory } = useTranslateHistory()
   const pendingLoadMoreRef = useRef(false)
-  const mountedRef = useRef(true)
-  const showCopyFailed = useSaveFailedToast('common.copy_failed')
-
-  useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
 
   const history: DisplayedTranslateHistoryItem[] = useMemo(
     () =>
@@ -111,15 +100,13 @@ const TranslateHistoryList: FC<Props> = ({ isOpen, onHistoryItemClick, onClose }
     async (value: string) => {
       try {
         await navigator.clipboard.writeText(value)
-        if (mountedRef.current) {
-          window.toast?.success(t('translate.copied'))
-        }
+        window.toast.success(t('translate.copied'))
       } catch (error) {
         logger.error('Failed to copy translate history text', error as Error)
-        showCopyFailed(error)
+        window.toast.error(t('common.copy_failed'))
       }
     },
-    [showCopyFailed, t]
+    [t]
   )
 
   useEffect(() => {

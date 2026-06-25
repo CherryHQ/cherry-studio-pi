@@ -106,18 +106,14 @@ function getKeywordMatchScore(keyword: string, fields: ModelSearchField[]) {
 }
 
 export function getSearchMatchScore(keywords: string, fields: ModelSearchField[]) {
-  const searchKeywords = keywords
-    .toLowerCase()
-    .split(/\s+/)
-    .filter((keyword) => normalizeSearchSegment(keyword).length > 0)
-
-  if (searchKeywords.length === 0) {
+  const normalizedKeywords = keywords.toLowerCase().split(/\s+/).filter(Boolean)
+  if (normalizedKeywords.length === 0) {
     return 0
   }
 
   let totalScore = 0
 
-  for (const keyword of searchKeywords) {
+  for (const keyword of normalizedKeywords) {
     const keywordScore = getKeywordMatchScore(keyword, fields)
     if (keywordScore === null) {
       return null

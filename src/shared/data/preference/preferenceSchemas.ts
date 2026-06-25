@@ -36,6 +36,8 @@ import * as PreferenceTypes from '@shared/data/preference/preferenceTypes'
 
 export interface PreferenceSchemas {
   default: {
+    // target-key-definitions/complex/complex
+    'agent.session.display_mode': PreferenceTypes.AgentSessionDisplayMode
     // redux/settings/enableDeveloperMode
     'app.developer_mode.enabled': boolean
     // redux/settings/autoCheckUpdate
@@ -56,6 +58,8 @@ export interface PreferenceSchemas {
     'app.notification.knowledge.enabled': boolean
     // app/update notifications
     'app.notification.update.enabled': boolean
+    // target-key-definitions/complex/complex
+    'app.power.prevent_sleep_when_busy': boolean
     // redux/settings/enableDataCollection
     'app.privacy.data_collection.enabled': boolean
     // redux/settings/proxyBypassRules
@@ -329,6 +333,8 @@ export interface PreferenceSchemas {
     // redux/settings/apiServer.port
     'feature.api_gateway.port': number
     // target-key-definitions/complex/complex
+    'feature.binary.tools': PreferenceTypes.ManagedBinary[]
+    // target-key-definitions/complex/complex
     'feature.code_cli.overrides': PreferenceTypes.CodeCliOverrides
     // redux/preprocess/defaultProvider
     'feature.file_processing.default_document_to_markdown': PreferenceTypes.FileProcessorId | null
@@ -472,6 +478,8 @@ export interface PreferenceSchemas {
     'topic.naming_prompt': string
     // redux/settings/topicPosition
     'topic.position': string
+    // target-key-definitions/complex/complex
+    'topic.tab.display_mode': PreferenceTypes.TopicDisplayMode
     // redux/settings/pinTopicsToTop
     'topic.tab.pin_to_top': boolean
     // redux/settings/showTopics
@@ -500,6 +508,7 @@ export interface PreferenceSchemas {
 /* eslint sort-keys: ["error", "asc", {"caseSensitive": true, "natural": false}] */
 export const DefaultPreferences: PreferenceSchemas = {
   default: {
+    'agent.session.display_mode': 'agent',
     'app.developer_mode.enabled': false,
     'app.dist.auto_update.enabled': true,
     'app.dist.test_plan.channel': PreferenceTypes.UpgradeChannel.LATEST,
@@ -510,6 +519,7 @@ export const DefaultPreferences: PreferenceSchemas = {
     'app.notification.backup.enabled': false,
     'app.notification.knowledge.enabled': false,
     'app.notification.update.enabled': true,
+    'app.power.prevent_sleep_when_busy': false,
     'app.privacy.data_collection.enabled': false,
     'app.proxy.bypass_rules': '',
     'app.proxy.mode': 'system',
@@ -646,6 +656,7 @@ export const DefaultPreferences: PreferenceSchemas = {
     'feature.api_gateway.enabled': false,
     'feature.api_gateway.host': '127.0.0.1',
     'feature.api_gateway.port': 23333,
+    'feature.binary.tools': [] as PreferenceTypes.ManagedBinary[],
     'feature.code_cli.overrides': {} as PreferenceTypes.CodeCliOverrides,
     'feature.file_processing.default_document_to_markdown': null,
     'feature.file_processing.default_image_to_text': null,
@@ -745,6 +756,7 @@ export const DefaultPreferences: PreferenceSchemas = {
     'topic.naming.model_id': null,
     'topic.naming_prompt': '',
     'topic.position': 'left',
+    'topic.tab.display_mode': 'assistant',
     'topic.tab.pin_to_top': false,
     'topic.tab.show': true,
     'topic.tab.show_time': false,

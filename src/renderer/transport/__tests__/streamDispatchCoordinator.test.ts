@@ -92,19 +92,6 @@ describe('streamDispatchCoordinator', () => {
     off()
   })
 
-  it('preserves nested rejected dispatch details', async () => {
-    streamOpen.mockRejectedValue({ error: { message: 'stream bridge failed' } })
-    const seen: Array<{ ok: boolean; error?: Error }> = []
-    const off = streamDispatchCoordinator.subscribe(TOPIC, (r) => seen.push(r))
-
-    streamDispatchCoordinator.dispatch(TOPIC, req)
-    await flush()
-
-    expect(seen[0]).toMatchObject({ ok: false, topicId: TOPIC })
-    expect(seen[0].error?.message).toBe('stream bridge failed')
-    off()
-  })
-
   it('shows workspace dispatch failures as toast', async () => {
     streamOpen.mockResolvedValue({
       mode: 'blocked',
@@ -116,19 +103,6 @@ describe('streamDispatchCoordinator', () => {
     await flush()
 
     expect(window.toast.error).toHaveBeenCalledWith('Workspace path for session session-1 is not accessible: /missing')
-  })
-
-  it('shows agent preflight dispatch failures as toast', async () => {
-    streamOpen.mockResolvedValue({
-      mode: 'blocked',
-      reason: 'agent-session-preflight',
-      message: 'Agent agent-1 has no model configured'
-    } satisfies AiStreamOpenResponse)
-
-    streamDispatchCoordinator.dispatch(TOPIC, req)
-    await flush()
-
-    expect(window.toast.error).toHaveBeenCalledWith('Agent agent-1 has no model configured')
   })
 
   it('unsubscribe stops further delivery', async () => {

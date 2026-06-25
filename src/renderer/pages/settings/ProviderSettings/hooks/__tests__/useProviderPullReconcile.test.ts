@@ -39,12 +39,10 @@ const keys = (...values: string[]) => ({
 
 const deferred = <T>() => {
   let resolve!: (v: T) => void
-  let reject!: (reason?: unknown) => void
-  const promise = new Promise<T>((r, j) => {
+  const promise = new Promise<T>((r) => {
     resolve = r
-    reject = j
   })
-  return { promise, resolve, reject }
+  return { promise, resolve }
 }
 
 describe('useProviderPullReconcile — C3 single-flight by api-key signature', () => {
@@ -108,100 +106,5 @@ describe('useProviderPullReconcile — C3 single-flight by api-key signature', (
     })
 
     expect(result.current.preview).toEqual({ added: [{ id: 'k2' }], missing: [] })
-  })
-
-  it('does not dedupe onto an in-flight preview from another provider with the same key', async () => {
-    useProviderApiKeysMock.mockReturnValue(keys('sk-shared'))
-    const d1 = deferred<any>()
-    const d2 = deferred<any>()
-    buildPreviewMock.mockReturnValueOnce(d1.promise).mockReturnValueOnce(d2.promise)
-
-    const { result, rerender } = renderHook(({ providerId }) => useProviderPullReconcile(providerId), {
-      initialProps: { providerId: 'openai' }
-    })
-
-    let p1: Promise<any>
-    act(() => {
-      p1 = result.current.fetchPreview()
-    })
-
-    rerender({ providerId: 'anthropic' })
-
-    let p2: Promise<any>
-    act(() => {
-      p2 = result.current.fetchPreview()
-    })
-
-    expect(buildPreviewMock).toHaveBeenCalledTimes(2)
-    expect(buildPreviewMock).toHaveBeenNthCalledWith(1, { providerId: 'openai' })
-    expect(buildPreviewMock).toHaveBeenNthCalledWith(2, { providerId: 'anthropic' })
-
-    await act(async () => {
-      d2.resolve({ added: [{ id: 'anthropic-model' }], missing: [] })
-      d1.resolve({ added: [{ id: 'openai-model' }], missing: [] })
-      await Promise.all([p1, p2])
-    })
-
-    expect(result.current.preview).toEqual({ added: [{ id: 'anthropic-model' }], missing: [] })
-  })
-
-  it('clears an existing preview when the provider changes', async () => {
-    useProviderApiKeysMock.mockReturnValue(keys('sk-1'))
-    buildPreviewMock.mockResolvedValue({ added: [{ id: 'openai-model' }], missing: [] })
-
-    const { result, rerender } = renderHook(({ providerId }) => useProviderPullReconcile(providerId), {
-      initialProps: { providerId: 'openai' }
-    })
-
-    await act(async () => {
-      await result.current.fetchPreview()
-    })
-
-    expect(result.current.preview).toEqual({ added: [{ id: 'openai-model' }], missing: [] })
-
-    rerender({ providerId: 'anthropic' })
-
-    expect(result.current.preview).toBeNull()
-  })
-
-  it('does not surface stale preview failures after unmount', async () => {
-    useProviderApiKeysMock.mockReturnValue(keys('sk-1'))
-    const d = deferred<any>()
-    buildPreviewMock.mockReturnValue(d.promise)
-
-    const { result, unmount } = renderHook(() => useProviderPullReconcile('openai'))
-
-    let previewPromise: Promise<any>
-    act(() => {
-      previewPromise = result.current.fetchPreview()
-    })
-    unmount()
-
-    await act(async () => {
-      d.reject(new Error('closed'))
-      await previewPromise.catch(() => undefined)
-    })
-
-    expect(window.toast.error).not.toHaveBeenCalled()
-  })
-
-  it('preserves nested preview failure details from bridged errors', async () => {
-    useProviderApiKeysMock.mockReturnValue(keys('sk-1'))
-    buildPreviewMock.mockRejectedValue({ error: { message: 'provider upstream timed out' } })
-
-    const { result } = renderHook(() => useProviderPullReconcile('openai'))
-    let thrown: unknown
-
-    await act(async () => {
-      try {
-        await result.current.fetchPreview()
-      } catch (error) {
-        thrown = error
-      }
-    })
-
-    expect(thrown).toBeInstanceOf(Error)
-    expect((thrown as Error).message).toBe('provider upstream timed out')
-    expect(window.toast.error).toHaveBeenCalledWith('settings.models.manage.sync_pull_failed')
   })
 })

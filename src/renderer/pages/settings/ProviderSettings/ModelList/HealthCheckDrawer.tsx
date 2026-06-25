@@ -20,7 +20,7 @@ import { HealthStatus } from '@renderer/pages/settings/ProviderSettings/types/he
 import { maskApiKey } from '@renderer/utils/api'
 import { cn } from '@renderer/utils/style'
 import { CheckCircle2, Info, Loader2, XCircle } from 'lucide-react'
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import ProviderSettingsDrawer from '../primitives/ProviderSettingsDrawer'
@@ -54,17 +54,8 @@ export default function HealthCheckDrawer({
   const [isConcurrent, setIsConcurrent] = useState(true)
   const [timeoutSeconds, setTimeoutSeconds] = useState(15)
   const [isStarting, setIsStarting] = useState(false)
-  const mountedRef = useRef(true)
-  const startInFlightRef = useRef(false)
 
   const showPipeline = modelStatuses.length > 0
-
-  useEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
 
   const progressStats = useMemo(() => {
     if (modelStatuses.length === 0) {
@@ -116,33 +107,7 @@ export default function HealthCheckDrawer({
     setTimeoutSeconds(15)
   }, [open])
 
-  useEffect(() => {
-    setSelectedKeyIndex((current) => (apiKeys.length > 0 ? Math.min(current, apiKeys.length - 1) : 0))
-  }, [apiKeys.length])
-
   const hasMultipleKeys = apiKeys.length > 1
-  const handleStart = useCallback(async () => {
-    if (startInFlightRef.current || isStarting || isChecking) {
-      return
-    }
-
-    startInFlightRef.current = true
-    setIsStarting(true)
-    try {
-      const keysToUse =
-        keyCheckMode === 'single' ? (apiKeys[selectedKeyIndex] ? [apiKeys[selectedKeyIndex]] : []) : apiKeys
-      await onStart({
-        apiKeys: keysToUse,
-        isConcurrent,
-        timeout: timeoutSeconds * 1000
-      })
-    } finally {
-      startInFlightRef.current = false
-      if (mountedRef.current) {
-        setIsStarting(false)
-      }
-    }
-  }, [apiKeys, isChecking, isConcurrent, isStarting, keyCheckMode, onStart, selectedKeyIndex, timeoutSeconds])
 
   const footer = !showPipeline ? (
     <div className={drawerClasses.footer}>
@@ -150,9 +115,21 @@ export default function HealthCheckDrawer({
         {t('common.cancel')}
       </Button>
       <Button
-        disabled={isStarting || isChecking}
-        loading={isStarting || isChecking || undefined}
-        onClick={() => void handleStart()}>
+        loading={isStarting}
+        onClick={async () => {
+          setIsStarting(true)
+          try {
+            const keysToUse =
+              keyCheckMode === 'single' ? (apiKeys[selectedKeyIndex] ? [apiKeys[selectedKeyIndex]] : []) : apiKeys
+            await onStart({
+              apiKeys: keysToUse,
+              isConcurrent,
+              timeout: timeoutSeconds * 1000
+            })
+          } finally {
+            setIsStarting(false)
+          }
+        }}>
         {t('settings.models.check.start')}
       </Button>
     </div>

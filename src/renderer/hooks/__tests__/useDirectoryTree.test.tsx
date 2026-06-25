@@ -197,32 +197,6 @@ describe('useDirectoryTree', () => {
     expect(mocks.dispose).toHaveBeenCalledWith('t-first')
   })
 
-  it('clears the stale root immediately when rootPath changes', async () => {
-    mocks.create.mockResolvedValueOnce({ treeId: 't-first', snapshot: makeSnapshot('/notes', ['old.md']) })
-    mocks.create.mockImplementationOnce(
-      () =>
-        new Promise<CreateTreeIpcResult>(() => {
-          // Keep the second tree pending so the assertion observes the loading state.
-        })
-    )
-    mocks.onMutation.mockReturnValue(() => {})
-
-    const { rerender, result } = renderHook(({ root }: { root: string | undefined }) => useDirectoryTree(root), {
-      initialProps: { root: '/notes' as string | undefined }
-    })
-
-    await waitFor(() => {
-      expect(result.current.root?.hasChild('old.md')).toBe(true)
-    })
-
-    rerender({ root: '/notes2' as string | undefined })
-
-    expect(result.current.root).toBeNull()
-    expect(result.current.treeId).toBeNull()
-    expect(result.current.version).toBe(0)
-    expect(result.current.isLoading).toBe(true)
-  })
-
   it('does not call setError when File_TreeCreate rejects after unmount', async () => {
     let rejectCreate: ((err: Error) => void) | null = null
     mocks.create.mockImplementationOnce(

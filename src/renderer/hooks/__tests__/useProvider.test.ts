@@ -118,7 +118,7 @@ describe('useProviders', () => {
     renderHook(() => useProviders())
 
     expect(mockUseMutation).toHaveBeenCalledWith('POST', '/providers', {
-      refresh: ['/providers', '/models']
+      refresh: ['/providers']
     })
   })
 
@@ -270,7 +270,7 @@ describe('useProviderMutations', () => {
     vi.clearAllMocks()
   })
 
-  it('should set up PATCH and DELETE mutations via template path with related cache refreshes', () => {
+  it('should set up PATCH and DELETE mutations via template path with list + entity + /* wildcard refresh', () => {
     renderHook(() => useProviderMutations('openai'))
 
     const patchCall = mockUseMutation.mock.calls.find(
@@ -281,18 +281,14 @@ describe('useProviderMutations', () => {
     )
 
     expect(patchCall).toBeDefined()
-    // P0: provider mutations can change model-selector visibility through provider.isEnabled.
-    expect(patchCall![2]).toEqual({
-      refresh: ['/providers', '/providers/openai', '/providers/openai/*', '/models', '/pins']
-    })
+    // P0: list + entity + /* wildcard covers useProvider(id) and all sub-resource hooks
+    expect(patchCall![2]).toEqual({ refresh: ['/providers', '/providers/openai', '/providers/openai/*'] })
 
     expect(deleteCall).toBeDefined()
-    expect(deleteCall![2]).toEqual({
-      refresh: ['/providers', '/providers/openai', '/providers/openai/*', '/models', '/pins']
-    })
+    expect(deleteCall![2]).toEqual({ refresh: ['/providers', '/providers/openai', '/providers/openai/*'] })
   })
 
-  it('should set up POST api-keys mutation with catalog refresh', () => {
+  it('should set up POST api-keys mutation with /* wildcard refresh', () => {
     renderHook(() => useProviderMutations('openai'))
 
     const addKeyCall = mockUseMutation.mock.calls.find(
@@ -300,13 +296,13 @@ describe('useProviderMutations', () => {
     )
 
     expect(addKeyCall).toBeDefined()
-    // Adding a usable key can enable the provider, which changes model-selector visibility.
+    // /* wildcard covers api-keys sub-path declaratively; no explicit sub-path needed
     expect(addKeyCall![2]).toEqual({
-      refresh: ['/providers', '/providers/openai', '/providers/openai/*', '/models', '/pins']
+      refresh: ['/providers', '/providers/openai', '/providers/openai/*']
     })
   })
 
-  it('should set up DELETE api-key mutation with catalog refresh', () => {
+  it('should set up DELETE api-key mutation with /* wildcard refresh', () => {
     renderHook(() => useProviderMutations('openai'))
 
     const deleteKeyCall = mockUseMutation.mock.calls.find(
@@ -315,11 +311,11 @@ describe('useProviderMutations', () => {
 
     expect(deleteKeyCall).toBeDefined()
     expect(deleteKeyCall![2]).toEqual({
-      refresh: ['/providers', '/providers/openai', '/providers/openai/*', '/models', '/pins']
+      refresh: ['/providers', '/providers/openai', '/providers/openai/*']
     })
   })
 
-  it('should set up PATCH api-key mutation with catalog refresh', () => {
+  it('should set up PATCH api-key mutation with /* wildcard refresh', () => {
     renderHook(() => useProviderMutations('openai'))
 
     const updateKeyCall = mockUseMutation.mock.calls.find(
@@ -328,11 +324,11 @@ describe('useProviderMutations', () => {
 
     expect(updateKeyCall).toBeDefined()
     expect(updateKeyCall![2]).toEqual({
-      refresh: ['/providers', '/providers/openai', '/providers/openai/*', '/models', '/pins']
+      refresh: ['/providers', '/providers/openai', '/providers/openai/*']
     })
   })
 
-  it('should set up PUT api-keys mutation with catalog refresh', () => {
+  it('should set up PUT api-keys mutation with /* wildcard refresh', () => {
     renderHook(() => useProviderMutations('openai'))
 
     const replaceKeysCall = mockUseMutation.mock.calls.find(
@@ -341,7 +337,7 @@ describe('useProviderMutations', () => {
 
     expect(replaceKeysCall).toBeDefined()
     expect(replaceKeysCall![2]).toEqual({
-      refresh: ['/providers', '/providers/openai', '/providers/openai/*', '/models', '/pins']
+      refresh: ['/providers', '/providers/openai', '/providers/openai/*']
     })
   })
 
@@ -354,7 +350,7 @@ describe('useProviderMutations', () => {
 
     expect(patchCall).toBeDefined()
     expect(patchCall![2]).toEqual({
-      refresh: ['/providers', '/providers/openai-main', '/providers/openai-main/*', '/models', '/pins']
+      refresh: ['/providers', '/providers/openai-main', '/providers/openai-main/*']
     })
   })
 
@@ -698,22 +694,12 @@ describe('useProviderActions refresh', () => {
     const patchCall = mockUseMutation.mock.calls.find(
       (c: any[]) => c[0] === 'PATCH' && c[1] === '/providers/:providerId'
     )
-    const deleteCall = mockUseMutation.mock.calls.find(
-      (c: any[]) => c[0] === 'DELETE' && c[1] === '/providers/:providerId'
-    )
     expect(patchCall).toBeDefined()
-    expect(deleteCall).toBeDefined()
 
-    // Invoke the function-form refresh with real args to confirm it refreshes the dependent model catalog.
+    // Invoke the function-form refresh with real args to confirm it calls providerRefreshPaths
     const refreshFn = (patchCall as any[])[2].refresh as (ctx: { args: { params: { providerId: string } } }) => string[]
     const result = refreshFn({ args: { params: { providerId: 'openai' } } })
-    expect(result).toEqual(['/providers', '/providers/openai', '/providers/openai/*', '/models', '/pins'])
-
-    const deleteRefreshFn = (deleteCall as any[])[2].refresh as (ctx: {
-      args: { params: { providerId: string } }
-    }) => string[]
-    const deleteResult = deleteRefreshFn({ args: { params: { providerId: 'openai' } } })
-    expect(deleteResult).toEqual(['/providers', '/providers/openai', '/providers/openai/*', '/models', '/pins'])
+    expect(result).toEqual(['/providers', '/providers/openai', '/providers/openai/*'])
   })
 })
 

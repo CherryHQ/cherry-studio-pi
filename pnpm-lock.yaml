@@ -904,7 +904,7 @@ importers:
         specifier: 2.3.0
         version: 2.3.0
       mermaid:
-        specifier: ^11.15.0
+        specifier: ^11.13.0
         version: 11.15.0
       mime:
         specifier: ^4.0.4
@@ -20904,7 +20904,7 @@ snapshots:
 
   '@streamdown/mermaid@1.0.2(react@19.2.3)':
     dependencies:
-      mermaid: 11.13.0
+      mermaid: 11.15.0
       react: 19.2.3
 
   '@strongtz/win32-arm64-msvc@0.4.7':

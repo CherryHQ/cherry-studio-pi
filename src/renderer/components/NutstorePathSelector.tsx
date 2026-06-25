@@ -1,8 +1,7 @@
 import { Button, Input, RowFlex } from '@cherrystudio/ui'
 import { loggerService } from '@logger'
 import { FolderIcon as NutstoreFolderIcon } from '@renderer/components/Icons/NutstoreIcons'
-import { getErrorMessage } from '@renderer/utils/error'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface NewFolderProps {
@@ -62,30 +61,21 @@ function FileList(props: FileListProps) {
   const folders = files.filter((file) => file.isDir).sort((a, b) => a.basename.localeCompare(b.basename, ['zh']))
 
   useEffect(() => {
-    let cancelled = false
-    setFiles([])
-
     async function fetchFiles() {
       try {
         const items = await props.fs.ls(props.path)
-        if (!cancelled) {
-          setFiles(items)
-        }
+        setFiles(items)
       } catch (error) {
-        if (!cancelled) {
-          logger.error('Error fetching files:', error as Error)
+        if (error instanceof Error) {
+          logger.error('Error fetching files:', error)
           window.modal.error({
-            content: getErrorMessage(error),
+            content: error.message,
             centered: true
           })
         }
       }
     }
     void fetchFiles()
-
-    return () => {
-      cancelled = true
-    }
   }, [props.path, props.fs])
 
   return (
@@ -108,17 +98,8 @@ export function NutstorePathSelector(props: Props) {
 
   const [stack, setStack] = useState<string[]>(['/'])
   const [showNewFolder, setShowNewFolder] = useState(false)
-  const mountedRef = useRef(true)
 
   const cwd = stack.at(-1)
-
-  useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
 
   const enter = useCallback((path: string) => {
     setStack((prev) => [...prev, path])
@@ -130,23 +111,10 @@ export function NutstorePathSelector(props: Props) {
 
   const handleNewFolder = useCallback(
     async (name: string) => {
-      const folderName = name.trim()
-      if (!folderName) return
-
-      const target = (cwd ?? '/') + (cwd && cwd !== '/' ? '/' : '') + folderName
-      try {
-        await props.fs.mkdirs(target)
-        if (!mountedRef.current) return
-        setShowNewFolder(false)
-        enter(target)
-      } catch (error) {
-        if (!mountedRef.current) return
-        logger.error('Error creating folder:', error as Error)
-        window.modal.error({
-          content: getErrorMessage(error),
-          centered: true
-        })
-      }
+      const target = (cwd ?? '/') + (cwd && cwd !== '/' ? '/' : '') + name
+      await props.fs.mkdirs(target)
+      setShowNewFolder(false)
+      enter(target)
     },
     [cwd, props.fs, enter]
   )

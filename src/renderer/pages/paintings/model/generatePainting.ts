@@ -1,5 +1,6 @@
 import { ipcApi } from '@renderer/ipc'
-import type { FileMetadata, GenerateImageParams } from '@renderer/types'
+import type { FileMetadata } from '@renderer/types/file'
+import type { GenerateImageParams } from '@shared/types/image'
 
 import { fileEntryToMetadata } from '../utils/fileEntryAdapter'
 import { runPainting } from './runPainting'
@@ -43,21 +44,9 @@ export interface GeneratePaintingOptions {
   readonly providerBag?: Record<string, unknown>
 }
 
-function createImageAbortError(): DOMException {
-  return new DOMException('Image generation aborted', 'AbortError')
-}
-
 export function generatePainting(opts: GeneratePaintingOptions): Promise<FileMetadata[]> {
-  if (opts.signal.aborted) {
-    return Promise.reject(createImageAbortError())
-  }
-
   return runPainting(async () => {
     const { aiSdkParams, providerBag } = opts
-
-    if (opts.signal.aborted) {
-      throw createImageAbortError()
-    }
 
     const seedRaw = typeof aiSdkParams.seed === 'string' ? aiSdkParams.seed.trim() : ''
     const seed = /^-?\d+$/.test(seedRaw) ? Number(seedRaw) : undefined
@@ -67,51 +56,49 @@ export function generatePainting(opts: GeneratePaintingOptions): Promise<FileMet
     const requestId = crypto.randomUUID()
     const onAbort = () => void ipcApi.request('ai.abort_image', { requestId })
     opts.signal.addEventListener('abort', onAbort, { once: true })
-    try {
-      const result = await ipcApi
-        .request('ai.generate_image', {
-          requestId,
-          payload: {
-            uniqueModelId: `${opts.provider.id}::${opts.modelId}`,
-            prompt: opts.prompt,
-            ...(inputImages.length > 0 && { inputImages }),
-            ...(aiSdkParams.batchSize !== undefined && { n: aiSdkParams.batchSize }),
-            ...(aiSdkParams.imageSize && { size: aiSdkParams.imageSize }),
-            ...(aiSdkParams.negativePrompt && { negativePrompt: aiSdkParams.negativePrompt }),
-            ...(seed !== undefined && { seed }),
-            ...(aiSdkParams.quality && { quality: aiSdkParams.quality }),
-            ...(aiSdkParams.numInferenceSteps !== undefined && { numInferenceSteps: aiSdkParams.numInferenceSteps }),
-            ...(aiSdkParams.guidanceScale !== undefined && { guidanceScale: aiSdkParams.guidanceScale }),
-            ...(aiSdkParams.promptEnhancement !== undefined && { promptEnhancement: aiSdkParams.promptEnhancement }),
-            ...(aiSdkParams.personGeneration && { personGeneration: aiSdkParams.personGeneration }),
-            ...(aiSdkParams.aspectRatio && { aspectRatio: aiSdkParams.aspectRatio }),
-            ...(aiSdkParams.background && { background: aiSdkParams.background }),
-            ...(aiSdkParams.moderation && { moderation: aiSdkParams.moderation }),
-            ...(aiSdkParams.style && { style: aiSdkParams.style }),
-            ...(providerBag && { providerOptions: { [opts.provider.id]: providerBag } })
-          }
-        })
-        // A failure now crosses IpcApi as an IpcError, so an abort would no
-        // longer satisfy runPainting's silent-cancel check unless we restore it.
-        .catch((error) => {
-          if (opts.signal.aborted) throw createImageAbortError()
-          throw error
-        })
+    const result = await ipcApi
+      .request('ai.generate_image', {
+        requestId,
+        payload: {
+          uniqueModelId: `${opts.provider.id}::${opts.modelId}`,
+          prompt: opts.prompt,
+          ...(inputImages.length > 0 && { inputImages }),
+          ...(aiSdkParams.batchSize !== undefined && { n: aiSdkParams.batchSize }),
+          ...(aiSdkParams.imageSize && { size: aiSdkParams.imageSize }),
+          ...(aiSdkParams.negativePrompt && { negativePrompt: aiSdkParams.negativePrompt }),
+          ...(seed !== undefined && { seed }),
+          ...(aiSdkParams.quality && { quality: aiSdkParams.quality }),
+          ...(aiSdkParams.numInferenceSteps !== undefined && { numInferenceSteps: aiSdkParams.numInferenceSteps }),
+          ...(aiSdkParams.guidanceScale !== undefined && { guidanceScale: aiSdkParams.guidanceScale }),
+          ...(aiSdkParams.promptEnhancement !== undefined && { promptEnhancement: aiSdkParams.promptEnhancement }),
+          ...(aiSdkParams.personGeneration && { personGeneration: aiSdkParams.personGeneration }),
+          ...(aiSdkParams.aspectRatio && { aspectRatio: aiSdkParams.aspectRatio }),
+          ...(aiSdkParams.background && { background: aiSdkParams.background }),
+          ...(aiSdkParams.moderation && { moderation: aiSdkParams.moderation }),
+          ...(aiSdkParams.style && { style: aiSdkParams.style }),
+          ...(providerBag && { providerOptions: { [opts.provider.id]: providerBag } })
+        }
+      })
+      // A failure now crosses IpcApi as an IpcError (name 'IpcError'), so an abort would
+      // no longer satisfy runPainting's `name === 'AbortError'` cancel check. When the
+      // user aborted, re-throw a real AbortError to preserve the silent-cancel behaviour.
+      .catch((error) => {
+        if (opts.signal.aborted) throw new DOMException('Image generation aborted', 'AbortError')
+        throw error
+      })
+      .finally(() => opts.signal.removeEventListener('abort', onAbort))
 
-      if (opts.signal.aborted) {
-        throw createImageAbortError()
-      }
-      if (result.files.length === 0) {
-        return undefined
-      }
-
-      // main already persisted the images (`createInternalEntry`); just adapt the
-      // returned v2 `FileEntry` rows to the v1 `FileMetadata` the painting state
-      // still consumes. No base64 round-trip.
-      const files = await Promise.all(result.files.map(fileEntryToMetadata))
-      return files.length > 0 ? { files } : undefined
-    } finally {
-      opts.signal.removeEventListener('abort', onAbort)
+    if (opts.signal.aborted) {
+      throw new DOMException('Image generation aborted', 'AbortError')
     }
+    if (result.files.length === 0) {
+      return undefined
+    }
+
+    // main already persisted the images (`createInternalEntry`); just adapt the
+    // returned v2 `FileEntry` rows to the v1 `FileMetadata` the painting state
+    // still consumes. No base64 round-trip.
+    const files = await Promise.all(result.files.map(fileEntryToMetadata))
+    return files.length > 0 ? { files } : undefined
   })
 }

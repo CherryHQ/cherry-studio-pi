@@ -5,13 +5,8 @@
  * orderKey / timestamps` live here. For config (model / instructions /
  * configuration / ...) call {@link import('./useAgent').useAgent}
  * with `session.agentId`.
- *
- * Companion hooks for derived/lifecycle state (not CRUD):
- *  - {@link import('./useCreateDefaultSession').useCreateDefaultSession}
- *  - {@link import('./useAgentSessionInitializer').useAgentSessionInitializer}
  */
 
-import { useCache } from '@renderer/data/hooks/useCache'
 import {
   useInfiniteFlatItems,
   useInfiniteQuery,
@@ -21,8 +16,8 @@ import {
 } from '@renderer/data/hooks/useDataApi'
 import { useReorder } from '@renderer/data/hooks/useReorder'
 import type { UpdateAgentBaseOptions } from '@renderer/types/agent'
-import { getErrorMessage } from '@renderer/utils/error'
-import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
+import { formatErrorMessageWithPrefix, getErrorMessage } from '@renderer/utils/error'
+import type { OrderRequest } from '@shared/data/api/schemas/_endpointHelpers'
 import type {
   AgentSessionEntity,
   CreateAgentSessionDto,
@@ -33,6 +28,11 @@ import { useCallback, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 const DEFAULT_SESSION_PAGE_SIZE = 20
+export type AgentSessionSource = 'query' | 'pending' | 'none'
+type UseSessionsOptions = {
+  pageSize?: number
+  loadAll?: boolean
+}
 
 export type CreateSessionForm = Omit<CreateAgentSessionDto, 'agentId'>
 export type UpdateSessionForm = UpdateAgentSessionDto & { id: string }
@@ -40,8 +40,7 @@ export type UpdateSessionForm = UpdateAgentSessionDto & { id: string }
 /**
  * Fetch a single session by id. Config (model / instructions / ...) lives on
  * the parent agent — fetch via `useAgent(session.agentId)` separately. For
- * mutations call `useUpdateSession(agentId)` directly; the id is retained for
- * legacy callers, while the update itself is addressed by `sessionId`.
+ * mutations call `useUpdateSession()` directly.
  */
 export const useSession = (sessionId: string | null) => {
   const {
@@ -58,28 +57,46 @@ export const useSession = (sessionId: string | null) => {
   return { session, error, isLoading, mutate }
 }
 
-/**
- * Reads the single active-session pointer and returns the resolved session.
- * Active agent is derived from `session.agentId` — see {@link useActiveAgent}.
- */
-export const useActiveSession = () => {
-  const [activeSessionId, setActiveSessionIdAction] = useCache('agent.active_session_id')
-  const setActiveSessionId = useCallback(
-    (id: string | null) => setActiveSessionIdAction(id),
-    [setActiveSessionIdAction]
-  )
+export interface UseActiveSessionOptions {
+  /** External source of truth for the active session id (e.g. URL search). */
+  activeSessionId: string | null
+  /** Write back when callers select a different session. */
+  setActiveSessionId: (id: string | null) => void
+  pendingSession?: AgentSessionEntity | null
+}
+
+export const useActiveSession = ({ activeSessionId, setActiveSessionId, pendingSession }: UseActiveSessionOptions) => {
   const result = useSession(activeSessionId)
-  return { ...result, activeSessionId, setActiveSessionId }
+  const querySession = activeSessionId && result.session?.id === activeSessionId ? result.session : undefined
+  const resolvedPendingSession = activeSessionId && pendingSession?.id === activeSessionId ? pendingSession : undefined
+  const session = querySession ?? resolvedPendingSession
+  const sessionSource: AgentSessionSource = querySession ? 'query' : resolvedPendingSession ? 'pending' : 'none'
+
+  return {
+    ...result,
+    session,
+    sessionSource,
+    isLoading: !session && result.isLoading,
+    activeSessionId,
+    setActiveSessionId
+  }
 }
 
 /**
  * Cursor-paginated session list. With `agentId` undefined / null the result
  * spans every agent (the global session view); pass an id to scope the
- * listing. Reorder uses the same cache key so applying a new order syncs the
- * infinite-query view.
+ * listing. Consumers that genuinely need every session can pass
+ * `{ loadAll: true }` to auto-page to completion; grouped sidebars use this
+ * so drag order is based on the complete list. Reorder uses the same cache key
+ * so applying a new order syncs the infinite-query view.
  */
-export const useSessions = (agentId?: string | null, pageSize = DEFAULT_SESSION_PAGE_SIZE) => {
+export const useSessions = (
+  agentId?: string | null,
+  options: number | UseSessionsOptions = DEFAULT_SESSION_PAGE_SIZE
+) => {
   const { t } = useTranslation()
+  const pageSize = typeof options === 'number' ? options : (options.pageSize ?? DEFAULT_SESSION_PAGE_SIZE)
+  const loadAll = typeof options === 'number' ? false : (options.loadAll ?? false)
 
   const { pages, isLoading, isRefreshing, error, hasNext, loadNext, refresh } = useInfiniteQuery('/agent-sessions', {
     query: agentId ? { agentId } : undefined,
@@ -88,33 +105,44 @@ export const useSessions = (agentId?: string | null, pageSize = DEFAULT_SESSION_
   // Cache key includes the query, so reorder operates on the same key.
   const { applyReorderedList } = useReorder('/agent-sessions')
 
-  // Server returns pinned-first via the two-section cursor in AgentSessionService —
-  // see `listByCursor` (`pin:` / `session:` / `session:` sentinel). The `/pins`
-  // map is kept only for the per-row pinned indicator and the toggle handler.
+  // AgentSessionService returns the persisted session order (`orderKey`, `id`).
+  // The `/pins` map is composed in the renderer for row indicators, toggle
+  // handling, and display grouping/sorting that promotes pinned sessions.
   const sessions = useInfiniteFlatItems(pages)
-  const { data: pinList } = useQuery('/pins', { query: { entityType: 'session' } })
+  const { data: pinList, isLoading: isPinsLoading } = useQuery('/pins', { query: { entityType: 'session' } })
   const pinIdBySessionId = useMemo(
     () => new Map(Array.isArray(pinList) ? pinList.map((p) => [p.entityId, p.id] as const) : []),
     [pinList]
   )
   const total = sessions.length
   const hasMore = hasNext
+  const isFullyLoaded = !loadAll || (!isLoading && !hasMore)
+  const isLoadingAll = isLoading || (loadAll && hasMore)
   const isLoadingMore = isRefreshing && pages.length > 1
+
+  useEffect(() => {
+    if (loadAll && hasMore && !isLoading && !isRefreshing) {
+      loadNext()
+    }
+  }, [loadAll, hasMore, isLoading, isRefreshing, loadNext])
 
   const reload = useCallback(() => refresh(), [refresh])
 
   const loadMore = useCallback(() => {
     if (!isLoadingMore && hasMore) {
-      void loadNext()
+      loadNext()
     }
   }, [hasMore, isLoadingMore, loadNext])
 
   const { trigger: createTrigger } = useMutation('POST', '/agent-sessions', {
-    refresh: ['/agent-sessions']
+    refresh: ['/agent-sessions', '/agent-workspaces']
   })
   const createSession = useCallback(
     async (form: CreateSessionForm): Promise<AgentSessionEntity | null> => {
-      if (!agentId) return null
+      if (!agentId) {
+        window.toast.error(t('agent.session.create.error.failed'))
+        return null
+      }
       let result: AgentSessionEntity
       try {
         result = await createTrigger({
@@ -126,12 +154,12 @@ export const useSessions = (agentId?: string | null, pageSize = DEFAULT_SESSION_
           }
         })
       } catch (error) {
-        window.toast?.error(formatErrorMessageWithPrefix(error, t('agent.session.create.error.failed')))
+        window.toast.error(formatErrorMessageWithPrefix(error, t('agent.session.create.error.failed')))
         return null
       }
 
       await refresh().catch((error) => {
-        window.toast?.error(formatErrorMessageWithPrefix(error, t('agent.session.get.error.failed')))
+        window.toast.error(formatErrorMessageWithPrefix(error, t('agent.session.get.error.failed')))
       })
 
       return result
@@ -139,11 +167,11 @@ export const useSessions = (agentId?: string | null, pageSize = DEFAULT_SESSION_
     [agentId, createTrigger, refresh, t]
   )
 
-  const { trigger: deleteTrigger, isLoading: isDeleting } = useMutation('DELETE', '/agent-sessions/:sessionId', {
-    refresh: ['/agent-sessions', '/pins']
+  const { trigger: deleteTrigger } = useMutation('DELETE', '/agent-sessions/:sessionId', {
+    refresh: ['/agent-sessions']
   })
-  const { trigger: deleteManyTrigger, isLoading: isDeletingMany } = useMutation('DELETE', '/agent-sessions', {
-    refresh: ['/agent-sessions', '/pins']
+  const { trigger: deleteManyTrigger } = useMutation('DELETE', '/agent-sessions', {
+    refresh: ['/agent-sessions', '/agent-workspaces', '/pins', '/agent-channels']
   })
   const deleteSession = useCallback(
     async (id: string): Promise<boolean> => {
@@ -151,18 +179,19 @@ export const useSessions = (agentId?: string | null, pageSize = DEFAULT_SESSION_
         await deleteTrigger({ params: { sessionId: id } })
         return true
       } catch (error) {
-        window.toast?.error(formatErrorMessageWithPrefix(error, t('agent.session.delete.error.failed')))
+        window.toast.error(formatErrorMessageWithPrefix(error, t('agent.session.delete.error.failed')))
         return false
       }
     },
     [deleteTrigger, t]
   )
+
   const deleteSessions = useCallback(
     async (ids: string[]): Promise<DeleteAgentSessionsResult | null> => {
       try {
         return await deleteManyTrigger({ query: { ids: ids.join(',') } })
       } catch (error) {
-        window.toast?.error(formatErrorMessageWithPrefix(error, t('agent.session.delete.error.failed')))
+        window.toast.error(formatErrorMessageWithPrefix(error, t('agent.session.delete.error.failed')))
         return null
       }
     },
@@ -174,10 +203,26 @@ export const useSessions = (agentId?: string | null, pageSize = DEFAULT_SESSION_
       try {
         await applyReorderedList(reorderedList as unknown as Array<Record<string, unknown>>)
       } catch (error) {
-        window.toast?.error(formatErrorMessageWithPrefix(error, t('agent.session.reorder.error.failed')))
+        window.toast.error(formatErrorMessageWithPrefix(error, t('agent.session.reorder.error.failed')))
       }
     },
     [applyReorderedList, t]
+  )
+
+  const { trigger: reorderTrigger } = useMutation('PATCH', '/agent-sessions/:id/order', {
+    refresh: ['/agent-sessions']
+  })
+  const reorderSession = useCallback(
+    async (id: string, anchor: OrderRequest): Promise<boolean> => {
+      try {
+        await reorderTrigger({ params: { id }, body: anchor })
+        return true
+      } catch (error) {
+        window.toast.error(formatErrorMessageWithPrefix(error, t('agent.session.reorder.error.failed')))
+        return false
+      }
+    },
+    [reorderTrigger, t]
   )
 
   // Server returns pinned-first via the two-section cursor in
@@ -195,8 +240,10 @@ export const useSessions = (agentId?: string | null, pageSize = DEFAULT_SESSION_
         } else {
           await pinTrigger({ body: { entityType: 'session', entityId: sessionId } })
         }
+        return true
       } catch (error) {
-        window.toast?.error(formatErrorMessageWithPrefix(error, t('agent.session.pin.error.failed')))
+        window.toast.error(formatErrorMessageWithPrefix(error, t('agent.session.pin.error.failed')))
+        return false
       }
     },
     [pinIdBySessionId, pinTrigger, unpinTrigger, t]
@@ -216,28 +263,21 @@ export const useSessions = (agentId?: string | null, pageSize = DEFAULT_SESSION_
     createSession,
     deleteSession,
     deleteSessions,
-    isDeleting: isDeleting || isDeletingMany,
+    reorderSession,
     reorderSessions,
-    togglePin
+    togglePin,
+    isFullyLoaded,
+    isLoadingAll,
+    isPinsLoading
   }
 }
 
 /**
- * Patch session-level fields (`name`, `description`, `workspaceId`, `agentId`).
- * Config fields (model, instructions, configuration, ...) live on the parent
- * agent — use {@link import('./useAgent').useUpdateAgent} for those.
- *
- * `agentId` is kept in the hook signature for older call sites, but updates
- * are session-addressed. Do not gate this mutation on `agentId`: workspace
- * changes must still work for sessions whose agent was just restored, changed,
- * or temporarily unresolved in the renderer.
+ * Patch session-level fields (`name`, `description`, `agentId`). Config fields
+ * (model, instructions, configuration, ...) live on the parent agent — use
+ * {@link import('./useAgent').useUpdateAgent} for those.
  */
-// `agentId` is optional: the v2 composer calls `useUpdateSession()` and drives
-// the session id off `form.id`; existing agent-page callers still pass an
-// explicit `string | null`. Updates are session-addressed, so unresolved/null
-// agent ids must not block workspace or session metadata patches.
-export const useUpdateSession = (agentId?: string | null) => {
-  void agentId
+export const useUpdateSession = () => {
   const { t } = useTranslation()
   const { trigger: updateTrigger } = useMutation('PATCH', '/agent-sessions/:sessionId', {
     // `args.params.sessionId` is always supplied by `updateSession` below.
@@ -253,11 +293,11 @@ export const useUpdateSession = (agentId?: string | null) => {
         const { id, ...patch } = form
         const result = await updateTrigger({ params: { sessionId: id }, body: patch })
         if (options?.showSuccessToast ?? true) {
-          window.toast?.success(t('common.update_success'))
+          window.toast.success(t('common.update_success'))
         }
         return result
       } catch (error) {
-        window.toast?.error({ title: t('agent.session.update.error.failed'), description: getErrorMessage(error) })
+        window.toast.error({ title: t('agent.session.update.error.failed'), description: getErrorMessage(error) })
         return undefined
       }
     },

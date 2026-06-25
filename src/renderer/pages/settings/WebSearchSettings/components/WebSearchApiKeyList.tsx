@@ -7,7 +7,7 @@ import { cn } from '@renderer/utils/style'
 import type { WebSearchProviderId } from '@shared/data/preference/preferenceTypes'
 import { Check, Copy, Minus, Plus, X } from 'lucide-react'
 import type { FC } from 'react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useWebSearchApiKeyList, type WebSearchApiKeyListItem as ApiKeyListItem } from '../hooks/useWebSearchApiKeyList'
@@ -28,20 +28,9 @@ const WebSearchApiKeyItem: FC<WebSearchApiKeyItemProps> = ({ item, onUpdate, onR
   const { t } = useTranslation()
   const [isEditing, setIsEditing] = useState(item.isNew || !item.key.trim())
   const [editValue, setEditValue] = useState(item.key)
-  const [saving, setSaving] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
-  const mountedRef = useRef(true)
-  const savingRef = useRef(false)
-  const isMounted = useCallback(() => mountedRef.current, [])
-  const persist = useWebSearchPersist(isMounted)
+  const persist = useWebSearchPersist()
   const hasUnsavedChanges = editValue.trim() !== item.key.trim()
-
-  useEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
 
   useEffect(() => {
     if (isEditing) {
@@ -54,50 +43,21 @@ const WebSearchApiKeyItem: FC<WebSearchApiKeyItemProps> = ({ item, onUpdate, onR
     setIsEditing(item.isNew || !item.key.trim())
   }, [item.isNew, item.key])
 
-  const runSavingAction = async (action: () => Promise<void>) => {
-    if (savingRef.current) {
+  const handleSave = async () => {
+    const result = await persist(() => onUpdate(editValue), 'Failed to save web search API key')
+    if (!result.ok) {
       return
     }
 
-    savingRef.current = true
-    setSaving(true)
-    try {
-      await action()
-    } finally {
-      savingRef.current = false
-      if (mountedRef.current) {
-        setSaving(false)
-      }
+    if (!result.value.isValid) {
+      window.toast.warning(result.value.error)
+      return
     }
-  }
 
-  const handleSave = async () => {
-    await runSavingAction(async () => {
-      const result = await persist(() => onUpdate(editValue), 'Failed to save web search API key')
-      if (!mountedRef.current) {
-        return
-      }
-
-      if (!result.ok) {
-        return
-      }
-
-      if (!result.value.isValid) {
-        window.toast?.warning(result.value.error)
-        return
-      }
-
-      if (mountedRef.current) {
-        setIsEditing(false)
-      }
-    })
+    setIsEditing(false)
   }
 
   const handleCancelEdit = () => {
-    if (savingRef.current) {
-      return
-    }
-
     if (item.isNew || !item.key.trim()) {
       void onRemove()
       return
@@ -110,35 +70,21 @@ const WebSearchApiKeyItem: FC<WebSearchApiKeyItemProps> = ({ item, onUpdate, onR
   const handleCopy = () => {
     navigator.clipboard
       .writeText(item.key)
-      .then(() => {
-        if (mountedRef.current) {
-          window.toast?.success(t('message.copy.success'))
-        }
-      })
-      .catch(() => {
-        if (mountedRef.current) {
-          window.toast?.error(t('message.copy.failed'))
-        }
-      })
+      .then(() => window.toast.success(t('message.copy.success')))
+      .catch(() => window.toast.error(t('message.copy.failed')))
   }
 
   const handleRemove = async () => {
-    await runSavingAction(async () => {
-      const confirmed = await window.modal.confirm({
-        title: t('common.delete_confirm'),
-        centered: true,
-        okText: t('common.confirm'),
-        cancelText: t('common.cancel')
-      })
-
-      if (!mountedRef.current) {
-        return
-      }
-
-      if (confirmed) {
-        await persist(onRemove, 'Failed to remove web search API key')
-      }
+    const confirmed = await window.modal.confirm({
+      title: t('common.delete_confirm'),
+      centered: true,
+      okText: t('common.confirm'),
+      cancelText: t('common.cancel')
     })
+
+    if (confirmed) {
+      await persist(onRemove, 'Failed to remove web search API key')
+    }
   }
 
   return (
@@ -149,7 +95,6 @@ const WebSearchApiKeyItem: FC<WebSearchApiKeyItemProps> = ({ item, onUpdate, onR
             ref={inputRef}
             type="password"
             value={editValue}
-            disabled={saving}
             onChange={(event) => setEditValue(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Enter') {
@@ -166,7 +111,6 @@ const WebSearchApiKeyItem: FC<WebSearchApiKeyItemProps> = ({ item, onUpdate, onR
               variant={hasUnsavedChanges ? 'default' : 'ghost'}
               size="icon-sm"
               aria-label={t('common.save')}
-              disabled={saving}
               onClick={() => void handleSave()}>
               <Check className="size-3.5" />
             </Button>
@@ -175,7 +119,6 @@ const WebSearchApiKeyItem: FC<WebSearchApiKeyItemProps> = ({ item, onUpdate, onR
               variant="ghost"
               size="icon-sm"
               aria-label={t('common.cancel')}
-              disabled={saving}
               onClick={handleCancelEdit}>
               <X className="size-3.5" />
             </Button>
@@ -200,7 +143,6 @@ const WebSearchApiKeyItem: FC<WebSearchApiKeyItemProps> = ({ item, onUpdate, onR
               variant="ghost"
               size="icon-sm"
               aria-label={t('common.edit')}
-              disabled={saving}
               onClick={() => setIsEditing(true)}>
               <EditIcon size={14} />
             </Button>
@@ -209,7 +151,6 @@ const WebSearchApiKeyItem: FC<WebSearchApiKeyItemProps> = ({ item, onUpdate, onR
               variant="ghost"
               size="icon-sm"
               aria-label={t('common.delete')}
-              disabled={saving}
               onClick={() => void handleRemove()}>
               <Minus className="size-3.5" />
             </Button>
@@ -282,16 +223,6 @@ const PopupContainer: FC<PopupProps> = ({ providerId, title, resolve }) => {
   const [open, setOpen] = useState(true)
   const { t } = useTranslation()
   const resolvedRef = useRef(false)
-  const closeTimerRef = useRef<number | null>(null)
-
-  useEffect(() => {
-    return () => {
-      if (closeTimerRef.current !== null) {
-        window.clearTimeout(closeTimerRef.current)
-        closeTimerRef.current = null
-      }
-    }
-  }, [])
 
   const closePopup = () => {
     if (resolvedRef.current) {
@@ -300,8 +231,7 @@ const PopupContainer: FC<PopupProps> = ({ providerId, title, resolve }) => {
 
     resolvedRef.current = true
     setOpen(false)
-    closeTimerRef.current = window.setTimeout(() => {
-      closeTimerRef.current = null
+    window.setTimeout(() => {
       resolve(null)
       TopView.hide(TopViewKey)
     }, 200)

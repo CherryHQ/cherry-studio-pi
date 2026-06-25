@@ -2,12 +2,10 @@ import { Button, ButtonGroup, IndicatorLight, Input, Tooltip } from '@cherrystud
 import { API_SERVER_DEFAULTS } from '@renderer/config/constant'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { useApiGateway } from '@renderer/hooks/useApiGateway'
-import { openHttpExternalUrl } from '@renderer/utils/openExternal'
 import { cn } from '@renderer/utils/style'
 import { Copy, ExternalLink, Play, RotateCcw, Server, Square, TriangleAlert } from 'lucide-react'
 import type React from 'react'
 import type { FC } from 'react'
-import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -32,20 +30,6 @@ const ApiGatewaySettings: FC = () => {
   const serverPort = apiGatewayConfig.port || API_SERVER_DEFAULTS.PORT
   const serverUrl = `http://${serverHost}:${serverPort}`
   const apiKey = apiGatewayConfig.apiKey || ''
-  const [portDraft, setPortDraft] = useState(() => String(serverPort))
-  const mountedRef = useRef(true)
-
-  useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
-
-  useEffect(() => {
-    setPortDraft(String(serverPort))
-  }, [serverPort])
 
   const handleApiGatewayToggle = async (enabled: boolean) => {
     // `startApiGateway`/`stopApiGateway` already persist `enabled` on success and
@@ -66,15 +50,11 @@ const ApiGatewaySettings: FC = () => {
     if (!apiKey) return
     try {
       await navigator.clipboard.writeText(apiKey)
-      if (mountedRef.current) {
-        window.toast?.success(t('apiGateway.messages.apiKeyCopied'))
-      }
+      window.toast.success(t('apiGateway.messages.apiKeyCopied'))
     } catch {
       // Clipboard write can be denied (permissions / insecure context); don't
       // report a copy that didn't happen.
-      if (mountedRef.current) {
-        window.toast?.error(t('apiGateway.messages.operationFailed'))
-      }
+      window.toast.error(t('apiGateway.messages.operationFailed'))
     }
   }
 
@@ -82,53 +62,23 @@ const ApiGatewaySettings: FC = () => {
     return `cs-sk-${uuidv4()}`
   }
 
-  const regenerateApiKey = async () => {
-    try {
-      await setApiGatewayConfig({ apiKey: generateApiKey() })
-      if (mountedRef.current) {
-        window.toast?.success(t('apiGateway.messages.apiKeyRegenerated'))
-      }
-    } catch {
-      if (mountedRef.current) {
-        window.toast?.error(t('apiGateway.messages.operationFailed'))
-      }
-    }
+  const regenerateApiKey = () => {
+    void setApiGatewayConfig({ apiKey: generateApiKey() })
+    window.toast.success(t('apiGateway.messages.apiKeyRegenerated'))
   }
 
-  const commitPortChange = () => {
-    const normalizedPortDraft = portDraft.trim()
-    const port = Number(normalizedPortDraft)
-
-    if (!normalizedPortDraft || !Number.isInteger(port) || port < 1000 || port > 65535) {
-      setPortDraft(String(serverPort))
-      window.toast?.error(t('apiGateway.messages.invalidPort'))
-      return
+  const handlePortChange = (value: string) => {
+    const port = Number.parseInt(value, 10) || API_SERVER_DEFAULTS.PORT
+    if (port >= 1000 && port <= 65535) {
+      void setApiGatewayConfig({ port })
     }
-
-    if (port === serverPort) {
-      setPortDraft(String(serverPort))
-      return
-    }
-
-    void setApiGatewayConfig({ port })
-      .then(() => {
-        if (mountedRef.current) {
-          setPortDraft(String(port))
-        }
-      })
-      .catch(() => {
-        if (mountedRef.current) {
-          setPortDraft(String(serverPort))
-          window.toast?.error(t('apiGateway.messages.operationFailed'))
-        }
-      })
   }
 
   const openApiDocs = () => {
     if (apiGatewayRunning) {
       // The ElysiaJS `@elysia/openapi` plugin serves the docs UI at `/openapi`
       // (the Express `/api-docs` path was removed in the gateway migration).
-      openHttpExternalUrl(`${serverUrl}/openapi`)
+      window.open(`${serverUrl}/openapi`, '_blank')
     }
   }
 
@@ -155,7 +105,7 @@ const ApiGatewaySettings: FC = () => {
         {!apiGatewayRunning && (
           <WarningBanner>
             <TriangleAlert className="size-4 shrink-0 text-warning" />
-            <span>{t('apiGateway.warning.stopped')}</span>
+            <span>{t('agent.warning.enable_server')}</span>
           </WarningBanner>
         )}
         <StatusCard $running={apiGatewayRunning}>
@@ -209,17 +159,8 @@ const ApiGatewaySettings: FC = () => {
                 type="number"
                 min={1000}
                 max={65535}
-                value={portDraft}
-                onBlur={commitPortChange}
-                onChange={(event) => setPortDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.currentTarget.blur()
-                  } else if (event.key === 'Escape') {
-                    setPortDraft(String(serverPort))
-                    event.currentTarget.blur()
-                  }
-                }}
+                value={serverPort}
+                onChange={(event) => handlePortChange(event.target.value)}
               />
             </SettingRow>
             <SettingDivider />
@@ -247,7 +188,7 @@ const ApiGatewaySettings: FC = () => {
             />
             <ButtonGroup attached={false}>
               {!apiGatewayRunning && (
-                <Button variant="outline" onClick={() => void regenerateApiKey()}>
+                <Button variant="outline" onClick={regenerateApiKey}>
                   {t('apiGateway.actions.regenerate')}
                 </Button>
               )}

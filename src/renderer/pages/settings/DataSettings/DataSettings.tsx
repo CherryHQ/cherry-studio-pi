@@ -19,7 +19,6 @@ import {
   settingsSubmenuSectionTitleClassName
 } from '..'
 import BasicDataSettings from './BasicDataSettings'
-import DataSyncSettings from './DataSyncSettings'
 import ExportMenuOptions from './ExportMenuSettings'
 import LocalBackupSettings from './LocalBackupSettings'
 import MarkdownExportSettings from './MarkdownExportSettings'
@@ -35,11 +34,6 @@ const DataSettings: FC = () => {
   const menuItems = [
     { key: 'data', title: t('settings.data.data.title'), icon: <FolderCog size={16} /> },
     { key: 'divider_1', isDivider: true, text: t('settings.data.divider.cloud_storage') },
-    {
-      key: 'data_sync',
-      title: t('settings.data.data_sync.title'),
-      icon: <CloudSyncOutlined style={{ fontSize: 16 }} />
-    },
     { key: 'local_backup', title: t('settings.data.local.title'), icon: <FolderCog size={16} /> },
     { key: 'webdav', title: t('settings.data.webdav.title'), icon: <CloudSyncOutlined style={{ fontSize: 16 }} /> },
     { key: 'nutstore', title: t('settings.data.nutstore.title'), icon: <NutstoreIcon /> },
@@ -93,7 +87,6 @@ const DataSettings: FC = () => {
       </div>
       <SettingsContentColumn theme={theme}>
         {menu === 'data' && <BasicDataSettings />}
-        {menu === 'data_sync' && <DataSyncSettings />}
         {menu === 'webdav' && <WebDavSettings />}
         {menu === 'nutstore' && <NutstoreSettings />}
         {menu === 's3' && <S3Settings />}

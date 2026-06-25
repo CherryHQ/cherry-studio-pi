@@ -73,21 +73,21 @@ export const LanDeviceCard: FC<LanDeviceCardProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex flex-col gap-1">
-          <div className="break-words font-semibold text-foreground text-sm">{displayTitle}</div>
-          <span className="text-foreground-secondary text-xs">{statusText}</span>
+          <div className="break-words font-semibold text-[var(--color-text-1)] text-sm">{displayTitle}</div>
+          <span className="text-[var(--color-text-2)] text-xs">{statusText}</span>
         </div>
       </div>
 
       {/* Meta Row - IP Address */}
       <div className="flex flex-col gap-1">
-        <span className="text-[11px] text-foreground-muted uppercase tracking-[0.03em]">
+        <span className="text-[11px] text-[var(--color-text-3)] uppercase tracking-[0.03em]">
           {t('settings.data.export_to_phone.lan.ip_addresses')}
         </span>
-        <span className="break-words text-foreground text-xs">{addressesWithPort || t('common.unknown')}</span>
+        <span className="break-words text-[var(--color-text)] text-xs">{addressesWithPort || t('common.unknown')}</span>
       </div>
 
       {/* Footer with Progress */}
-      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-foreground-muted">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-[var(--color-text-3)]">
         {shouldShowProgress && transferState && (
           <ProgressIndicator transferState={transferState} handshakeInProgress={handshakeInProgress} />
         )}

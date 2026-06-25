@@ -77,18 +77,15 @@ function SelectContent({
   children,
   position = 'popper',
   align = 'center',
-  container,
   portalContainer,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Content> & {
-  /** @deprecated Use portalContainer. Kept for existing Cherry Studio Pi callers. */
-  container?: React.ComponentProps<typeof SelectPrimitive.Portal>['container']
   portalContainer?: React.ComponentProps<typeof SelectPrimitive.Portal>['container']
 }) {
   const defaultPortalContainer = usePortalContainer()
 
   return (
-    <SelectPrimitive.Portal container={portalContainer ?? container ?? defaultPortalContainer ?? undefined}>
+    <SelectPrimitive.Portal container={portalContainer ?? defaultPortalContainer ?? undefined}>
       <SelectPrimitive.Content
         data-slot="select-content"
         className={cn(

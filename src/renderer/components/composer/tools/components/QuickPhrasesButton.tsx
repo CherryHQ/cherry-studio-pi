@@ -1,13 +1,13 @@
 import { useMutation, useQuery } from '@data/hooks/useDataApi'
 import { loggerService } from '@logger'
+import { ComposerPanelSymbol } from '@renderer/components/composer/quickPanel/symbols'
+import type { ToolLauncherApi } from '@renderer/components/composer/tools/types'
 import {
   type QuickPanelCallBackOptions,
   type QuickPanelListItem,
   type QuickPanelOpenOptions
-} from '@renderer/components/composer/panelEngine'
-import { useQuickPanel } from '@renderer/components/composer/panelEngine'
-import { ComposerPanelSymbol } from '@renderer/components/composer/quickPanel/symbols'
-import type { ToolLauncherApi } from '@renderer/components/composer/tools/types'
+} from '@renderer/components/QuickPanel'
+import { useQuickPanel } from '@renderer/components/QuickPanel'
 import PromptEditDialog from '@renderer/components/resource/dialogs/PromptEditDialog'
 import { useTimer } from '@renderer/hooks/useTimer'
 import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
@@ -41,7 +41,7 @@ const useQuickPhrasesToolController = ({ launcher, setInputValue }: Props) => {
     refresh: ['/prompts'],
     onError: (error) => {
       logger.error('Failed to create prompt', error)
-      window.toast?.error?.(formatErrorMessageWithPrefix(error, t('settings.prompts.errors.createFailed')))
+      window.toast.error(formatErrorMessageWithPrefix(error, t('settings.prompts.errors.createFailed')))
     }
   })
 

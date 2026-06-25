@@ -3,7 +3,7 @@ import { loggerService } from '@logger'
 import { TopView } from '@renderer/components/TopView'
 import { useTimer } from '@renderer/hooks/useTimer'
 import type { Provider } from '@shared/data/types/provider'
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import ProviderSettingsDrawer from '../primitives/ProviderSettingsDrawer'
@@ -37,12 +37,12 @@ interface PresetModel {
   task: OvmsDownloadTask
 }
 
-const OVMS_TASK_LABEL_KEYS = {
-  text_generation: 'ovms.download.task.text_generation',
+const OVMS_DOWNLOAD_TASK_LABEL_KEYS: Record<OvmsDownloadTask, string> = {
   embeddings: 'ovms.download.task.embeddings',
+  image_generation: 'ovms.download.task.image_generation',
   rerank: 'ovms.download.task.rerank',
-  image_generation: 'ovms.download.task.image_generation'
-} as const
+  text_generation: 'ovms.download.task.text_generation'
+}
 
 const PRESET_MODELS: PresetModel[] = [
   {
@@ -92,13 +92,8 @@ const PRESET_MODELS: PresetModel[] = [
 const PopupContainer: React.FC<Props> = ({ title, resolve }) => {
   const [open, setOpen] = useState(true)
   const [loading, setLoading] = useState(false)
-  const [cancelling, setCancelling] = useState(false)
   const [progress, setProgress] = useState(0)
-  const cancelledRef = useRef(false)
-  const runningRef = useRef(false)
-  const cancellingRef = useRef(false)
-  const runIdRef = useRef(0)
-  const mountedRef = useRef(true)
+  const [cancelled, setCancelled] = useState(false)
   const [formValues, setFormValues] = useState<FieldType>({
     modelId: '',
     modelName: '',
@@ -109,34 +104,18 @@ const PopupContainer: React.FC<Props> = ({ title, resolve }) => {
   const { t } = useTranslation()
   const { setIntervalTimer, clearIntervalTimer, setTimeoutTimer } = useTimer()
 
-  useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-      runIdRef.current += 1
-      runningRef.current = false
-      cancellingRef.current = false
-    }
-  }, [])
-
-  const getPresetTooltipLabel = (model: PresetModel) => {
-    const labelKey =
-      OVMS_TASK_LABEL_KEYS[model.task as keyof typeof OVMS_TASK_LABEL_KEYS] ?? OVMS_TASK_LABEL_KEYS.text_generation
-    return `${model.modelName} (${t(labelKey)})`
-  }
+  const getPresetTooltipLabel = (model: PresetModel) =>
+    `${model.modelName} (${t(OVMS_DOWNLOAD_TASK_LABEL_KEYS[model.task])})`
 
   const updateField = <K extends keyof FieldType>(field: K, value: FieldType[K]) => {
     setFormValues((current) => ({ ...current, [field]: value }))
   }
 
   const startFakeProgress = () => {
-    if (!mountedRef.current) return
     setProgress(0)
     setIntervalTimer(
       'progress',
       () => {
-        if (!mountedRef.current) return
         setProgress((prev) => {
           if (prev >= 95) {
             return prev // Stop at 95% until actual completion
@@ -158,7 +137,6 @@ const PopupContainer: React.FC<Props> = ({ title, resolve }) => {
 
   const stopFakeProgress = (complete = false) => {
     clearIntervalTimer('progress')
-    if (!mountedRef.current) return
     if (complete) {
       setProgress(100)
       // Reset progress after a short delay
@@ -192,34 +170,16 @@ const PopupContainer: React.FC<Props> = ({ title, resolve }) => {
   }
 
   const onCancel = async () => {
-    if (runningRef.current || loading) {
-      if (cancellingRef.current) {
-        return
-      }
-
-      const cancelRunId = runIdRef.current
+    if (loading) {
       // Stop the download
-      cancellingRef.current = true
-      setCancelling(true)
       try {
-        cancelledRef.current = true
+        setCancelled(true) // Mark as cancelled by user
         logger.info('Stopping download...')
         await window.api.ovms.stopAddModel()
+        stopFakeProgress(false)
+        setLoading(false)
       } catch (error) {
         logger.error(`Failed to stop download: ${error}`)
-      } finally {
-        if (runIdRef.current === cancelRunId) {
-          runIdRef.current += 1
-          runningRef.current = false
-          stopFakeProgress(false)
-          if (mountedRef.current) {
-            setLoading(false)
-          }
-        }
-        cancellingRef.current = false
-        if (mountedRef.current) {
-          setCancelling(false)
-        }
       }
       return
     }
@@ -228,10 +188,6 @@ const PopupContainer: React.FC<Props> = ({ title, resolve }) => {
   }
 
   const onFinish = async () => {
-    if (runningRef.current) {
-      return
-    }
-
     const values = formValues
     if (!values.modelId) {
       setError(t('ovms.download.model_id.required'))
@@ -245,15 +201,9 @@ const PopupContainer: React.FC<Props> = ({ title, resolve }) => {
       setError(t('ovms.download.model_name.required'))
       return
     }
-
-    const runId = runIdRef.current + 1
-    runIdRef.current = runId
-    const isCurrentRun = () => runIdRef.current === runId
-
     setError(null)
-    runningRef.current = true
     setLoading(true)
-    cancelledRef.current = false
+    setCancelled(false) // Reset cancelled state
     startFakeProgress()
     try {
       const { modelName, modelId, modelSource, task } = values
@@ -263,54 +213,37 @@ const PopupContainer: React.FC<Props> = ({ title, resolve }) => {
       )
       const result = await window.api.ovms.addModel(modelName, modelId, normalizedModelSource, task)
 
-      if (!mountedRef.current || !isCurrentRun()) {
-        return
-      }
-
       if (result.success) {
-        if (cancelledRef.current) {
-          stopFakeProgress(false)
-          return
-        }
         stopFakeProgress(true) // Complete the progress bar
-        window.toast?.success(t('ovms.download.success_desc', { modelName: modelName, modelId: modelId }))
+        window.toast.success(t('ovms.download.success_desc', { modelName: modelName, modelId: modelId }))
         setOpen(false)
         resolve({})
       } else {
         stopFakeProgress(false) // Reset progress on error
-        logger.error(`Download failed, is it cancelled? ${cancelledRef.current}`)
+        logger.error(`Download failed, is it cancelled? ${cancelled}`)
         // Only show error if not cancelled by user
-        if (!cancelledRef.current) {
+        if (!cancelled) {
           setError(result.message)
         }
       }
     } catch (error: any) {
-      if (mountedRef.current && isCurrentRun()) {
-        stopFakeProgress(false) // Reset progress on error
-        logger.error(`Download crashed, is it cancelled? ${cancelledRef.current}`)
-        // Only show error if not cancelled by user
-        if (!cancelledRef.current) {
-          setError(error.message)
-        }
+      stopFakeProgress(false) // Reset progress on error
+      logger.error(`Download crashed, is it cancelled? ${cancelled}`)
+      // Only show error if not cancelled by user
+      if (!cancelled) {
+        setError(error.message)
       }
     } finally {
-      if (mountedRef.current && isCurrentRun()) {
-        runningRef.current = false
-        setLoading(false)
-      }
+      setLoading(false)
     }
   }
 
   const footer = (
     <div className={drawerClasses.footer}>
-      <Button
-        variant={loading ? 'default' : 'outline'}
-        type="button"
-        disabled={cancelling}
-        onClick={() => void onCancel()}>
+      <Button variant={loading ? 'default' : 'outline'} type="button" onClick={() => void onCancel()}>
         {loading ? t('common.cancel') : t('common.cancel')}
       </Button>
-      <Button disabled={loading || cancelling} onClick={() => void onFinish()}>
+      <Button disabled={loading} onClick={() => void onFinish()}>
         {t('ovms.download.button')}
       </Button>
     </div>

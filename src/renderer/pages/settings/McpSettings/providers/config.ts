@@ -1,24 +1,12 @@
 import type { CompoundIcon } from '@cherrystudio/ui'
 import { Ai302, Bailian, Lanyun, Mcprouter, Modelscope } from '@cherrystudio/ui/icons'
-import type { McpServer } from '@renderer/types'
+import type { McpServer } from '@shared/data/types/mcpServer'
 
-import { clearAI302Token, getAI302Token, saveAI302Token, syncAi302Servers } from './302ai'
-import { clearBailianToken, getBailianToken, saveBailianToken, syncBailianServers } from './bailian'
-import {
-  clearTokenLanYunToken,
-  getTokenLanYunToken,
-  LANYUN_KEY_HOST,
-  saveTokenLanYunToken,
-  syncTokenLanYunServers
-} from './lanyun'
-import { clearMcpRouterToken, getMcpRouterToken, saveMcpRouterToken, syncMcpRouterServers } from './mcprouter'
-import {
-  clearModelScopeToken,
-  getModelScopeToken,
-  MODELSCOPE_HOST,
-  saveModelScopeToken,
-  syncModelScopeServers
-} from './modelscope'
+import { getAI302Token, saveAI302Token, syncAi302Servers } from './302ai'
+import { getBailianToken, saveBailianToken, syncBailianServers } from './bailian'
+import { getTokenLanYunToken, LANYUN_KEY_HOST, saveTokenLanYunToken, syncTokenLanYunServers } from './lanyun'
+import { getMcpRouterToken, saveMcpRouterToken, syncMcpRouterServers } from './mcprouter'
+import { getModelScopeToken, MODELSCOPE_HOST, saveModelScopeToken, syncModelScopeServers } from './modelscope'
 
 export interface SyncResult {
   success: boolean
@@ -37,7 +25,6 @@ export interface ProviderConfig {
   tokenFieldName: string
   getToken: () => string | null
   saveToken: (token: string) => void
-  clearToken: () => void
   syncServers: (token: string) => Promise<SyncResult>
 }
 
@@ -51,7 +38,6 @@ export const providers: ProviderConfig[] = [
     tokenFieldName: 'bailianToken',
     getToken: getBailianToken,
     saveToken: saveBailianToken,
-    clearToken: clearBailianToken,
     syncServers: syncBailianServers
   },
   {
@@ -63,7 +49,6 @@ export const providers: ProviderConfig[] = [
     tokenFieldName: 'modelScopeToken',
     getToken: getModelScopeToken,
     saveToken: saveModelScopeToken,
-    clearToken: clearModelScopeToken,
     syncServers: syncModelScopeServers
   },
   {
@@ -75,7 +60,6 @@ export const providers: ProviderConfig[] = [
     tokenFieldName: 'tokenLanyunToken',
     getToken: getTokenLanYunToken,
     saveToken: saveTokenLanYunToken,
-    clearToken: clearTokenLanYunToken,
     syncServers: syncTokenLanYunServers
   },
   {
@@ -87,7 +71,6 @@ export const providers: ProviderConfig[] = [
     tokenFieldName: 'token302aiToken',
     getToken: getAI302Token,
     saveToken: saveAI302Token,
-    clearToken: clearAI302Token,
     syncServers: syncAi302Servers
   },
   {
@@ -99,7 +82,6 @@ export const providers: ProviderConfig[] = [
     tokenFieldName: 'mcprouterToken',
     getToken: getMcpRouterToken,
     saveToken: saveMcpRouterToken,
-    clearToken: clearMcpRouterToken,
     syncServers: syncMcpRouterServers
   }
 ]

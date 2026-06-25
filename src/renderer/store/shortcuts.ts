@@ -15,13 +15,10 @@
  * - v2 Refactor PR   : https://github.com/CherryHQ/cherry-studio/pull/10162
  * --------------------------------------------------------------------------
  */
-import { loggerService } from '@logger'
 import type { PayloadAction } from '@reduxjs/toolkit'
 import { createSlice } from '@reduxjs/toolkit'
-import type { Shortcut } from '@renderer/types'
+import type { Shortcut } from '@renderer/types/app'
 import { ZOOM_SHORTCUTS } from '@shared/utils/shortcut'
-
-const logger = loggerService.withContext('ShortcutsStore')
 
 export interface ShortcutsState {
   shortcuts: Shortcut[]
@@ -165,39 +162,25 @@ const getSerializableShortcuts = (shortcuts: Shortcut[]) => {
   }))
 }
 
-const persistShortcuts = (shortcuts: Shortcut[]) => {
-  void window.api.shortcuts.update(getSerializableShortcuts(shortcuts)).catch((error) => {
-    logger.error('Failed to persist shortcuts', error as Error)
-  })
-}
-
 const shortcutsSlice = createSlice({
   name: 'shortcuts',
   initialState,
   reducers: {
-    hydrateShortcutsState: (_state, action: PayloadAction<Partial<ShortcutsState>>) => {
-      const nextState = {
-        ...initialState,
-        ...action.payload
-      }
-      persistShortcuts(nextState.shortcuts)
-      return nextState
-    },
     updateShortcut: (state, action: PayloadAction<Shortcut>) => {
       state.shortcuts = state.shortcuts.map((s) => (s.key === action.payload.key ? action.payload : s))
-      persistShortcuts(state.shortcuts)
+      void window.api.shortcuts.update(getSerializableShortcuts(state.shortcuts))
     },
     toggleShortcut: (state, action: PayloadAction<string>) => {
       state.shortcuts = state.shortcuts.map((s) => (s.key === action.payload ? { ...s, enabled: !s.enabled } : s))
-      persistShortcuts(state.shortcuts)
+      void window.api.shortcuts.update(getSerializableShortcuts(state.shortcuts))
     },
     resetShortcuts: (state) => {
       state.shortcuts = initialState.shortcuts
-      persistShortcuts(state.shortcuts)
+      void window.api.shortcuts.update(getSerializableShortcuts(state.shortcuts))
     }
   }
 })
 
-export const { hydrateShortcutsState, updateShortcut, toggleShortcut, resetShortcuts } = shortcutsSlice.actions
+export const { updateShortcut, toggleShortcut, resetShortcuts } = shortcutsSlice.actions
 export default shortcutsSlice.reducer
 export { initialState }

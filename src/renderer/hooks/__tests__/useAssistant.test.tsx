@@ -1,22 +1,14 @@
-import { CHERRYAI_DEFAULT_UNIQUE_MODEL_ID } from '@shared/data/presets/cherryai'
-import { DEFAULT_ASSISTANT_ID } from '@shared/data/types/assistant'
-import { MockUseDataApiUtils, mockUseQuery } from '@test-mocks/renderer/useDataApi'
+import { mockUseQuery } from '@test-mocks/renderer/useDataApi'
 import { MockUsePreferenceUtils } from '@test-mocks/renderer/usePreference'
-import { mockRendererLoggerService } from '@test-mocks/RendererLoggerService'
-import { act, renderHook } from '@testing-library/react'
+import { renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import {
-  composeDefaultAssistant,
-  resolveDefaultAssistantOption,
-  useAssistant,
-  useDefaultAssistant
-} from '../useAssistant'
+import { useAssistant, useAssistants } from '../useAssistant'
 
-function queryResult(data?: unknown) {
+function queryResult(data?: unknown, options: { isLoading?: boolean } = {}) {
   return {
     data,
-    isLoading: false,
+    isLoading: options.isLoading ?? false,
     isRefreshing: false,
     error: undefined,
     refetch: vi.fn().mockResolvedValue(data),
@@ -24,73 +16,46 @@ function queryResult(data?: unknown) {
   } as never
 }
 
-describe('useDefaultAssistant', () => {
+function resetQueryMock() {
+  mockUseQuery.mockImplementation(() => queryResult())
+}
+
+describe('useAssistants', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    resetQueryMock()
     MockUsePreferenceUtils.resetMocks()
   })
 
-  it('returns an assistant with the sentinel default id', () => {
-    const { result } = renderHook(() => useDefaultAssistant())
-    expect(result.current.assistant.id).toBe(DEFAULT_ASSISTANT_ID)
+  it('queries the assistant list from DataApi', () => {
+    const assistant = { id: 'assistant-1', name: 'Assistant 1' }
+    mockUseQuery.mockReturnValue(queryResult({ items: [assistant], total: 1 }))
+
+    const { result } = renderHook(() => useAssistants())
+
+    expect(mockUseQuery).toHaveBeenCalledWith('/assistants', {
+      enabled: true,
+      query: { limit: 500 }
+    })
+    expect(result.current.assistants).toEqual([assistant])
+    expect(result.current.hasLoaded).toBe(true)
   })
 
-  it('reflects the chat.default_model_id preference in assistant.modelId', () => {
-    MockUsePreferenceUtils.setPreferenceValue('chat.default_model_id', 'openai::gpt-4o')
+  it('reports the assistant list as unresolved before DataApi returns data', () => {
+    mockUseQuery.mockReturnValue(queryResult(undefined, { isLoading: false }))
 
-    const { result } = renderHook(() => useDefaultAssistant())
+    const { result } = renderHook(() => useAssistants())
 
-    expect(result.current.assistant.modelId).toBe('openai::gpt-4o')
-  })
-
-  it('returns null modelId when preference is unset', () => {
-    MockUsePreferenceUtils.setPreferenceValue('chat.default_model_id', null)
-
-    const { result } = renderHook(() => useDefaultAssistant())
-
-    expect(result.current.assistant.modelId).toBeNull()
-  })
-
-  it('always returns a defined assistant — no loading state', () => {
-    MockUsePreferenceUtils.setPreferenceValue('chat.default_model_id', null)
-
-    const { result } = renderHook(() => useDefaultAssistant())
-
-    expect(result.current.assistant).toBeDefined()
-    expect(result.current.assistant.settings).toBeDefined()
-    expect(result.current.assistant.mcpServerIds).toEqual([])
-    expect(result.current.assistant.knowledgeBaseIds).toEqual([])
-  })
-})
-
-describe('resolveDefaultAssistantOption', () => {
-  it('uses the seeded default assistant instead of the renderer sentinel when present', () => {
-    const fallback = composeDefaultAssistant(CHERRYAI_DEFAULT_UNIQUE_MODEL_ID)
-    const seeded = {
-      ...fallback,
-      id: '11111111-1111-4111-8111-111111111111',
-      name: 'Default Assistant',
-      modelId: CHERRYAI_DEFAULT_UNIQUE_MODEL_ID
-    }
-
-    expect(resolveDefaultAssistantOption([seeded], fallback)).toBe(seeded)
+    expect(result.current.assistants).toEqual([])
+    expect(result.current.hasLoaded).toBe(false)
   })
 })
 
 describe('useAssistant', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    MockUseDataApiUtils.resetMocks()
+    resetQueryMock()
     MockUsePreferenceUtils.resetMocks()
-    mockUseQuery.mockImplementation((_path, options) => (options?.enabled === false ? queryResult() : queryResult()))
-    vi.spyOn(mockRendererLoggerService, 'error').mockImplementation(() => {})
-    Object.defineProperty(window, 'toast', {
-      configurable: true,
-      value: {
-        ...window.toast,
-        error: vi.fn()
-      }
-    })
   })
 
   it('disables the DataApi query when id is null', () => {
@@ -130,21 +95,16 @@ describe('useAssistant', () => {
     })
   })
 
-  it('persists model changes to the default model preference when the topic has no assistant', async () => {
-    const nextModel = {
-      id: 'openai::gpt-4o',
-      name: 'GPT-4o',
-      provider: 'openai',
-      providerId: 'openai'
-    }
+  it('can skip the default model lookup for callers that only need persisted assistants', () => {
+    MockUsePreferenceUtils.setPreferenceValue('chat.default_model_id', 'provider::default-model')
 
-    const { result } = renderHook(() => useAssistant(null))
+    renderHook(() => useAssistant(null, { loadDefaultModel: false }))
 
-    await act(async () => {
-      await result.current.setModel(nextModel as never)
+    expect(mockUseQuery).not.toHaveBeenCalledWith('/models/provider::default-model', expect.anything())
+    expect(mockUseQuery).toHaveBeenCalledWith('/models/', {
+      enabled: false,
+      swrOptions: { keepPreviousData: false }
     })
-
-    expect(MockUsePreferenceUtils.getPreferenceValue('chat.default_model_id')).toBe('openai::gpt-4o')
   })
 
   it('does not fall back to the default model when a persisted assistant has no model', () => {
@@ -171,10 +131,48 @@ describe('useAssistant', () => {
 
     expect(result.current.assistant).toBeDefined()
     expect(result.current.model).toBeUndefined()
+    expect(result.current.isModelPending).toBe(false)
+    expect(result.current.isModelMissing).toBe(true)
     expect(mockUseQuery).toHaveBeenCalledWith('/models/', {
       enabled: false,
       swrOptions: { keepPreviousData: false }
     })
+  })
+
+  it('marks the model pending while a persisted assistant is loading', () => {
+    mockUseQuery.mockImplementation((path, options) => {
+      if (options?.enabled === false) return queryResult()
+      if (path === '/assistants/:id') return queryResult(undefined, { isLoading: true })
+      return queryResult()
+    })
+
+    const { result } = renderHook(() => useAssistant('assistant-1'))
+
+    expect(result.current.isModelPending).toBe(true)
+    expect(result.current.isModelMissing).toBe(false)
+  })
+
+  it('marks the model pending while the assistant model record is loading', () => {
+    mockUseQuery.mockImplementation((path, options) => {
+      if (options?.enabled === false) return queryResult()
+      if (path === '/assistants/:id') {
+        return queryResult({
+          id: 'assistant-1',
+          name: 'Assistant 1',
+          modelId: 'provider::model-a',
+          settings: {},
+          mcpServerIds: [],
+          knowledgeBaseIds: []
+        })
+      }
+      if (path === '/models/provider::model-a') return queryResult(undefined, { isLoading: true })
+      return queryResult()
+    })
+
+    const { result } = renderHook(() => useAssistant('assistant-1'))
+
+    expect(result.current.isModelPending).toBe(true)
+    expect(result.current.isModelMissing).toBe(false)
   })
 
   it('disables previous data for assistant identity switches', () => {
@@ -187,63 +185,32 @@ describe('useAssistant', () => {
     })
   })
 
-  it('shows an error toast when quick assistant settings persistence fails', async () => {
-    const assistant = {
-      id: 'assistant-1',
-      name: 'Assistant 1',
-      modelId: null,
-      settings: {},
-      mcpServerIds: [],
-      knowledgeBaseIds: []
-    }
-    const patchTrigger = vi.fn().mockRejectedValue(new Error('persist failed'))
-
-    MockUseDataApiUtils.mockQueryResult('/assistants/:id', { data: assistant as never })
-    MockUseDataApiUtils.mockMutationWithTrigger('PATCH', '/assistants/:id', patchTrigger)
-
-    const { result } = renderHook(() => useAssistant('assistant-1'))
-
-    await act(async () => {
-      await result.current.updateAssistantSettings({ enableWebSearch: true })
+  it('keeps assistant mutation callbacks stable across rerenders', () => {
+    mockUseQuery.mockImplementation((path, options) => {
+      if (options?.enabled === false) return queryResult()
+      if (path === '/assistants/:id') {
+        return queryResult({
+          id: 'assistant-1',
+          name: 'Assistant 1',
+          modelId: 'provider::model-a',
+          settings: {},
+          mcpServerIds: [],
+          knowledgeBaseIds: []
+        })
+      }
+      if (path === '/models/provider::model-a') return queryResult({ id: 'provider::model-a', name: 'Model A' })
+      return queryResult()
     })
 
-    expect(patchTrigger).toHaveBeenCalledWith({
-      params: { id: 'assistant-1' },
-      body: { settings: { enableWebSearch: true } }
-    })
-    expect(window.toast.error).toHaveBeenCalledWith(expect.stringContaining('persist failed'))
-  })
+    const { rerender, result } = renderHook(() => useAssistant('assistant-1'))
+    const firstSetModel = result.current.setModel
+    const firstUpdateAssistant = result.current.updateAssistant
+    const firstUpdateAssistantSettings = result.current.updateAssistantSettings
 
-  it('shows an error toast when quick assistant model persistence fails', async () => {
-    const assistant = {
-      id: 'assistant-1',
-      name: 'Assistant 1',
-      modelId: null,
-      settings: { enableWebSearch: false },
-      mcpServerIds: [],
-      knowledgeBaseIds: []
-    }
-    const nextModel = {
-      id: 'openai::gpt-4o',
-      name: 'GPT-4o',
-      provider: 'openai',
-      providerId: 'openai'
-    }
-    const patchTrigger = vi.fn().mockRejectedValue(new Error('model persist failed'))
+    rerender()
 
-    MockUseDataApiUtils.mockQueryResult('/assistants/:id', { data: assistant as never })
-    MockUseDataApiUtils.mockMutationWithTrigger('PATCH', '/assistants/:id', patchTrigger)
-
-    const { result } = renderHook(() => useAssistant('assistant-1'))
-
-    await act(async () => {
-      await result.current.setModel(nextModel as never)
-    })
-
-    expect(patchTrigger).toHaveBeenCalledWith({
-      params: { id: 'assistant-1' },
-      body: { modelId: 'openai::gpt-4o' }
-    })
-    expect(window.toast.error).toHaveBeenCalledWith(expect.stringContaining('model persist failed'))
+    expect(result.current.setModel).toBe(firstSetModel)
+    expect(result.current.updateAssistant).toBe(firstUpdateAssistant)
+    expect(result.current.updateAssistantSettings).toBe(firstUpdateAssistantSettings)
   })
 })

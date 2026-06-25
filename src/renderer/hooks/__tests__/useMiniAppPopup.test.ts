@@ -2,7 +2,7 @@ import type { MiniApp } from '@shared/data/types/miniApp'
 import { MockUseCacheUtils } from '@test-mocks/renderer/useCache'
 import { MockUseDataApiUtils } from '@test-mocks/renderer/useDataApi'
 import { MockUsePreferenceUtils } from '@test-mocks/renderer/usePreference'
-import { act, renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Mock side-effect dependencies BEFORE importing the hook
@@ -13,9 +13,6 @@ vi.mock('@renderer/utils/webviewStateManager', () => ({
 const mockWindowApi = vi.hoisted(() => ({
   openWebsite: vi.fn(),
   openPath: vi.fn()
-}))
-const mockToast = vi.hoisted(() => ({
-  error: vi.fn()
 }))
 
 // TabsContext is consumed by useMiniAppPopup to open AppShell tabs and to find
@@ -87,14 +84,6 @@ describe('useMiniAppPopup', () => {
         openPath: mockWindowApi.openPath
       }
     })
-    Object.defineProperty(window, 'toast', {
-      configurable: true,
-      value: {
-        ...window.toast,
-        error: mockToast.error
-      }
-    })
-    mockToast.error.mockReset()
   })
 
   // === Basic Return Values ===
@@ -485,25 +474,6 @@ describe('useMiniAppPopup', () => {
       expect(getKeepAlive()).toEqual([])
     })
 
-    it('should surface http external open failures without TabsProvider', async () => {
-      mockTabs.hasContext = false
-      mockWindowApi.openWebsite.mockRejectedValueOnce(new Error('open blocked'))
-      const { result } = renderHook(() => useTestMiniAppPopup())
-
-      await act(async () => {
-        result.current.openSmartMiniApp({
-          appId: 'external-failure',
-          name: 'External Failure',
-          url: 'https://example.com/failure',
-          logo: 'icon'
-        })
-      })
-
-      await waitFor(() => {
-        expect(mockToast.error).toHaveBeenCalledWith({ title: expect.any(String), description: 'open blocked' })
-      })
-    })
-
     it('should open file URLs externally with openPath without TabsProvider', async () => {
       mockTabs.hasContext = false
       MockUseCacheUtils.setCacheValue(KEEP_ALIVE_KEY, [])
@@ -522,26 +492,6 @@ describe('useMiniAppPopup', () => {
       expect(mockWindowApi.openWebsite).not.toHaveBeenCalled()
       expect(mockTabs.openTab).not.toHaveBeenCalled()
       expect(getKeepAlive()).toEqual([])
-    })
-
-    it('should surface file external open failures without falling back to openWebsite', async () => {
-      mockTabs.hasContext = false
-      mockWindowApi.openPath.mockRejectedValueOnce(new Error('file denied'))
-      const { result } = renderHook(() => useTestMiniAppPopup())
-
-      await act(async () => {
-        result.current.openSmartMiniApp({
-          appId: 'file-failure',
-          name: 'File Failure',
-          url: 'file:///Applications/Cherry%20Studio/resources/failure.html',
-          logo: 'icon'
-        })
-      })
-
-      await waitFor(() => {
-        expect(mockToast.error).toHaveBeenCalledWith({ title: expect.any(String), description: 'file denied' })
-      })
-      expect(mockWindowApi.openWebsite).not.toHaveBeenCalled()
     })
   })
 

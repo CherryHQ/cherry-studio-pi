@@ -17,7 +17,10 @@
 import { loggerService } from '@logger'
 import type { PayloadAction } from '@reduxjs/toolkit'
 import { createSlice } from '@reduxjs/toolkit'
-import type { KnowledgeBase, KnowledgeItem, PreprocessProvider, ProcessingStatus } from '@renderer/types'
+import FileManager from '@renderer/services/FileManager'
+import type { ProcessingStatus } from '@renderer/types/app'
+import type { FileMetadata } from '@renderer/types/file'
+import type { KnowledgeBase, KnowledgeItem, PreprocessProvider } from '@renderer/types/knowledge'
 
 const logger = loggerService.withContext('Store:Knowledge')
 
@@ -33,13 +36,6 @@ const knowledgeSlice = createSlice({
   name: 'knowledge',
   initialState,
   reducers: {
-    hydrateKnowledgeState: (_state, action: PayloadAction<Partial<KnowledgeState>>) => {
-      return {
-        ...initialState,
-        ...action.payload
-      }
-    },
-
     addBase(state, action: PayloadAction<KnowledgeBase>) {
       state.bases.push(action.payload)
     },
@@ -48,6 +44,8 @@ const knowledgeSlice = createSlice({
       const base = state.bases.find((b) => b.id === action.payload.baseId)
       if (base) {
         state.bases = state.bases.filter((b) => b.id !== action.payload.baseId)
+        const files = base.items.filter((item) => item.type === 'file')
+        void FileManager.deleteFiles(files.map((item) => item.content) as FileMetadata[])
       }
     },
 
@@ -242,7 +240,6 @@ const knowledgeSlice = createSlice({
 })
 
 export const {
-  hydrateKnowledgeState,
   addBase,
   deleteBase,
   renameBase,

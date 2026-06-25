@@ -50,7 +50,7 @@ body,
 body {
   display: flex;
   min-height: 100vh;
-  color: var(--color-foreground);
+  color: var(--color-text);
   font-size: 14px;
   line-height: 1.6;
   overflow: hidden;
@@ -121,88 +121,91 @@ ul {
   word-wrap: break-word;
 }
 
-.bubble:not(.multi-select-mode) .message-user .block-wrapper {
+:is(.bubble.messages-container, .bubble .messages-container):not(.multi-select-mode) .block-wrapper {
   display: flow-root;
 }
 
-.bubble:not(.multi-select-mode) .message-user .block-wrapper:last-child > *:last-child {
+:is(.bubble.messages-container, .bubble .messages-container):not(.multi-select-mode)
+  .block-wrapper:last-child
+  > *:last-child {
   margin-bottom: 0;
 }
 
-.bubble:not(.multi-select-mode) .message-user .message-content-container > *:last-child {
+:is(.bubble.messages-container, .bubble .messages-container):not(.multi-select-mode)
+  .message-content-container
+  > *:last-child {
   margin-bottom: 0;
 }
 
-.bubble:not(.multi-select-mode) .message-user .message-content-container .markdown p:last-child {
-  margin-bottom: 0;
-}
-
-.bubble:not(.multi-select-mode) .message-user .message-thought-container {
+:is(.bubble.messages-container, .bubble .messages-container):not(.multi-select-mode) .message-thought-container {
   margin-top: 8px;
 }
 
-.bubble:not(.multi-select-mode) .message-user .message-header {
+:is(.bubble.messages-container, .bubble .messages-container):not(.multi-select-mode)
+  .message-thought-wrapper
+  + .message-thought-wrapper {
+  margin-top: 0.5rem;
+}
+
+:is(.bubble.messages-container, .bubble .messages-container):not(.multi-select-mode)
+  .message-thought-wrapper
+  + .message-thought-wrapper
+  .message-thought-container {
+  margin-top: 0;
+}
+
+:is(.bubble.messages-container, .bubble .messages-container):not(.multi-select-mode) .message-user .message-header {
   flex-direction: row-reverse;
   text-align: right;
 }
 
-.bubble:not(.multi-select-mode) .message-user .message-header.user-bubble-header {
-  position: absolute;
-  top: calc(10px + (1lh + 20px) / 2);
-  right: 10px;
-  transform: translateY(-50%);
-  margin-bottom: 0;
-  z-index: 1;
-}
-
-.bubble:not(.multi-select-mode) .message-user .message-header .message-header-info-wrap {
+:is(.bubble.messages-container, .bubble .messages-container):not(.multi-select-mode)
+  .message-user
+  .message-header
+  .message-header-info-wrap {
   flex-direction: row-reverse;
   text-align: right;
 }
 
-.bubble:not(.multi-select-mode) .message-user .message-content-container {
+:is(.bubble.messages-container, .bubble .messages-container):not(.multi-select-mode)
+  .message-user
+  .message-content-container {
   border-radius: 10px;
   padding: 10px 16px 10px 16px;
-  background-color: var(--color-muted);
+  background-color: var(--chat-background-user);
   align-self: self-end;
-  margin-left: 46px;
-  margin-right: 45px;
 }
 
-.bubble:not(.multi-select-mode) .message-user .MessageFooter {
+:is(.bubble.messages-container, .bubble .messages-container):not(.multi-select-mode) .message-user .MessageFooter {
   margin-top: 2px;
   align-self: self-end;
-  margin-right: 45px;
 }
 
-.bubble:not(.multi-select-mode) .message-user .MessageFooter .message-footer-metadata {
-  opacity: 0;
-  visibility: hidden;
-  transition:
-    opacity 0.2s ease,
-    visibility 0.2s ease;
+:is(.bubble.messages-container, .bubble .messages-container):not(.multi-select-mode)
+  .message-assistant
+  .message-content-container {
+  padding-left: 0;
 }
 
-.bubble:not(.multi-select-mode) .message-user:hover .MessageFooter .message-footer-metadata {
-  opacity: 1;
-  visibility: visible;
+:is(.bubble.messages-container, .bubble .messages-container):not(.multi-select-mode) .message-assistant .MessageFooter {
+  margin-left: 0;
 }
 
-.bubble:not(.multi-select-mode) .message-user code {
-  color: var(--color-foreground);
+:is(.bubble.messages-container, .bubble .messages-container):not(.multi-select-mode) code {
+  color: var(--color-text);
 }
 
-.bubble:not(.multi-select-mode) .message-user .markdown {
+:is(.bubble.messages-container, .bubble .messages-container):not(.multi-select-mode) .markdown {
   display: flow-root;
 }
 
 ::highlight(search-matches) {
-  background-color: color-mix(in srgb, var(--color-warning) 50%, transparent);
-  color: var(--color-foreground);
+  background-color: var(--color-background-highlight);
+  color: var(--color-highlight);
 }
 
 ::highlight(current-match) {
-  background-color: color-mix(in srgb, var(--color-primary) 35%, transparent);
+  background-color: var(--color-background-highlight-accent);
 }
 
 textarea::-webkit-resizer {

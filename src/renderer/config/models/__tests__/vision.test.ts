@@ -1,4 +1,4 @@
-import type { Model as V1Model } from '@renderer/types'
+import type { Model as V1Model } from '@renderer/types/model'
 import type { Model } from '@shared/data/types/model'
 import { MODEL_CAPABILITY } from '@shared/data/types/model'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -56,13 +56,6 @@ vi.mock('@renderer/store/settings', () => {
     }
   )
 })
-
-vi.mock('@renderer/hooks/useSettings', () => ({
-  useSettings: vi.fn(() => ({})),
-  useNavbarPosition: vi.fn(() => ({ navbarPosition: 'left' })),
-  useMessageStyle: vi.fn(() => ({ isBubbleStyle: false })),
-  getStoreSetting: vi.fn()
-}))
 
 vi.mock('../embedding', () => ({
   isEmbeddingModel: vi.fn(),
@@ -141,11 +134,6 @@ describe('isVisionModel', () => {
 
   it('detects vision via id', () => {
     expect(isVisionModel(createModel({ id: 'gpt-4o-mini' }))).toBe(true)
-  })
-
-  it('matches MiniMax M3 as vision but not text-only M2.x', () => {
-    expect(isVisionModel(createModel({ id: 'MiniMax-M3', provider: 'minimax' }))).toBe(true)
-    expect(isVisionModel(createModel({ id: 'MiniMax-M2.7', provider: 'minimax' }))).toBe(false)
   })
 
   it('leverages image enhancement regex when standard vision regex does not match', () => {
@@ -321,8 +309,6 @@ describe('isVisionModel', () => {
       expect(isVisionModel(createModel({ id: 'moonshot/kimi-k2.5' }))).toBe(true)
       expect(isVisionModel(createModel({ id: 'kimi-k2.6' }))).toBe(true)
       expect(isVisionModel(createModel({ id: 'moonshot/kimi-k2.6' }))).toBe(true)
-      expect(isVisionModel(createModel({ id: 'kimi-k2.7-code' }))).toBe(true)
-      expect(isVisionModel(createModel({ id: 'moonshot/kimi-k2.7-code' }))).toBe(true)
     })
     it('should return false for kimi non-vision models', () => {
       expect(isVisionModel(createModel({ id: 'kimi-k2-thinking' }))).toBe(false)

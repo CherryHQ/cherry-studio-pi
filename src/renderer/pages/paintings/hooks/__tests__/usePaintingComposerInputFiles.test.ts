@@ -1,4 +1,4 @@
-import type { ComposerAttachment } from '@renderer/utils/messageUtils/composerAttachment'
+import type { ComposerAttachment } from '@renderer/utils/message/composerAttachment'
 import type { FileEntry } from '@shared/data/types/file/fileEntry'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { useState } from 'react'

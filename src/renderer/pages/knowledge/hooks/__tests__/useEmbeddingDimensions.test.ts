@@ -3,25 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useEmbeddingDimensions } from '../useEmbeddingDimensions'
 
+// embedMany goes through ipcApi.request('ai.embed_many', …) now (Main IPC).
 const { mockEmbedMany } = vi.hoisted(() => ({ mockEmbedMany: vi.fn() }))
-
 vi.mock('@renderer/ipc', () => ({
   ipcApi: { request: (_route: string, input: unknown) => mockEmbedMany(input) }
 }))
-
-type Deferred<T> = {
-  promise: Promise<T>
-  resolve: (value: T) => void
-}
-
-function deferred<T>(): Deferred<T> {
-  let resolve: (value: T) => void = () => {}
-  const promise = new Promise<T>((promiseResolve) => {
-    resolve = promiseResolve
-  })
-
-  return { promise, resolve }
-}
 
 describe('useEmbeddingDimensions', () => {
   beforeEach(() => {
@@ -64,38 +50,6 @@ describe('useEmbeddingDimensions', () => {
     await act(async () => {
       resolveRequest({ embeddings: [new Array(3072).fill(0)] })
       await fetchPromise
-    })
-
-    expect(result.current.isFetchingDimensions).toBe(false)
-  })
-
-  it('keeps loading until the latest overlapping request completes', async () => {
-    const firstRequest = deferred<{ embeddings: number[][] }>()
-    const secondRequest = deferred<{ embeddings: number[][] }>()
-    mockEmbedMany.mockReturnValueOnce(firstRequest.promise).mockReturnValueOnce(secondRequest.promise)
-
-    const { result } = renderHook(() => useEmbeddingDimensions())
-
-    let firstFetchPromise!: Promise<number>
-    let secondFetchPromise!: Promise<number>
-    await act(async () => {
-      firstFetchPromise = result.current.fetchDimensions('openai::text-embedding-3-small')
-      secondFetchPromise = result.current.fetchDimensions('openai::text-embedding-3-large')
-      await Promise.resolve()
-    })
-
-    expect(result.current.isFetchingDimensions).toBe(true)
-
-    await act(async () => {
-      firstRequest.resolve({ embeddings: [new Array(1536).fill(0)] })
-      await firstFetchPromise
-    })
-
-    expect(result.current.isFetchingDimensions).toBe(true)
-
-    await act(async () => {
-      secondRequest.resolve({ embeddings: [new Array(3072).fill(0)] })
-      await secondFetchPromise
     })
 
     expect(result.current.isFetchingDimensions).toBe(false)

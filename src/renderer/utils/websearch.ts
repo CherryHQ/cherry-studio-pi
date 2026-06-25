@@ -1,4 +1,5 @@
-import type { KnowledgeReference, WebSearchProviderResult } from '@renderer/types'
+import type { KnowledgeReference } from '@renderer/types/knowledge'
+import type { WebSearchProviderResult } from '@renderer/types/webSearchProvider'
 
 /**
  * 将检索到的知识片段按源URL整合为搜索结果
@@ -90,23 +91,19 @@ export function selectReferences(
 
   // Round Robin 选择
   const selected: KnowledgeReference[] = []
-  const groupPositions = new Map<string, number>()
   let roundIndex = 0
 
   while (selected.length < maxRefs && availableUrls.length > 0) {
     const currentUrl = availableUrls[roundIndex]
     const group = groupsByUrl.get(currentUrl)!
-    const groupPosition = groupPositions.get(currentUrl) ?? 0
 
-    if (groupPosition < group.length) {
-      selected.push(group[groupPosition])
-      groupPositions.set(currentUrl, groupPosition + 1)
+    if (group.length > 0) {
+      selected.push(group.shift()!)
     }
 
     // 如果当前组为空，从可用URL列表中移除
-    if ((groupPositions.get(currentUrl) ?? 0) >= group.length) {
+    if (group.length === 0) {
       availableUrls.splice(roundIndex, 1)
-      groupPositions.delete(currentUrl)
       // 调整索引，避免跳过下一个URL
       if (roundIndex >= availableUrls.length) {
         roundIndex = 0

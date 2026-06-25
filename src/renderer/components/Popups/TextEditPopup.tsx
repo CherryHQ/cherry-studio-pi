@@ -3,8 +3,8 @@ import { cn } from '@cherrystudio/ui/lib/utils'
 import { usePreference } from '@data/hooks/usePreference'
 import { loggerService } from '@logger'
 import { useLanguages } from '@renderer/hooks/translate/useTranslateLanguages'
-import { translateText } from '@renderer/services/TranslateService'
 import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
+import { translateText } from '@renderer/utils/translate'
 import { Languages, Loader2 } from 'lucide-react'
 import type { ComponentProps, CSSProperties, ReactNode } from 'react'
 import { useEffect, useRef, useState } from 'react'
@@ -65,12 +65,10 @@ const PopupContainer: React.FC<Props> = ({
   const [textValue, setTextValue] = useState(text)
   const [isTranslating, setIsTranslating] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const translatingRef = useRef(false)
   const [targetLanguage] = usePreference('chat.input.translate.target_language')
   const [showTranslateConfirm] = usePreference('chat.input.translate.show_confirm')
   const { languages } = useLanguages()
   const isMounted = useRef(true)
-  const translationSeqRef = useRef(0)
   const {
     className: textareaClassName,
     onChange: handleTextareaChange,
@@ -84,21 +82,10 @@ const PopupContainer: React.FC<Props> = ({
   useEffect(() => {
     return () => {
       isMounted.current = false
-      translationSeqRef.current += 1
-      translatingRef.current = false
     }
   }, [])
 
-  const isCurrentTranslation = (translationSeq: number) =>
-    isMounted.current && translationSeqRef.current === translationSeq
-
-  const invalidateTranslation = () => {
-    translationSeqRef.current += 1
-    translatingRef.current = false
-  }
-
   const settle = (result: string | null) => {
-    invalidateTranslation()
     close(result)
   }
 
@@ -140,42 +127,32 @@ const PopupContainer: React.FC<Props> = ({
   }, [open])
 
   const handleTranslate = async () => {
-    if (!textValue.trim() || translatingRef.current) return
+    if (!textValue.trim() || isTranslating) return
 
-    translatingRef.current = true
-    const translationSeq = ++translationSeqRef.current
-    let didStartTranslating = false
+    if (showTranslateConfirm) {
+      const confirmed = await window?.modal?.confirm({
+        title: t('translate.confirm.title'),
+        content: t('translate.confirm.content'),
+        centered: true
+      })
+      if (!confirmed) return
+    }
+
+    if (isMounted.current) {
+      setIsTranslating(true)
+    }
+
     try {
-      if (showTranslateConfirm) {
-        const confirmed = await window?.modal?.confirm({
-          title: t('translate.confirm.title'),
-          content: t('translate.confirm.content'),
-          centered: true
-        })
-        if (!confirmed) return
-        if (!isCurrentTranslation(translationSeq)) return
-      }
-
-      if (isCurrentTranslation(translationSeq)) {
-        didStartTranslating = true
-        setIsTranslating(true)
-      }
-
       const targetVo = languages?.find((l) => l.langCode === targetLanguage)
       const translatedText = await translateText(textValue, targetVo ?? targetLanguage)
-      if (isCurrentTranslation(translationSeq)) {
+      if (isMounted.current) {
         setTextValue(translatedText)
       }
     } catch (error) {
-      if (isCurrentTranslation(translationSeq)) {
-        logger.error('Translation failed:', error as Error)
-        window.toast?.error(formatErrorMessageWithPrefix(error, t('translate.error.failed')))
-      }
+      logger.error('Translation failed:', error as Error)
+      window.toast.error(formatErrorMessageWithPrefix(error, t('translate.error.failed')))
     } finally {
-      if (translationSeqRef.current === translationSeq) {
-        translatingRef.current = false
-      }
-      if (didStartTranslating && isCurrentTranslation(translationSeq)) {
+      if (isMounted.current) {
         setIsTranslating(false)
       }
     }
@@ -195,6 +172,7 @@ const PopupContainer: React.FC<Props> = ({
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onCancel()}>
       <DialogContent
         showCloseButton={modalProps?.closable !== false}
+        closeOnOverlayClick={modalProps?.maskClosable !== false}
         className={cn('max-h-[70vh] overflow-y-auto sm:max-w-none', modalProps?.rootClassName, modalProps?.className)}
         style={contentStyle}
         onEscapeKeyDown={(event) => {

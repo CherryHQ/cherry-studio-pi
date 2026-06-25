@@ -4,8 +4,7 @@ import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { CopyIcon } from '@renderer/components/Icons'
 import { useCodeStyle } from '@renderer/context/CodeStyleProvider'
 import { useTimer } from '@renderer/hooks/useTimer'
-import type { McpToolResponse } from '@renderer/types'
-import { renderPlainTextCodeHtml, sanitizeHtml } from '@renderer/utils/html'
+import type { McpToolResponse } from '@renderer/types/mcpTool'
 import { Check, ShieldCheck, Wrench } from 'lucide-react'
 import { parse as parsePartialJson } from 'partial-json'
 import type { ComponentPropsWithoutRef, FC } from 'react'
@@ -329,45 +328,29 @@ const ExpandedToolResponseContent: FC<{
 
   // Extract and highlight response when available
   useEffect(() => {
-    if (!showResponse || !response) {
-      setHighlightedResponse('')
-      setResponseImages([])
-      setIsTruncated(false)
-      setOriginalLength(0)
-      return
-    }
+    if (!showResponse || !response) return
 
     let cancelled = false
 
     const highlight = async () => {
-      try {
-        setHighlightedResponse('')
-        setResponseImages([])
-        setIsTruncated(false)
-        setOriginalLength(0)
-        const { text: previewContent, images } = extractPreviewContent(response)
-        if (cancelled) return
-        setResponseImages(images)
-        const {
-          data: truncatedContent,
-          isTruncated: wasTruncated,
-          originalLength: origLen
-        } = truncateOutput(previewContent)
-        if (cancelled) return
-        setIsTruncated(wasTruncated)
-        setOriginalLength(origLen)
-        try {
-          const result = await highlightCode(truncatedContent, 'json')
-          if (cancelled) return
-          setHighlightedResponse(sanitizeHtml(result))
-        } catch (error) {
-          logger.debug('Failed to highlight MCP tool response', error as Error)
-          if (!cancelled) setHighlightedResponse(renderPlainTextCodeHtml(truncatedContent))
-        }
-      } catch (error) {
-        logger.debug('Failed to render MCP tool response', error as Error)
-        if (!cancelled) setHighlightedResponse('')
-      }
+      setHighlightedResponse('')
+      setResponseImages([])
+      setIsTruncated(false)
+      setOriginalLength(0)
+      const { text: previewContent, images } = extractPreviewContent(response)
+      if (cancelled) return
+      setResponseImages(images)
+      const {
+        data: truncatedContent,
+        isTruncated: wasTruncated,
+        originalLength: origLen
+      } = truncateOutput(previewContent)
+      if (cancelled) return
+      setIsTruncated(wasTruncated)
+      setOriginalLength(origLen)
+      const result = await highlightCode(truncatedContent, 'json')
+      if (cancelled) return
+      setHighlightedResponse(result)
     }
 
     if (window.requestIdleCallback) {

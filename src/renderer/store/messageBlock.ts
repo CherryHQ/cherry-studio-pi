@@ -18,27 +18,22 @@ import type { WebSearchResultBlock } from '@anthropic-ai/sdk/resources'
 import type OpenAI from '@cherrystudio/openai'
 import type { GroundingMetadata } from '@google/genai'
 import { createEntityAdapter, createSelector, createSlice, type PayloadAction } from '@reduxjs/toolkit'
-import type { TodoItem, TodoWriteToolInput } from '@renderer/pages/home/Messages/Tools/MessageAgentTools/types'
-import type {
-  AISDKWebSearchResult,
-  BaseTool,
-  Citation,
-  NormalToolResponse,
-  WebSearchProviderResponse
-} from '@renderer/types'
-import { WEB_SEARCH_SOURCE } from '@renderer/types'
+import type { TodoItem, TodoWriteToolInput } from '@renderer/components/chat/messages/tools/agent/types'
+import type { NormalToolResponse } from '@renderer/types/mcpTool'
+import type { Citation } from '@renderer/types/message'
 import type { CitationMessageBlock, MessageBlock, ToolMessageBlock } from '@renderer/types/newMessage'
 import { MessageBlockType } from '@renderer/types/newMessage'
-import { getUrlHostnameOrFallback } from '@renderer/utils/url'
+import type { BaseTool } from '@renderer/types/tool'
+import {
+  type AISDKWebSearchResult,
+  WEB_SEARCH_SOURCE,
+  type WebSearchProviderResponse
+} from '@renderer/types/webSearchProvider'
 
-import type { RootState } from './index' // 确认 RootState 从 store/index.ts 导出
+import type { RootState } from './index'
 
 // Create a simplified type for the entity adapter to avoid circular type issues
 type MessageBlockEntity = MessageBlock
-
-function asArray<T>(value: unknown): T[] {
-  return Array.isArray(value) ? value : []
-}
 
 // 1. 创建实体适配器 (Entity Adapter)
 // 我们使用块的 `id` 作为唯一标识符。
@@ -52,6 +47,7 @@ const initialState = messageBlocksAdapter.getInitialState({
 })
 
 // 3. 创建 Slice
+// @ts-ignore ignore
 export const messageBlocksSlice = createSlice({
   name: 'messageBlocks',
   initialState,
@@ -127,22 +123,25 @@ export const formatCitationsFromBlock = (block: CitationMessageBlock | undefined
       case WEB_SEARCH_SOURCE.GEMINI: {
         const groundingMetadata = block.response.results as GroundingMetadata
         formattedCitations =
-          asArray<NonNullable<GroundingMetadata['groundingChunks']>[number]>(groundingMetadata?.groundingChunks).map(
-            (chunk, index) => ({
-              number: index + 1,
-              url: chunk?.web?.uri || '',
-              title: chunk?.web?.title,
-              showFavicon: true,
-              metadata: groundingMetadata.groundingSupports,
-              type: 'websearch'
-            })
-          ) || []
+          groundingMetadata?.groundingChunks?.map((chunk, index) => ({
+            number: index + 1,
+            url: chunk?.web?.uri || '',
+            title: chunk?.web?.title,
+            showFavicon: true,
+            metadata: groundingMetadata.groundingSupports,
+            type: 'websearch'
+          })) || []
         break
       }
       case WEB_SEARCH_SOURCE.OPENAI_RESPONSE:
         formattedCitations =
-          asArray<OpenAI.Responses.ResponseOutputText.URLCitation>(block.response.results).map((result, index) => {
-            const hostname = result.title ? undefined : getUrlHostnameOrFallback(result.url)
+          (block.response.results as OpenAI.Responses.ResponseOutputText.URLCitation[])?.map((result, index) => {
+            let hostname: string | undefined
+            try {
+              hostname = result.title ? undefined : new URL(result.url).hostname
+            } catch {
+              hostname = result.url
+            }
             return {
               number: index + 1,
               url: result.url,
@@ -155,26 +154,34 @@ export const formatCitationsFromBlock = (block: CitationMessageBlock | undefined
         break
       case WEB_SEARCH_SOURCE.OPENAI:
         formattedCitations =
-          asArray<OpenAI.Chat.Completions.ChatCompletionMessage.Annotation>(block.response.results).map(
-            (url, index) => {
-              const urlCitation = url.url_citation
-              const hostname = urlCitation.title ? undefined : getUrlHostnameOrFallback(urlCitation.url)
-              return {
-                number: index + 1,
-                url: urlCitation.url,
-                title: urlCitation.title,
-                hostname: hostname,
-                showFavicon: true,
-                type: 'websearch'
-              }
+          (block.response.results as OpenAI.Chat.Completions.ChatCompletionMessage.Annotation[])?.map((url, index) => {
+            const urlCitation = url.url_citation
+            let hostname: string | undefined
+            try {
+              hostname = urlCitation.title ? undefined : new URL(urlCitation.url).hostname
+            } catch {
+              hostname = urlCitation.url
             }
-          ) || []
+            return {
+              number: index + 1,
+              url: urlCitation.url,
+              title: urlCitation.title,
+              hostname: hostname,
+              showFavicon: true,
+              type: 'websearch'
+            }
+          }) || []
         break
       case WEB_SEARCH_SOURCE.ANTHROPIC:
         formattedCitations =
-          asArray<WebSearchResultBlock>(block.response.results).map((result, index) => {
+          (block.response.results as Array<WebSearchResultBlock>)?.map((result, index) => {
             const { url } = result
-            const hostname = getUrlHostnameOrFallback(url)
+            let hostname: string | undefined
+            try {
+              hostname = new URL(url).hostname
+            } catch {
+              hostname = url
+            }
             return {
               number: index + 1,
               url: url,
@@ -187,10 +194,10 @@ export const formatCitationsFromBlock = (block: CitationMessageBlock | undefined
         break
       case WEB_SEARCH_SOURCE.PERPLEXITY: {
         formattedCitations =
-          asArray<any>(block.response.results).map((result, index) => ({
+          (block.response.results as any[])?.map((result, index) => ({
             number: index + 1,
             url: result.url || result, // 兼容旧数据
-            title: result.title || getUrlHostnameOrFallback(result.url || result), // 兼容旧数据
+            title: result.title || new URL(result).hostname, // 兼容旧数据
             showFavicon: true,
             type: 'websearch'
           })) || []
@@ -198,40 +205,60 @@ export const formatCitationsFromBlock = (block: CitationMessageBlock | undefined
       }
       case WEB_SEARCH_SOURCE.GROK:
         formattedCitations =
-          asArray<AISDKWebSearchResult>(block.response.results).map((result, index) => {
+          (block.response.results as AISDKWebSearchResult[])?.map((result, index) => {
             const url = result.url
-            const hostname = getUrlHostnameOrFallback(url)
-            // xAI source events use citation number as title, fall back to hostname
-            const title = result.title && /^\d+$/.test(result.title) ? hostname : result.title || hostname
-            return {
-              number: index + 1,
-              url,
-              title,
-              showFavicon: true,
-              type: 'websearch'
+            try {
+              const hostname = new URL(result.url).hostname
+              // xAI source events use citation number as title, fall back to hostname
+              const title = result.title && /^\d+$/.test(result.title) ? hostname : result.title || hostname
+              return {
+                number: index + 1,
+                url,
+                title,
+                showFavicon: true,
+                type: 'websearch'
+              }
+            } catch {
+              return {
+                number: index + 1,
+                url,
+                hostname: url,
+                showFavicon: true,
+                type: 'websearch'
+              }
             }
           }) || []
         break
       case WEB_SEARCH_SOURCE.OPENROUTER:
         formattedCitations =
-          asArray<AISDKWebSearchResult>(block.response.results).map((result, index) => {
+          (block.response.results as AISDKWebSearchResult[])?.map((result, index) => {
             const url = result.url
-            const hostname = getUrlHostnameOrFallback(url)
-            const content = result.providerMetadata && result.providerMetadata['openrouter']?.content
-            return {
-              number: index + 1,
-              url,
-              title: result.title || hostname,
-              content: content as string,
-              showFavicon: true,
-              type: 'websearch'
+            try {
+              const hostname = new URL(result.url).hostname
+              const content = result.providerMetadata && result.providerMetadata['openrouter']?.content
+              return {
+                number: index + 1,
+                url,
+                title: result.title || hostname,
+                content: content as string,
+                showFavicon: true,
+                type: 'websearch'
+              }
+            } catch {
+              return {
+                number: index + 1,
+                url,
+                hostname: url,
+                showFavicon: true,
+                type: 'websearch'
+              }
             }
           }) || []
         break
       case WEB_SEARCH_SOURCE.ZHIPU:
       case WEB_SEARCH_SOURCE.HUNYUAN:
         formattedCitations =
-          asArray<any>(block.response.results).map((result, index) => ({
+          (block.response.results as any[])?.map((result, index) => ({
             number: index + 1,
             url: result.link || result.url,
             title: result.title,
@@ -241,9 +268,7 @@ export const formatCitationsFromBlock = (block: CitationMessageBlock | undefined
         break
       case WEB_SEARCH_SOURCE.WEBSEARCH:
         formattedCitations =
-          asArray<WebSearchProviderResponse['results'][number]>(
-            (block.response.results as WebSearchProviderResponse | undefined)?.results
-          ).map((result, index) => ({
+          (block.response.results as WebSearchProviderResponse)?.results?.map((result, index) => ({
             number: index + 1,
             url: result.url,
             title: result.title,
@@ -254,10 +279,10 @@ export const formatCitationsFromBlock = (block: CitationMessageBlock | undefined
         break
       case WEB_SEARCH_SOURCE.AISDK:
         formattedCitations =
-          asArray<AISDKWebSearchResult>(block.response?.results).map((result, index) => ({
+          (block.response?.results as AISDKWebSearchResult[])?.map((result, index) => ({
             number: index + 1,
             url: result.url,
-            title: result.title || getUrlHostnameOrFallback(result.url),
+            title: result.title || new URL(result.url).hostname,
             showFavicon: true,
             type: 'websearch',
             providerMetadata: result?.providerMetadata
@@ -345,6 +370,12 @@ export interface TodoWriteToolMessageBlock extends Omit<ToolMessageBlock, 'metad
 }
 
 /**
+ * Check if todos have any incomplete items
+ */
+const hasIncompleteTodos = (todos: TodoItem[]): boolean =>
+  todos.some((todo) => todo.status === 'pending' || todo.status === 'in_progress')
+
+/**
  * Check if a block is a TodoWrite tool block
  */
 export const isTodoWriteBlock = (block: MessageBlock | undefined): block is TodoWriteToolMessageBlock => {
@@ -375,7 +406,7 @@ export interface ActiveTodoInfo {
 
 /**
  * Select active todo info for a topic in a single pass.
- * Returns the latest TodoWrite block's todos, or undefined if none exist.
+ * Returns undefined if no TodoWrite block with incomplete todos exists.
  *
  * Used by PinnedTodoPanel to display current task progress above the inputbar.
  */
@@ -402,7 +433,10 @@ export const selectActiveTodoInfo = createSelector(
         if (isTodoWriteBlock(block)) {
           const ids = (blockIdsByMessage[messageId] ??= [])
           ids.push(blockId)
-          latestBlock = block
+          const todos = block.metadata.rawMcpToolResponse?.arguments?.todos
+          if (todos && hasIncompleteTodos(todos)) {
+            latestBlock = block
+          }
         }
       }
     }

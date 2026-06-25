@@ -11,9 +11,9 @@ import {
 import CopyIcon from '@renderer/components/Icons/CopyIcon'
 import { useModelMutations } from '@renderer/hooks/useModel'
 import { useProvider } from '@renderer/hooks/useProvider'
-import { getDefaultGroupName } from '@renderer/utils'
-import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
+import { getDefaultGroupName } from '@renderer/utils/naming'
 import { CURRENCY, type Currency, type EndpointType, type Model } from '@shared/data/types/model'
+import { parseUniqueModelId } from '@shared/data/types/model'
 import { isNewApiProvider } from '@shared/utils/provider'
 import { ChevronDown, ChevronUp, SaveIcon } from 'lucide-react'
 import type { FormEvent } from 'react'
@@ -99,12 +99,6 @@ export default function EditModelDrawer({ providerId, open, model: modelProp, on
   const [maxInputTokens, setMaxInputTokens] = useState('')
   const [maxOutputTokens, setMaxOutputTokens] = useState('')
   const [endpointTypeTouched, setEndpointTypeTouched] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const savingRef = useRef(false)
-  const deleteConfirmRef = useRef(false)
-  const deleteRunningRef = useRef(false)
-  const mountedRef = useRef(true)
-  const activeRef = useRef(open)
 
   const mode: ModelDrawerMode = provider && isNewApiProvider(provider) ? 'new-api' : 'legacy'
   const apiModelId = useMemo(() => (model ? getModelApiId(model) : ''), [model])
@@ -112,21 +106,6 @@ export default function EditModelDrawer({ providerId, open, model: modelProp, on
     () => (model ? getInitialSelectedCapabilities(model) : new Set<ModelCapabilityToggle>()),
     [model]
   )
-
-  useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-      activeRef.current = false
-    }
-  }, [])
-
-  useEffect(() => {
-    activeRef.current = open
-  }, [open])
-
-  const isDrawerActive = useCallback(() => mountedRef.current && activeRef.current, [])
 
   useEffect(() => {
     if (!open || !model) {
@@ -158,7 +137,7 @@ export default function EditModelDrawer({ providerId, open, model: modelProp, on
         return
       }
 
-      const modelId = getModelApiId(model)
+      const { modelId } = parseUniqueModelId(model.id)
       await updateModel(model.providerId ?? providerId, modelId, {
         name: patch.name,
         group: patch.group,
@@ -228,12 +207,10 @@ export default function EditModelDrawer({ providerId, open, model: modelProp, on
   const autoSave = useCallback(
     (overrides?: BuildPatchOverrides) => {
       void handleUpdateModel(buildPatch(overrides)).catch(() => {
-        if (isDrawerActive()) {
-          window.toast?.error(t('common.error'))
-        }
+        window.toast.error(t('common.error'))
       })
     },
-    [buildPatch, handleUpdateModel, isDrawerActive, t]
+    [buildPatch, handleUpdateModel, t]
   )
 
   const handleToggleCapability = useCallback((type: ModelCapabilityToggle) => {
@@ -257,34 +234,15 @@ export default function EditModelDrawer({ providerId, open, model: modelProp, on
   }, [savedCaps])
 
   const saveModel = useCallback(async () => {
-    if (savingRef.current) {
-      return
-    }
-
     if (mode === 'new-api' && endpointTypes.length === 0) {
       setEndpointTypeTouched(true)
       return
     }
 
-    savingRef.current = true
-    setSaving(true)
-    try {
-      await handleUpdateModel(buildPatch())
-      if (isDrawerActive()) {
-        setShowMoreSettings(false)
-        onClose()
-      }
-    } catch {
-      if (isDrawerActive()) {
-        window.toast?.error(t('settings.models.manage.operation_failed'))
-      }
-    } finally {
-      savingRef.current = false
-      if (mountedRef.current) {
-        setSaving(false)
-      }
-    }
-  }, [buildPatch, endpointTypes.length, handleUpdateModel, isDrawerActive, mode, onClose, t])
+    await handleUpdateModel(buildPatch())
+    setShowMoreSettings(false)
+    onClose()
+  }, [buildPatch, endpointTypes.length, handleUpdateModel, mode, onClose])
 
   const handleFormSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
@@ -295,43 +253,25 @@ export default function EditModelDrawer({ providerId, open, model: modelProp, on
   )
 
   const handleDeleteModel = useCallback(async () => {
-    if (!model || deleteConfirmRef.current || deleteRunningRef.current) {
+    if (!model) {
       return
     }
 
-    const modelId = getModelApiId(model)
-    const clearDeleteGuard = () => {
-      if (deleteRunningRef.current) return
-      deleteConfirmRef.current = false
-    }
+    const { modelId } = parseUniqueModelId(model.id)
 
-    deleteConfirmRef.current = true
     window.modal.confirm({
       title: t('common.delete_confirm'),
       content: t('settings.models.manage.remove_model'),
       okButtonProps: { danger: true },
       okText: t('common.delete'),
       centered: true,
-      onCancel: clearDeleteGuard,
       onOk: async () => {
-        if (deleteRunningRef.current) {
-          return
-        }
-
-        deleteRunningRef.current = true
-        try {
-          await deleteModel(model.providerId ?? providerId, modelId)
-          if (isDrawerActive()) {
-            window.toast?.success(t('common.delete_success'))
-            onClose()
-          }
-        } finally {
-          deleteRunningRef.current = false
-          deleteConfirmRef.current = false
-        }
+        await deleteModel(model.providerId ?? providerId, modelId)
+        window.toast.success(t('common.delete_success'))
+        onClose()
       }
     })
-  }, [deleteModel, isDrawerActive, model, onClose, providerId, t])
+  }, [deleteModel, model, onClose, providerId, t])
 
   if (!provider || !model) {
     return <ProviderSettingsDrawer open={open} onClose={onClose} title={t('models.edit')} />
@@ -348,10 +288,10 @@ export default function EditModelDrawer({ providerId, open, model: modelProp, on
           {t('common.delete')}
         </Button>
       ) : null}
-      <Button variant="outline" disabled={saving} onClick={onClose}>
+      <Button variant="outline" onClick={onClose}>
         {t('common.cancel')}
       </Button>
-      <Button type="button" disabled={saving} loading={saving} onClick={() => void saveModel()}>
+      <Button type="button" onClick={() => void saveModel()}>
         <SaveIcon aria-hidden className="size-4 shrink-0 text-current" />
         {t('common.save')}
       </Button>
@@ -386,17 +326,9 @@ export default function EditModelDrawer({ providerId, open, model: modelProp, on
                   type="button"
                   aria-label={t('message.copied')}
                   className={fieldClasses.iconButton}
-                  onClick={async () => {
-                    try {
-                      await navigator.clipboard.writeText(apiModelId)
-                      if (isDrawerActive()) {
-                        window.toast?.success(t('message.copied'))
-                      }
-                    } catch (error) {
-                      if (isDrawerActive()) {
-                        window.toast?.error(formatErrorMessageWithPrefix(error, t('common.copy_failed')))
-                      }
-                    }
+                  onClick={() => {
+                    void navigator.clipboard.writeText(apiModelId)
+                    window.toast.success(t('message.copied'))
                   }}>
                   <CopyIcon size={14} />
                 </button>

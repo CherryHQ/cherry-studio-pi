@@ -5,7 +5,7 @@ import { ipcChatTransport } from '@renderer/transport/IpcChatTransport'
 import type { ActiveExecution } from '@shared/ai/transport'
 import type { CherryUIMessage } from '@shared/data/types/message'
 import type { ChatRequestOptions, FileUIPart } from 'ai'
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { useTopicDbRefreshOnTerminal } from './useTopicStreamStatus'
 import { useTopicStreamStatus } from './useTopicStreamStatus'
@@ -34,20 +34,16 @@ export function useChatWithHistory(
   initialMessages: CherryUIMessage[],
   refresh: () => Promise<CherryUIMessage[]>
 ): UseChatWithHistoryResult {
-  const initialMessagesRef = useRef(initialMessages)
-  initialMessagesRef.current = initialMessages
-
-  const chat = useMemo<Chat<CherryUIMessage>>(
+  const [chat] = useState<Chat<CherryUIMessage>>(
     () =>
       new Chat<CherryUIMessage>({
         id: topicId,
         transport: ipcChatTransport,
-        messages: initialMessagesRef.current,
+        messages: initialMessages,
         onError: (streamError) => {
           logger.error('AI stream error', { topicId, streamError })
         }
-      }),
-    [topicId]
+      })
   )
 
   const {
@@ -122,27 +118,21 @@ export function useChatWithHistory(
   // re-attaches a stream that started while this window was unmounted /
   // reloading. Stays here (it's tightly coupled to `resumeActiveStream` and
   // chat-specific) rather than mingling with the generic invalidation gate.
-  const prevTopicStatusRef = useRef<{ topicId: string; status: typeof topicStreamStatus } | undefined>(undefined)
+  const prevTopicStatusRef = useRef<typeof topicStreamStatus>(undefined)
   useEffect(() => {
     const prev = prevTopicStatusRef.current
-    const prevStatus = prev?.topicId === topicId ? prev.status : undefined
-    prevTopicStatusRef.current = { topicId, status: topicStreamStatus }
-    if (topicStreamStatus === 'pending' && prevStatus !== 'pending') {
+    prevTopicStatusRef.current = topicStreamStatus
+    if (topicStreamStatus === 'pending' && prev !== 'pending') {
       resumeActiveStream('started-event')
     }
-  }, [resumeActiveStream, topicId, topicStreamStatus])
+  }, [resumeActiveStream, topicStreamStatus])
 
-  useEffect(() => {
-    const errorUnsub = ipcApi.on('ai.stream_error', (data) => {
-      if (data.topicId !== topicId) return
-      void refreshRef.current().catch((err) => {
-        logger.warn('Failed to refresh messages after stream error', { topicId, err })
-      })
-    })
-    return () => {
-      errorUnsub()
-    }
-  }, [topicId])
+  // PR 3: dropped the per-window `onStreamDone` / `onStreamError` IPC
+  // listeners that previously called `refresh()` here. `useTopicDbRefreshOnTerminal`
+  // above already revalidates SWR on every terminal transition via the
+  // classifier (covers done / aborted / error / awaiting-approval), so the
+  // IPC subscription was a second producer of the same `mutate()` call and
+  // produced the double-mutate race documented in the plan.
 
   return {
     sendMessage,

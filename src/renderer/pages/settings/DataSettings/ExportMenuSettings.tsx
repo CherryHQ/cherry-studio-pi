@@ -1,7 +1,6 @@
 import { Switch } from '@cherrystudio/ui'
 import { useMultiplePreferences } from '@data/hooks/usePreference'
 import { useTheme } from '@renderer/context/ThemeProvider'
-import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import type { FC } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -9,7 +8,6 @@ import { SettingDivider, SettingGroup, SettingRow, SettingRowTitle, SettingTitle
 const ExportMenuOptions: FC = () => {
   const { t } = useTranslation()
   const { theme } = useTheme()
-  const showSaveFailed = useSaveFailedToast()
 
   const [exportMenuOptions, setExportMenuOptions] = useMultiplePreferences({
     image: 'data.export.menus.image',
@@ -27,7 +25,7 @@ const ExportMenuOptions: FC = () => {
   const handleToggleOption = (option: string, checked: boolean) => {
     void setExportMenuOptions({
       [option]: checked
-    }).catch(showSaveFailed)
+    })
   }
 
   return (

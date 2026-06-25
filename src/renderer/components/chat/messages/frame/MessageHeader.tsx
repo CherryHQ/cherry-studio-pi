@@ -1,8 +1,8 @@
 import { Checkbox, Tooltip } from '@cherrystudio/ui'
 import { getModelLogo } from '@renderer/config/models'
 import { useTheme } from '@renderer/context/ThemeProvider'
-import type { Model } from '@renderer/types'
-import { firstLetter, removeLeadingEmoji } from '@renderer/utils'
+import type { Model } from '@renderer/types/model'
+import { firstLetter, removeLeadingEmoji } from '@renderer/utils/naming'
 import dayjs from 'dayjs'
 import { Sparkle } from 'lucide-react'
 import type { FC, ReactNode } from 'react'
@@ -125,12 +125,15 @@ const MessageHeader: FC<Props> = memo(
             <div
               className={`message-header-info-wrap flex shrink-0 items-center gap-1 text-[10px] text-foreground-muted leading-none opacity-0 transition-opacity duration-150 focus-within:opacity-100 ${hiddenContentHoverClass}`}>
               <span>{dayjs(message?.updatedAt ?? message.createdAt).format('MM/DD HH:mm')}</span>
-              {isBubbleStyle && !isAssistantMessage && message.stats !== undefined && (
-                <>
-                  |
-                  <MessageTokens message={message} />
-                </>
-              )}
+              {renderConfig.showEstimatedTokens &&
+                isBubbleStyle &&
+                !isAssistantMessage &&
+                message.stats !== undefined && (
+                  <>
+                    |
+                    <MessageTokens message={message} />
+                  </>
+                )}
             </div>
             {actionsSlot && (
               <div

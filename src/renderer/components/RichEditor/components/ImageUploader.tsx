@@ -13,11 +13,10 @@ import {
 } from '@cherrystudio/ui'
 import { loggerService } from '@logger'
 import { ImageUp, Link, LoaderCircle, UploadCloud } from 'lucide-react'
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 const logger = loggerService.withContext('RichEditorImageUploader')
-const ALLOWED_IMAGE_URL_PROTOCOLS = new Set(['http:', 'https:'])
 
 interface ImageUploaderProps {
   /** Callback when image is selected/uploaded */
@@ -29,20 +28,6 @@ interface ImageUploaderProps {
 }
 
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024
-
-const normalizeImageEmbedUrl = (rawUrl: string): string | null => {
-  const trimmedUrl = rawUrl.trim()
-  if (!trimmedUrl || /\s/.test(trimmedUrl)) return null
-
-  try {
-    const parsedUrl = new URL(trimmedUrl)
-    if (!ALLOWED_IMAGE_URL_PROTOCOLS.has(parsedUrl.protocol)) return null
-    if (parsedUrl.username || parsedUrl.password) return null
-    return parsedUrl.href
-  } catch {
-    return null
-  }
-}
 
 // Function to convert file to base64 URL
 const convertFileToBase64 = (file: File): Promise<string> => {
@@ -64,29 +49,6 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageSelect, vis
   const { t } = useTranslation()
   const [urlInput, setUrlInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const mountedRef = useRef(true)
-  const visibleRef = useRef(visible)
-  const uploadSeqRef = useRef(0)
-
-  visibleRef.current = visible
-
-  useEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
-      uploadSeqRef.current += 1
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!visible) {
-      uploadSeqRef.current += 1
-      setLoading(false)
-    }
-  }, [visible])
-
-  const isActiveUpload = (uploadSeq: number) =>
-    mountedRef.current && visibleRef.current && uploadSeq === uploadSeqRef.current
 
   const validateFile = (file: File) => {
     const isImage = file.type.startsWith('image/')
@@ -105,55 +67,45 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageSelect, vis
   const handleFileSelect = async (file: File) => {
     const validationError = validateFile(file)
     if (validationError) {
-      window.toast?.error(validationError)
+      window.toast.error(validationError)
       return
     }
 
-    const uploadSeq = ++uploadSeqRef.current
     try {
       setLoading(true)
 
       // Convert to base64 and call callback
       const base64Url = await convertFileToBase64(file)
-      if (!isActiveUpload(uploadSeq)) {
-        return
-      }
       onImageSelect(base64Url)
-      window.toast?.success(t('richEditor.imageUploader.uploadSuccess'))
+      window.toast.success(t('richEditor.imageUploader.uploadSuccess'))
       onClose()
     } catch (error) {
-      if (isActiveUpload(uploadSeq)) {
-        logger.error('Image upload failed:', error as Error)
-        window.toast?.error(t('richEditor.imageUploader.uploadError'))
-      }
+      logger.error('Image upload failed:', error as Error)
+      window.toast.error(t('richEditor.imageUploader.uploadError'))
     } finally {
-      if (mountedRef.current && uploadSeq === uploadSeqRef.current) {
-        setLoading(false)
-      }
+      setLoading(false)
     }
   }
 
   const handleUrlSubmit = () => {
     if (!urlInput.trim()) {
-      window.toast?.error(t('richEditor.imageUploader.urlRequired'))
+      window.toast.error(t('richEditor.imageUploader.urlRequired'))
       return
     }
 
-    const imageUrl = normalizeImageEmbedUrl(urlInput)
-    if (!imageUrl) {
-      window.toast?.error(t('richEditor.imageUploader.invalidUrl'))
-      return
+    // Basic URL validation
+    try {
+      new URL(urlInput.trim())
+      onImageSelect(urlInput.trim())
+      window.toast.success(t('richEditor.imageUploader.embedSuccess'))
+      setUrlInput('')
+      onClose()
+    } catch {
+      window.toast.error(t('richEditor.imageUploader.invalidUrl'))
     }
-
-    onImageSelect(imageUrl)
-    window.toast?.success(t('richEditor.imageUploader.embedSuccess'))
-    setUrlInput('')
-    onClose()
   }
 
   const handleCancel = () => {
-    uploadSeqRef.current += 1
-    setLoading(false)
     setUrlInput('')
     onClose()
   }
@@ -194,7 +146,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageSelect, vis
               }}
               onError={(err) => {
                 logger.error('Dropzone validation failed:', err)
-                window.toast?.error(err.message || t('richEditor.imageUploader.invalidType'))
+                window.toast.error(err.message || t('richEditor.imageUploader.invalidType'))
               }}
               className="min-h-44 border-dashed bg-muted/20 hover:bg-accent/40">
               <div className="flex flex-col items-center justify-center gap-2 text-center">

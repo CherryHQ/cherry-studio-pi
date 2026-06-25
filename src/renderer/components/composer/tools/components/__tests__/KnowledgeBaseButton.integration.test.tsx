@@ -1,11 +1,11 @@
-import type { QuickPanelInputAdapter } from '@renderer/components/composer/panelEngine'
+import type { ToolLauncherApi } from '@renderer/components/composer/tools/types'
+import type { QuickPanelInputAdapter } from '@renderer/components/QuickPanel'
 import {
   type QuickPanelContextType,
   QuickPanelProvider,
   QuickPanelView,
   useQuickPanel
-} from '@renderer/components/composer/panelEngine'
-import type { ToolLauncherApi } from '@renderer/components/composer/tools/types'
+} from '@renderer/components/QuickPanel'
 import type { KnowledgeBase } from '@shared/data/types/knowledge'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import React, { useEffect, useState } from 'react'

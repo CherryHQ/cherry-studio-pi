@@ -44,10 +44,8 @@ export function createAbortPromise<T>(signal: AbortSignal, finallyPromise: Promi
 
     signal.addEventListener('abort', abortHandler, { once: true })
 
-    void finallyPromise
-      .finally(() => {
-        signal.removeEventListener('abort', abortHandler)
-      })
-      .catch(() => undefined)
+    void finallyPromise.finally(() => {
+      signal.removeEventListener('abort', abortHandler)
+    })
   })
 }

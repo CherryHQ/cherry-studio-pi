@@ -98,7 +98,7 @@ const RecallTestProvider = ({ baseId, children }: RecallTestProviderProps) => {
       if (!isCurrentSearch()) {
         return
       }
-      window.toast?.error(formatErrorMessageWithPrefix(normalizedError, t('knowledge.recall.search_failed')))
+      window.toast.error(formatErrorMessageWithPrefix(normalizedError, t('knowledge.recall.search_failed')))
       setResults([])
     }
 

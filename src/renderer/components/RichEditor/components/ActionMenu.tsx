@@ -25,8 +25,7 @@ export const ActionMenu: FC<ActionMenuProps> = ({ show, position, items, onClose
   useEffect(() => {
     if (!show) return
     const onDocMouseDown = (e: MouseEvent) => {
-      const target = e.target
-      if (ref.current && (!(target instanceof Node) || !ref.current.contains(target))) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
         onClose()
       }
     }
@@ -62,7 +61,7 @@ export const ActionMenu: FC<ActionMenuProps> = ({ show, position, items, onClose
         left: position.x,
         top: position.y,
         zIndex: 2000,
-        background: 'var(--color-background)',
+        background: 'var(--color-bg-base)',
         border: '1px solid var(--color-border)',
         borderRadius: 6,
         boxShadow: '0 6px 16px rgba(0,0,0,0.12)',

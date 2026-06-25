@@ -69,17 +69,54 @@ export async function getBinaryName(name: string): Promise<string> {
   return name
 }
 
+export function getBinarySearchDirs(): string[] {
+  return [path.join(application.getPath('feature.binary.data'), 'shims'), application.getPath('cherry.bin')]
+}
+
+export function getBinaryExecutionEnv(): Record<string, string> {
+  const dataDir = application.getPath('feature.binary.data')
+  return {
+    MISE_DATA_DIR: dataDir,
+    MISE_CONFIG_DIR: path.join(dataDir, 'config'),
+    MISE_CACHE_DIR: path.join(dataDir, 'cache'),
+    MISE_STATE_DIR: path.join(dataDir, 'state'),
+    MISE_SHIMS_DIR: path.join(dataDir, 'shims'),
+    MISE_YES: '1',
+    MISE_NO_ANALYTICS: '1',
+    MISE_EXPERIMENTAL: '1'
+  }
+}
+
+export function getBinaryIsolatedHomeEnv(): Record<string, string> {
+  const dataDir = application.getPath('feature.binary.data')
+  return {
+    HOME: path.join(dataDir, 'home'),
+    XDG_CONFIG_HOME: path.join(dataDir, 'xdg', 'config'),
+    XDG_CACHE_HOME: path.join(dataDir, 'xdg', 'cache'),
+    XDG_STATE_HOME: path.join(dataDir, 'xdg', 'state')
+  }
+}
+
+export function mergeBinaryExecutionEnv(env: Record<string, string>): Record<string, string> {
+  const binaryEnv = getBinaryExecutionEnv()
+  const pathKey = Object.keys(env).find((key) => key.toLowerCase() === 'path') || (isWin ? 'Path' : 'PATH')
+  const pathValue = [binaryEnv.MISE_SHIMS_DIR, env[pathKey] || env.PATH || ''].filter(Boolean).join(path.delimiter)
+  const merged = { ...env, ...binaryEnv, [pathKey]: pathValue }
+  if (!isWin) merged.PATH = pathValue
+  return merged
+}
+
 export async function getBinaryPath(name?: string): Promise<string> {
-  const binDir = application.getPath('cherry.bin')
   if (!name) {
-    return binDir
+    return application.getPath('cherry.bin')
   }
 
   const binaryName = await getBinaryName(name)
-  const binaryPath = path.join(binDir, binaryName)
-  // Fall back to the bare name (resolved via the system PATH) only when the
-  // managed binary is actually absent — not merely when the bin dir is missing.
-  return fs.existsSync(binaryPath) ? binaryPath : binaryName
+  for (const dir of getBinarySearchDirs()) {
+    const binaryPath = path.join(dir, binaryName)
+    if (fs.existsSync(binaryPath)) return binaryPath
+  }
+  return binaryName
 }
 
 export async function isBinaryExists(name: string): Promise<boolean> {

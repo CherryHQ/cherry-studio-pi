@@ -1,4 +1,5 @@
-import type { Message, Topic } from '@renderer/types'
+import type { Message } from '@renderer/types/newMessage'
+import type { Topic } from '@renderer/types/topic'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { copyMessageAsPlainText, copyTopicAsMarkdown, copyTopicAsPlainText } from '../copy'
@@ -16,11 +17,6 @@ vi.mock('i18next', () => ({
   }
 }))
 
-vi.mock('@renderer/utils/error', () => ({
-  formatErrorMessageWithPrefix: (error: unknown, prefix: string) =>
-    `${prefix}: ${error instanceof Error ? error.message : String(error)}`
-}))
-
 // Mock navigator.clipboard
 const mockClipboard = {
   writeText: vi.fn()
@@ -28,7 +24,6 @@ const mockClipboard = {
 
 // Mock window.toast
 const mockedToast = {
-  error: vi.fn(),
   success: vi.fn()
 }
 
@@ -95,20 +90,18 @@ describe('copy', () => {
       expect(mockedToast.success).toHaveBeenCalledWith('message.copy.success')
     })
 
-    it('should show an error when exporting markdown fails', async () => {
+    it('should handle export function errors', async () => {
       // 测试导出函数错误
       const topic = createTestTopic()
       const { topicToMarkdown } = await import('@renderer/utils/export')
       vi.mocked(topicToMarkdown).mockRejectedValue(new Error('Export error'))
 
-      await copyTopicAsMarkdown(topic)
-
+      await expect(copyTopicAsMarkdown(topic)).rejects.toThrow('Export error')
       expect(mockClipboard.writeText).not.toHaveBeenCalled()
       expect(mockedToast.success).not.toHaveBeenCalled()
-      expect(mockedToast.error).toHaveBeenCalledWith('common.copy_failed: Export error')
     })
 
-    it('should show an error when writing markdown to clipboard fails', async () => {
+    it('should handle clipboard write errors', async () => {
       // 测试剪贴板写入错误
       const topic = createTestTopic()
       const markdownContent = '# Test Topic'
@@ -117,10 +110,8 @@ describe('copy', () => {
       vi.mocked(topicToMarkdown).mockResolvedValue(markdownContent)
       mockClipboard.writeText.mockRejectedValue(new Error('Clipboard error'))
 
-      await copyTopicAsMarkdown(topic)
-
+      await expect(copyTopicAsMarkdown(topic)).rejects.toThrow('Clipboard error')
       expect(mockedToast.success).not.toHaveBeenCalled()
-      expect(mockedToast.error).toHaveBeenCalledWith('common.copy_failed: Clipboard error')
     })
   })
 
@@ -141,17 +132,15 @@ describe('copy', () => {
       expect(mockedToast.success).toHaveBeenCalledWith('message.copy.success')
     })
 
-    it('should show an error when exporting plain text fails', async () => {
+    it('should handle export function errors', async () => {
       // 测试导出函数错误
       const topic = createTestTopic()
       const { topicToPlainText } = await import('@renderer/utils/export')
       vi.mocked(topicToPlainText).mockRejectedValue(new Error('Export error'))
 
-      await copyTopicAsPlainText(topic)
-
+      await expect(copyTopicAsPlainText(topic)).rejects.toThrow('Export error')
       expect(mockClipboard.writeText).not.toHaveBeenCalled()
       expect(mockedToast.success).not.toHaveBeenCalled()
-      expect(mockedToast.error).toHaveBeenCalledWith('common.copy_failed: Export error')
     })
   })
 
@@ -172,7 +161,7 @@ describe('copy', () => {
       expect(mockedToast.success).toHaveBeenCalledWith('message.copy.success')
     })
 
-    it('should show an error when converting message to plain text fails', async () => {
+    it('should handle messageToPlainText errors', async () => {
       // 测试消息转换错误
       const message = createTestMessage()
       const { messageToPlainText } = await import('@renderer/utils/export')
@@ -180,16 +169,14 @@ describe('copy', () => {
         throw new Error('Message conversion error')
       })
 
-      await copyMessageAsPlainText(message)
-
+      await expect(copyMessageAsPlainText(message)).rejects.toThrow('Message conversion error')
       expect(mockClipboard.writeText).not.toHaveBeenCalled()
       expect(mockedToast.success).not.toHaveBeenCalled()
-      expect(mockedToast.error).toHaveBeenCalledWith('common.copy_failed: Message conversion error')
     })
   })
 
   describe('edge cases', () => {
-    it('should show copy errors for null or undefined inputs', async () => {
+    it('should handle null or undefined inputs gracefully', async () => {
       // 测试null/undefined输入的错误处理
       const { topicToMarkdown, topicToPlainText, messageToPlainText } = await import('@renderer/utils/export')
 
@@ -200,14 +187,11 @@ describe('copy', () => {
       })
 
       // @ts-expect-error 测试类型错误
-      await copyTopicAsMarkdown(null)
+      await expect(copyTopicAsMarkdown(null)).rejects.toThrow('Cannot read properties of null')
       // @ts-expect-error 测试类型错误
-      await copyTopicAsPlainText(undefined)
+      await expect(copyTopicAsPlainText(undefined)).rejects.toThrow('Cannot read properties of undefined')
       // @ts-expect-error 测试类型错误
-      await copyMessageAsPlainText(null)
-
-      expect(mockedToast.error).toHaveBeenCalledWith('common.copy_failed: Cannot read properties of null')
-      expect(mockedToast.error).toHaveBeenCalledWith('common.copy_failed: Cannot read properties of undefined')
+      await expect(copyMessageAsPlainText(null)).rejects.toThrow('Cannot read properties of null')
     })
   })
 })

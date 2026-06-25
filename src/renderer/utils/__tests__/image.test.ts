@@ -151,19 +151,6 @@ describe('utils/image', () => {
       await expect(captureScrollable(ref)).rejects.toBeUndefined()
       expect(window.toast.error).toHaveBeenCalled()
     })
-
-    it('should reject if dimension is too large before toast is available', async () => {
-      const div = document.createElement('div')
-      Object.defineProperty(div, 'scrollWidth', { value: 40000, configurable: true })
-      Object.defineProperty(div, 'scrollHeight', { value: 40000, configurable: true })
-      const ref = { current: div } as React.RefObject<HTMLDivElement>
-      Object.defineProperty(window, 'toast', {
-        configurable: true,
-        value: undefined
-      })
-
-      await expect(captureScrollable(ref)).rejects.toBeUndefined()
-    })
   })
 
   describe('captureScrollableAsDataURL', () => {

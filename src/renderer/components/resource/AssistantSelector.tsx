@@ -24,18 +24,6 @@ const AssistantEditDialog = lazy(() =>
   }))
 )
 
-function waitForDialogCloseFrame() {
-  if (typeof window === 'undefined') return Promise.resolve()
-
-  return new Promise<void>((resolve) => {
-    if (typeof window.requestAnimationFrame === 'function') {
-      window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve()))
-      return
-    }
-    window.setTimeout(resolve, 0)
-  })
-}
-
 /**
  * Row shape the selector operates on — derived from the Assistant DTO. `selectionType: 'item'`
  * returns values of this shape (not the raw Assistant) so the selector never leaks DB columns the
@@ -218,7 +206,6 @@ export function AssistantSelector(props: AssistantSelectorProps) {
         handleSelectorOpenChange(false)
         return
       }
-      await waitForDialogCloseFrame()
       handleSelectorOpenChange(true)
     },
     [autoSelectOnCreate, createAssistant, handleSelectorOpenChange, props, refetch, t]

@@ -2,14 +2,7 @@ import { IpcError } from '@shared/ipc/errors'
 import { aiErrorCodes, aiErrorDetail } from '@shared/ipc/errors/ai'
 import { describe, expect, it, vi } from 'vitest'
 
-import {
-  formatErrorMessage,
-  getErrorDetails,
-  getErrorMessage,
-  isAbortError,
-  isTimeoutError,
-  serializeHealthCheckError
-} from '../error'
+import { formatErrorMessage, getErrorDetails, isAbortError, isTimeoutError, serializeHealthCheckError } from '../error'
 
 describe('error', () => {
   describe('getErrorDetails', () => {
@@ -112,67 +105,6 @@ describe('error', () => {
       expect(result).toContain('Error Details:')
       expect(result).toContain('"code": 500')
       expect(result).toContain('"status": "Internal Server Error"')
-    })
-
-    it('should format objects containing BigInt values without throwing', () => {
-      const result = formatErrorMessage({
-        code: 500n,
-        status: 'Internal Server Error'
-      })
-
-      expect(result).toContain('Error Details:')
-      expect(result).toContain('"code": "500"')
-      expect(result).toContain('"status": "Internal Server Error"')
-    })
-
-    it('should format circular error details without throwing', () => {
-      const errorWithoutMessage: Record<string, unknown> = {
-        code: 'E_CIRCULAR'
-      }
-      errorWithoutMessage.self = errorWithoutMessage
-
-      const result = formatErrorMessage(errorWithoutMessage)
-
-      expect(result).toContain('Error Details:')
-      expect(result).toContain('"code": "E_CIRCULAR"')
-      expect(result).toContain('"self": "[Circular]"')
-    })
-  })
-
-  describe('getErrorMessage', () => {
-    it('preserves string errors', () => {
-      expect(getErrorMessage('plain IPC failure')).toBe('plain IPC failure')
-    })
-
-    it('preserves nested error messages', () => {
-      expect(getErrorMessage({ error: { message: 'nested bridge failure' } })).toBe('nested bridge failure')
-    })
-
-    it('preserves object message fields', () => {
-      expect(getErrorMessage({ message: 'object failure' })).toBe('object failure')
-    })
-
-    it('preserves structured response status details', () => {
-      expect(
-        getErrorMessage({
-          response: {
-            status: 503,
-            statusText: 'Service Unavailable'
-          }
-        })
-      ).toBe('503 Service Unavailable')
-    })
-
-    it('uses readable status and code fallbacks for message-less objects', () => {
-      expect(getErrorMessage({ status: 423 })).toBe('HTTP 423')
-      expect(getErrorMessage({ code: 'SQLITE_BUSY' })).toBe('SQLITE_BUSY')
-    })
-
-    it('uses the provided fallback for circular message-less objects', () => {
-      const circular: Record<string, unknown> = {}
-      circular.cause = circular
-
-      expect(getErrorMessage(circular, 'fallback message')).toBe('fallback message')
     })
   })
 

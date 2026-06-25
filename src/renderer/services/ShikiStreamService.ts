@@ -1,5 +1,4 @@
 import { loggerService } from '@logger'
-import { getErrorMessage } from '@renderer/utils/error'
 import {
   DEFAULT_LANGUAGES,
   DEFAULT_THEMES,
@@ -43,39 +42,6 @@ export type ShikiPreProperties = {
   class: string
   style: string
   tabindex: number
-}
-
-type HastElementLike = {
-  type: 'element'
-  properties?: Record<string, unknown> | null
-}
-
-function isHastElementLike(value: unknown): value is HastElementLike {
-  return Boolean(value && typeof value === 'object' && (value as { type?: unknown }).type === 'element')
-}
-
-function normalizeShikiPreProperties(properties: Record<string, unknown>): ShikiPreProperties {
-  const classValue = properties.class
-  const normalizedClass = Array.isArray(classValue)
-    ? classValue.filter((item): item is string => typeof item === 'string').join(' ')
-    : typeof classValue === 'string'
-      ? classValue
-      : ''
-
-  const style = typeof properties.style === 'string' ? properties.style : ''
-  const tabindexValue = properties.tabindex ?? properties.tabIndex
-  const tabindex =
-    typeof tabindexValue === 'number'
-      ? tabindexValue
-      : typeof tabindexValue === 'string'
-        ? Number.parseInt(tabindexValue, 10)
-        : 0
-
-  return {
-    class: normalizedClass,
-    style,
-    tabindex: Number.isFinite(tabindex) ? tabindex : 0
-  }
 }
 
 /**
@@ -278,7 +244,7 @@ class ShikiStreamService {
     } catch (error) {
       const pendingRequest = this.pendingRequests.get(id)
       if (pendingRequest) {
-        pendingRequest.reject(error instanceof Error ? error : new Error(getErrorMessage(error), { cause: error }))
+        pendingRequest.reject(error instanceof Error ? error : new Error(String(error)))
       }
     }
 
@@ -325,12 +291,8 @@ class ShikiStreamService {
       theme: loadedTheme
     })
 
-    const preElement = hast.children[0]
-    if (!isHastElementLike(preElement)) {
-      throw new Error('Unexpected Shiki HAST structure: missing pre element')
-    }
-
-    return normalizeShikiPreProperties(preElement.properties ?? {})
+    // @ts-ignore hack
+    return hast.children[0].properties as ShikiPreProperties
   }
 
   /**

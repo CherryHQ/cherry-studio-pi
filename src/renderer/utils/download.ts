@@ -2,58 +2,6 @@ import { loggerService } from '@logger'
 import i18n from '@renderer/i18n'
 
 const logger = loggerService.withContext('Utils:download')
-const OBJECT_URL_REVOKE_DELAY_MS = 1000
-const REMOTE_DOWNLOAD_TIMEOUT_MS = 30_000
-const UNKNOWN_DOWNLOAD_ERROR_MESSAGE = 'Unknown download error'
-
-export const revokeObjectUrlLater = (url: string) => {
-  const timer = setTimeout(() => URL.revokeObjectURL(url), OBJECT_URL_REVOKE_DELAY_MS)
-  const maybeNodeTimer = timer as { unref?: () => void }
-  maybeNodeTimer.unref?.()
-}
-
-function getDownloadErrorMessage(error: unknown, seen = new WeakSet<object>()): string | undefined {
-  if (error instanceof Error) {
-    return error.message.trim() || undefined
-  }
-  if (typeof error === 'string') {
-    return error.trim() || undefined
-  }
-  if (!error || typeof error !== 'object' || seen.has(error)) {
-    return undefined
-  }
-
-  seen.add(error)
-
-  const nestedError = (error as { error?: unknown }).error
-  if (nestedError) {
-    const nestedMessage = getDownloadErrorMessage(nestedError, seen)
-    if (nestedMessage) return nestedMessage
-  }
-
-  const cause = (error as { cause?: unknown }).cause
-  if (cause) {
-    const causeMessage = getDownloadErrorMessage(cause, seen)
-    if (causeMessage) return causeMessage
-  }
-
-  const message = (error as { message?: unknown }).message
-  return typeof message === 'string' && message.trim() ? message : undefined
-}
-
-const showDownloadError = (error: unknown) => {
-  const message = getDownloadErrorMessage(error)
-  logger.error(
-    'Download failed:',
-    error instanceof Error ? error : new Error(message || UNKNOWN_DOWNLOAD_ERROR_MESSAGE)
-  )
-  // 显示用户友好的错误提示
-  if (message) {
-    window.toast?.error(`${i18n.t('message.download.failed')}：${message}`)
-  } else {
-    window.toast?.error(i18n.t('message.download.failed'))
-  }
-}
 
 export const download = (url: string, filename?: string) => {
   // 处理可直接通过 <a> 标签下载的 URL:
@@ -64,35 +12,48 @@ export const download = (url: string, filename?: string) => {
   //    data:image/svg+xml 之前因 CSP connect-src 不含 data: 导致 fetch 失败，故加入直接下载)
   const SUPPORTED_PREFIXES = ['file://', 'blob:', 'data:image/png', 'data:image/jpeg', 'data:image/svg+xml']
   if (SUPPORTED_PREFIXES.some((prefix) => url.startsWith(prefix))) {
-    try {
-      const link = document.createElement('a')
-      link.href = url
-      link.download = resolveDirectDownloadFilename(url, filename)
+    const link = document.createElement('a')
+    link.href = url
 
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-    } catch (error) {
-      showDownloadError(error)
+    let resolvedFilename = filename
+    if (!resolvedFilename) {
+      if (url.startsWith('file://')) {
+        const pathname = new URL(url).pathname
+        resolvedFilename = decodeURIComponent(pathname.substring(pathname.lastIndexOf('/') + 1))
+      } else if (url.startsWith('blob:')) {
+        resolvedFilename = `${Date.now()}_diagram.svg`
+      } else if (url.startsWith('data:')) {
+        const mimeMatch = url.match(/^data:([^;,]+)[;,]/)
+        const mimeType = mimeMatch && mimeMatch[1]
+        const extension = getExtensionFromMimeType(mimeType)
+        resolvedFilename = `${Date.now()}_download${extension}`
+      } else resolvedFilename = 'download'
     }
+    link.download = resolvedFilename
+
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
     return
   }
 
   // 处理普通 URL
-  fetch(url, { signal: AbortSignal.timeout(REMOTE_DOWNLOAD_TIMEOUT_MS) })
+  fetch(url)
     .then((response) => {
-      if (!response.ok) {
-        throw new Error(`HTTP error: ${response.status}`)
-      }
-
       let finalFilename = filename || 'download'
 
       if (!filename) {
         // 尝试从Content-Disposition头获取文件名
-        finalFilename = getFilenameFromContentDisposition(response.headers.get('Content-Disposition')) || finalFilename
+        const contentDisposition = response.headers.get('Content-Disposition')
+        if (contentDisposition) {
+          const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i)
+          if (filenameMatch) {
+            finalFilename = filenameMatch[1]
+          }
+        }
 
         // 如果URL中有文件名，使用URL中的文件名
-        const urlFilename = getFilenameFromUrl(url)
+        const urlFilename = url.split('/').pop()
         if (urlFilename && urlFilename.includes('.')) {
           finalFilename = urlFilename
         }
@@ -111,92 +72,24 @@ export const download = (url: string, filename?: string) => {
       return response.blob().then((blob) => ({ blob, finalFilename }))
     })
     .then(({ blob, finalFilename }) => {
-      const blobUrl = URL.createObjectURL(blob)
+      const blobUrl = URL.createObjectURL(new Blob([blob]))
       const link = document.createElement('a')
-      try {
-        link.href = blobUrl
-        link.download = finalFilename
-        document.body.appendChild(link)
-        link.click()
-      } finally {
-        revokeObjectUrlLater(blobUrl)
-        link.remove()
-      }
+      link.href = blobUrl
+      link.download = finalFilename
+      document.body.appendChild(link)
+      link.click()
+      URL.revokeObjectURL(blobUrl)
+      link.remove()
     })
     .catch((error) => {
-      showDownloadError(error)
+      logger.error('Download failed:', error)
+      // 显示用户友好的错误提示
+      if (error.message) {
+        window.toast?.error(`${i18n.t('message.download.failed')}：${error.message}`)
+      } else {
+        window.toast?.error(i18n.t('message.download.failed'))
+      }
     })
-}
-
-function resolveDirectDownloadFilename(url: string, filename?: string): string {
-  if (filename) return filename
-
-  if (url.startsWith('file://')) {
-    return getFilenameFromFileUrl(url) || 'download'
-  }
-  if (url.startsWith('blob:')) {
-    return `${Date.now()}_diagram.svg`
-  }
-  if (url.startsWith('data:')) {
-    const mimeMatch = url.match(/^data:([^;,]+)[;,]/)
-    const mimeType = mimeMatch && mimeMatch[1]
-    const extension = getExtensionFromMimeType(mimeType)
-    return `${Date.now()}_download${extension}`
-  }
-
-  return 'download'
-}
-
-function getFilenameFromFileUrl(url: string): string {
-  try {
-    const pathname = new URL(url).pathname
-    const encodedFilename = pathname.substring(pathname.lastIndexOf('/') + 1)
-    if (!encodedFilename) return ''
-
-    return safeDecodeURIComponent(encodedFilename)
-  } catch {
-    return ''
-  }
-}
-
-function getFilenameFromContentDisposition(contentDisposition: string | null): string | undefined {
-  if (!contentDisposition) return undefined
-
-  const encodedMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)
-  if (encodedMatch?.[1]) {
-    return safeDecodeURIComponent(encodedMatch[1].trim())
-  }
-
-  const quotedMatch = contentDisposition.match(/filename="([^"]+)"/i)
-  if (quotedMatch?.[1]) {
-    return quotedMatch[1].trim()
-  }
-
-  const plainMatch = contentDisposition.match(/filename=([^;]+)/i)
-  if (plainMatch?.[1]) {
-    return plainMatch[1].trim().replace(/^"|"$/g, '')
-  }
-
-  return undefined
-}
-
-function getFilenameFromUrl(url: string): string | undefined {
-  try {
-    const pathname = new URL(url).pathname
-    const encodedFilename = pathname.substring(pathname.lastIndexOf('/') + 1)
-    return encodedFilename ? safeDecodeURIComponent(encodedFilename) : undefined
-  } catch {
-    const fallback = url.split(/[?#]/)[0]?.split('/').pop()
-    return fallback ? safeDecodeURIComponent(fallback) : undefined
-  }
-}
-
-function safeDecodeURIComponent(value: string): string {
-  try {
-    return decodeURIComponent(value)
-  } catch {
-    return value
-  }
 }
 
 // 辅助函数：根据MIME类型获取文件扩展名

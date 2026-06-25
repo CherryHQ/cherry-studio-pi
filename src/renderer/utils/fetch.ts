@@ -1,7 +1,6 @@
 import { loggerService } from '@logger'
 import { Readability } from '@mozilla/readability'
-import { summarizeUrlForLog } from '@renderer/aiCore/utils/logging'
-import type { WebSearchProviderResult } from '@renderer/types'
+import type { WebSearchProviderResult } from '@renderer/types/webSearchProvider'
 import { createAbortPromise } from '@renderer/utils/abortController'
 import { isAbortError } from '@renderer/utils/error'
 import { nanoid } from 'nanoid'
@@ -56,13 +55,12 @@ export async function fetchWebContent(
   try {
     // Validate URL before attempting to fetch
     if (!isValidUrl(url)) {
-      throw new Error('Invalid URL format')
+      throw new Error(`Invalid URL format: ${url}`)
     }
 
     let html: string
     if (usingBrowser) {
-      const searchWindowUid = `search-window-${nanoid()}`
-      const windowApiPromise = window.api.searchService.openUrlInSearchWindow(searchWindowUid, url)
+      const windowApiPromise = window.api.searchService.openUrlInSearchWindow(`search-window-${nanoid()}`, url)
 
       const promisesToRace: [Promise<string>] = [windowApiPromise]
 
@@ -72,18 +70,7 @@ export async function fetchWebContent(
         promisesToRace.push(abortPromise)
       }
 
-      try {
-        html = await Promise.race(promisesToRace)
-      } finally {
-        try {
-          await window.api.searchService.closeSearchWindow(searchWindowUid)
-        } catch (closeError) {
-          logger.warn('Failed to close search window after browser fetch', {
-            uid: searchWindowUid,
-            error: closeError
-          })
-        }
-      }
+      html = await Promise.race(promisesToRace)
     } else {
       const response = await fetch(url, {
         headers: {
@@ -134,7 +121,7 @@ export async function fetchWebContent(
       throw e
     }
 
-    logger.error('Failed to fetch web content', { url: summarizeUrlForLog(url), error: e })
+    logger.error(`Failed to fetch ${url}`, e as Error)
     return {
       title: url,
       url: url,
@@ -188,7 +175,6 @@ export async function fetchRedirectUrl(url: string) {
     const response = await fetch(url, {
       method: 'HEAD',
       redirect: 'follow',
-      signal: AbortSignal.timeout(10000),
       headers: {
         'User-Agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'

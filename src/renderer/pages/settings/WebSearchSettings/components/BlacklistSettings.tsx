@@ -40,7 +40,7 @@ const BlacklistSettings: FC = () => {
 
       setBlacklistInput(nextBlacklistInput)
       setBlacklistBaseline(nextBlacklistInput)
-      window.toast?.info({
+      window.toast.info({
         title: t('message.save.success.title'),
         timeout: 4000,
         icon: <Info className="size-4" />

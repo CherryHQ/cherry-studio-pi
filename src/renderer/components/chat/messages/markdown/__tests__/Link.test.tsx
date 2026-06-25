@@ -36,10 +36,6 @@ vi.mock('@renderer/components/Icons/FallbackFavicon', () => ({
   default: mocks.Favicon
 }))
 
-vi.mock('@shared/utils/externalUrlSafety', () => ({
-  isSafeExternalUrl: (href: string) => href.startsWith('https://') || href.startsWith('mailto:')
-}))
-
 vi.mock('../CitationTooltip', () => ({
   default: mocks.CitationTooltip,
   CitationSchema: mocks.CitationSchema
@@ -85,7 +81,7 @@ describe('Link', () => {
     const anchor = container.querySelector('a') as HTMLAnchorElement
     expect(anchor).not.toBeNull()
     expect(anchor.getAttribute('target')).toBe('_blank')
-    expect(anchor.getAttribute('rel')).toBe('noopener noreferrer')
+    expect(anchor.getAttribute('rel')).toBe('noreferrer')
     expect(anchor).toHaveClass('text-primary')
     expect(anchor).not.toHaveClass('inline-flex')
 
@@ -121,7 +117,7 @@ describe('Link', () => {
     const anchor = container.querySelector('a') as HTMLAnchorElement
     expect(anchor.getAttribute('href')).toBe('https://domain.com/path')
     expect(anchor.getAttribute('target')).toBe('_blank')
-    expect(anchor.getAttribute('rel')).toBe('noopener noreferrer')
+    expect(anchor.getAttribute('rel')).toBe('noreferrer')
     expect(anchor).toHaveClass('text-primary', 'hover:underline')
     expect(anchor).not.toHaveClass('inline-flex')
     expect(screen.getByTestId('favicon')).toHaveAttribute('data-hostname', 'domain.com')
@@ -140,15 +136,6 @@ describe('Link', () => {
     expect(screen.getAllByTestId('favicon')).toHaveLength(1)
     expect(screen.getByRole('link')).toHaveClass('text-primary', 'flex', 'gap-2')
     expect(screen.getByRole('link')).not.toHaveClass('hover:underline')
-  })
-
-  it('should render unsafe external links as inert text', () => {
-    const { container } = render(<Link href="file:///tmp/secret.txt">Do not open</Link>)
-
-    expect(container.querySelector('a')).toBeNull()
-    expect(container.querySelector('span.link')).not.toBeNull()
-    expect(screen.queryByTestId('hyperlink')).toBeNull()
-    expect(screen.getByText('Do not open')).toBeInTheDocument()
   })
 
   it('should omit empty href for citation link (no href attribute when href="")', () => {

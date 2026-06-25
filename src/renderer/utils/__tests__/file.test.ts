@@ -1,27 +1,6 @@
-import { allFilesExt } from '@shared/config/constant'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
-import {
-  filterSupportedFiles,
-  formatFileSize,
-  getFileDirectory,
-  getFileExtension,
-  getFileName,
-  isSupportedFile,
-  removeFileExtension,
-  removeSpecialCharactersForFileName
-} from '../file'
-
-const originalApiDescriptor = Object.getOwnPropertyDescriptor(window, 'api')
-
-afterEach(() => {
-  vi.restoreAllMocks()
-  if (originalApiDescriptor) {
-    Object.defineProperty(window, 'api', originalApiDescriptor)
-  } else {
-    delete (window as unknown as { api?: unknown }).api
-  }
-})
+import { formatFileSize, getFileDirectory, getFileExtension, removeSpecialCharactersForFileName } from '../file'
 
 describe('file', () => {
   describe('getFileDirectory', () => {
@@ -44,12 +23,6 @@ describe('file', () => {
       const filePath = '/root/path/to/file.txt'
       const result = getFileDirectory(filePath)
       expect(result).toBe('/root/path/to')
-    })
-
-    it('should handle Windows paths correctly', () => {
-      const filePath = 'C:\\Users\\Cherry\\file.txt'
-      const result = getFileDirectory(filePath)
-      expect(result).toBe('C:\\Users\\Cherry')
     })
 
     it('should handle empty string input', () => {
@@ -89,42 +62,11 @@ describe('file', () => {
       expect(result).toBe('.json')
     })
 
-    it('should ignore dots in parent directories', () => {
-      const filePath = '/tmp/cherry.workspace/noextension'
-      const result = getFileExtension(filePath)
-      expect(result).toBe('.')
-    })
-
-    it('should handle Windows paths correctly', () => {
-      const filePath = 'C:\\Users\\Cherry.Workspace\\image.PNG'
-      const result = getFileExtension(filePath)
-      expect(result).toBe('.png')
-    })
-
     it('should handle empty string input', () => {
       // 验证空字符串输入的边界情况
       const filePath = ''
       const result = getFileExtension(filePath)
       expect(result).toBe('.')
-    })
-  })
-
-  describe('getFileName', () => {
-    it('should return basename for POSIX paths', () => {
-      expect(getFileName('/Users/Cherry/import.json')).toBe('import.json')
-    })
-
-    it('should return basename for Windows paths', () => {
-      expect(getFileName('C:\\Users\\Cherry\\import.json')).toBe('import.json')
-    })
-
-    it('should ignore trailing path separators', () => {
-      expect(getFileName('/Users/Cherry/Documents/')).toBe('Documents')
-      expect(getFileName('C:\\Users\\Cherry\\Documents\\')).toBe('Documents')
-    })
-
-    it('should return empty string for empty input', () => {
-      expect(getFileName('')).toBe('')
     })
   })
 
@@ -155,49 +97,6 @@ describe('file', () => {
       const size = 0
       const result = formatFileSize(size)
       expect(result).toBe('0.00 KB')
-    })
-  })
-
-  describe('removeFileExtension', () => {
-    it('should remove an extension from the basename only', () => {
-      expect(removeFileExtension('/tmp/cherry.workspace/file.txt')).toBe('/tmp/cherry.workspace/file')
-    })
-
-    it('should preserve paths without basename extensions even when parent directories contain dots', () => {
-      expect(removeFileExtension('/tmp/cherry.workspace/noextension')).toBe('/tmp/cherry.workspace/noextension')
-    })
-
-    it('should handle Windows paths correctly', () => {
-      expect(removeFileExtension('C:\\Users\\Cherry.Workspace\\image.PNG')).toBe('C:\\Users\\Cherry.Workspace\\image')
-    })
-  })
-
-  describe('isSupportedFile', () => {
-    it('accepts any file when allFilesExt is present', async () => {
-      const isTextFile = vi.fn(async () => false)
-      Object.defineProperty(window, 'api', {
-        configurable: true,
-        value: { file: { isTextFile } }
-      })
-
-      await expect(isSupportedFile('/tmp/archive.unknown-binary', new Set([allFilesExt]))).resolves.toBe(true)
-
-      expect(isTextFile).not.toHaveBeenCalled()
-    })
-
-    it('keeps all files during filtering when allFilesExt is present', async () => {
-      const isTextFile = vi.fn(async () => false)
-      Object.defineProperty(window, 'api', {
-        configurable: true,
-        value: { file: { isTextFile } }
-      })
-      const files = [{ path: '/tmp/asset.bin' }, { path: '/tmp/no-extension' }] as unknown as Parameters<
-        typeof filterSupportedFiles
-      >[0]
-
-      await expect(filterSupportedFiles(files, [allFilesExt])).resolves.toEqual(files)
-
-      expect(isTextFile).not.toHaveBeenCalled()
     })
   })
 

@@ -3,23 +3,13 @@ import {
   ClawhubSearchResponseSchema,
   ClawhubSkillDetailSchema,
   SkillsShSearchResponseSchema
-} from '@types'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+} from '@shared/types/skill'
+import { describe, expect, it } from 'vitest'
 
 import claudePluginsFixture from './fixtures/claude-plugins-search.json'
 import clawhubDetailFixture from './fixtures/clawhub-detail.json'
 import clawhubSearchFixture from './fixtures/clawhub-search.json'
 import skillsShFixture from './fixtures/skills-sh-search.json'
-
-vi.mock('@logger', () => ({
-  loggerService: {
-    withContext: () => ({
-      warn: vi.fn()
-    })
-  }
-}))
-
-import { searchSkills } from '../SkillSearchService'
 
 // =============================================================================
 // Schema validation against fixtures
@@ -296,13 +286,13 @@ describe('Skill search deduplication', () => {
     const allResults = [
       { name: 'Code-Review', slug: 'a', sourceRegistry: 'claude-plugins.dev' as const },
       { name: 'code-review', slug: 'b', sourceRegistry: 'skills.sh' as const },
-      { name: ' Code-review ', slug: 'c', sourceRegistry: 'clawhub.ai' as const },
+      { name: 'Code-review', slug: 'c', sourceRegistry: 'clawhub.ai' as const },
       { name: 'Unique-Skill', slug: 'd', sourceRegistry: 'skills.sh' as const }
     ]
 
     const seen = new Set<string>()
     const deduped = allResults.filter((r) => {
-      const key = r.name.trim().toLowerCase()
+      const key = r.name.toLowerCase()
       if (seen.has(key)) return false
       seen.add(key)
       return true
@@ -311,77 +301,5 @@ describe('Skill search deduplication', () => {
     expect(deduped).toHaveLength(2)
     expect(deduped[0].slug).toBe('a')
     expect(deduped[1].slug).toBe('d')
-  })
-})
-
-describe('searchSkills', () => {
-  beforeEach(() => {
-    vi.useFakeTimers()
-    vi.stubGlobal('fetch', vi.fn())
-  })
-
-  afterEach(() => {
-    vi.useRealTimers()
-    vi.unstubAllGlobals()
-  })
-
-  it('settles slow registry requests so the search UI cannot hang indefinitely', async () => {
-    vi.mocked(fetch).mockReturnValue(new Promise<Response>(() => {}))
-
-    const searchPromise = searchSkills('code-review')
-    await vi.advanceTimersByTimeAsync(8_000)
-
-    await expect(searchPromise).resolves.toEqual([])
-    expect(fetch).toHaveBeenCalledTimes(3)
-  })
-
-  it('aborts in-flight registry requests when the caller aborts the search', async () => {
-    const fetchSignals: AbortSignal[] = []
-    vi.mocked(fetch).mockImplementation((_url, init) => {
-      const signal = init?.signal as AbortSignal
-      fetchSignals.push(signal)
-
-      return new Promise<Response>((_resolve, reject) => {
-        signal.addEventListener('abort', () => reject(signal.reason), { once: true })
-      })
-    })
-
-    const controller = new AbortController()
-    const searchPromise = searchSkills('code-review', { signal: controller.signal })
-
-    expect(fetch).toHaveBeenCalledTimes(3)
-
-    controller.abort(new DOMException('cancelled', 'AbortError'))
-
-    await expect(searchPromise).resolves.toEqual([])
-    expect(fetchSignals).toHaveLength(3)
-    expect(fetchSignals.every((signal) => signal.aborted)).toBe(true)
-  })
-
-  it('trims the query before requesting registries', async () => {
-    vi.mocked(fetch).mockImplementation(async (url) => {
-      const href = url.toString()
-      if (href.startsWith('https://skills.sh/')) {
-        return {
-          ok: true,
-          json: async () => ({ query: 'code-review', skills: [], count: 0 })
-        } as Response
-      }
-      if (href.startsWith('https://claude-plugins.dev/')) {
-        return {
-          ok: true,
-          json: async () => ({ skills: [] })
-        } as Response
-      }
-      return {
-        ok: true,
-        json: async () => ({ results: [] })
-      } as Response
-    })
-
-    await expect(searchSkills('  code-review  ')).resolves.toEqual([])
-
-    const requestedQueries = vi.mocked(fetch).mock.calls.map(([url]) => new URL(url.toString()).searchParams.get('q'))
-    expect(requestedQueries).toEqual(['code-review', 'code-review', 'code-review'])
   })
 })

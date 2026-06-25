@@ -25,8 +25,9 @@ import { useCodeCli } from '@renderer/hooks/useCodeCli'
 import { useModels } from '@renderer/hooks/useModel'
 import { getProviderDisplayName, useProviders } from '@renderer/hooks/useProvider'
 import { useTimer } from '@renderer/hooks/useTimer'
+import { ipcApi } from '@renderer/ipc'
 import { loggerService } from '@renderer/services/LoggerService'
-import { EFFORT_RATIO } from '@renderer/types'
+import { EFFORT_RATIO } from '@renderer/types/reasoning'
 import { getThinkingBudget } from '@shared/ai/reasoningBudget'
 import { CHERRYAI_PROVIDER_ID } from '@shared/data/presets/cherryai'
 import { DEFAULT_ASSISTANT_SETTINGS } from '@shared/data/types/assistant'
@@ -301,13 +302,13 @@ const CodeCliPage: FC = () => {
   const handleInstallBun = async () => {
     try {
       setIsInstallingBun(true)
-      await window.api.installBunBinary()
+      await ipcApi.request('binary.install_tool', { name: 'bun', tool: 'bun' })
       setIsBunInstalled(true)
-      window.toast?.success?.(t('settings.mcp.installSuccess'))
+      window.toast.success(t('settings.mcp.installSuccess'))
     } catch (error) {
       logger.error('Failed to install bun:', error as Error)
       const message = error instanceof Error ? error.message : String(error)
-      window.toast?.error?.(`${t('settings.mcp.installError')}: ${message}`)
+      window.toast.error(`${t('settings.mcp.installError')}: ${message}`)
     } finally {
       setIsInstallingBun(false)
       setTimeoutTimer('handleInstallBun', checkBunInstallation, 1000)
@@ -397,7 +398,7 @@ const CodeCliPage: FC = () => {
     const resolvedModel = selectedModel ? resolveModel(selectedModel) : null
     if (selectedCliTool !== codeCLI.githubCopilotCli && selectedCliTool !== codeCLI.qoderCli && !resolvedModel) {
       logger.warn('Cannot launch: model could not be resolved')
-      window.toast?.error?.(t('code.model_required'))
+      window.toast.error(t('code.model_required'))
       return false
     }
     const modelId =
@@ -421,14 +422,14 @@ const CodeCliPage: FC = () => {
           },
           2500
         )
-        window.toast?.success?.(t('code.launch.success'))
+        window.toast.success(t('code.launch.success'))
         return true
       }
-      window.toast?.error?.(result?.message || t('code.launch.error'))
+      window.toast.error(result?.message || t('code.launch.error'))
       return false
     } catch (error) {
       logger.error('codeTools.run failed:', error as Error)
-      window.toast?.error?.(t('code.launch.error'))
+      window.toast.error(t('code.launch.error'))
       return false
     }
   }
@@ -447,12 +448,12 @@ const CodeCliPage: FC = () => {
         const path = result[0].path
         await window.api.codeCli.setCustomTerminalPath(terminalId, path)
         setTerminalCustomPaths((prev) => ({ ...prev, [terminalId]: path }))
-        window.toast?.success?.(t('code.custom_path_set'))
+        window.toast.success(t('code.custom_path_set'))
         void loadAvailableTerminals()
       }
     } catch (error) {
       logger.error('Failed to set custom terminal path:', error as Error)
-      window.toast?.error?.(t('code.custom_path_error'))
+      window.toast.error(t('code.custom_path_error'))
     }
   }
 
@@ -460,7 +461,7 @@ const CodeCliPage: FC = () => {
     const validation = validateLaunch()
 
     if (!validation.isValid) {
-      window.toast?.warning?.(validation.message || t('code.launch.validation_error'))
+      window.toast.warning(validation.message || t('code.launch.validation_error'))
       return
     }
 
@@ -469,7 +470,7 @@ const CodeCliPage: FC = () => {
     try {
       const result = await prepareLaunchEnvironment()
       if (!result) {
-        window.toast?.error?.(t('code.model_required'))
+        window.toast.error(t('code.model_required'))
         setLaunchStatus('idle')
         return
       }
@@ -480,7 +481,7 @@ const CodeCliPage: FC = () => {
       }
     } catch (error) {
       logger.error('start code tools failed:', error as Error)
-      window.toast?.error?.(t('code.launch.error'))
+      window.toast.error(t('code.launch.error'))
       setLaunchStatus('idle')
     }
   }
@@ -499,7 +500,7 @@ const CodeCliPage: FC = () => {
         await setCliTool(tool)
       } catch (err) {
         logger.error('Failed to set CLI tool:', err as Error)
-        window.toast?.error?.(t('common.error'))
+        window.toast.error(t('common.error'))
         return
       }
     }

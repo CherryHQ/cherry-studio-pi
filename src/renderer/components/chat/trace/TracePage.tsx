@@ -1,5 +1,4 @@
 import type { SpanEntity } from '@mcp-trace/trace-core'
-import { getErrorMessage } from '@renderer/utils/error'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -158,7 +157,7 @@ export const TracePage: React.FC<TracePageProps> = ({ topicId, traceId, reload =
         failureCountRef.current++
         if (failureCountRef.current >= 3) {
           stop()
-          setPollError(getErrorMessage(error))
+          setPollError(error instanceof Error ? error.message : String(error))
         }
       }
     }

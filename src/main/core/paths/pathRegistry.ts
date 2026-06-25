@@ -79,6 +79,8 @@ export function buildPathRegistry() {
     'app.database.migrations': app.isPackaged
       ? path.join(appExtraResources, 'migrations/sqlite-drizzle')
       : path.join(__dirname, '../../migrations/sqlite-drizzle'),
+    'feature.binary.data': path.join(CHERRY_HOME, 'binary-manager'),
+    'feature.binary.state_file': path.join(CHERRY_HOME, 'binary-manager', 'state.json'),
 
     // -- D. feature.* — grouped by feature, physical location is irrelevant --
 

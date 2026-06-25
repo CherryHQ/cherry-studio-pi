@@ -8,14 +8,13 @@ import { useMcpServerMutations } from '@renderer/hooks/useMcpServer'
 import { useMcpServerTrust } from '@renderer/hooks/useMcpServerTrust'
 import { formatMcpError } from '@renderer/utils/error'
 import { formatErrorMessage } from '@renderer/utils/error'
-import { openHttpExternalUrl } from '@renderer/utils/openExternal'
 import { cn } from '@renderer/utils/style'
 import type { UpdateMcpServerDto } from '@shared/data/api/schemas/mcpServers'
 import type { McpServer } from '@shared/data/types/mcpServer'
 import { CircleXIcon, SquareArrowOutUpRight } from 'lucide-react'
 import type React from 'react'
 import type { FC } from 'react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { FallbackProps } from 'react-error-boundary'
 import { useTranslation } from 'react-i18next'
 
@@ -30,13 +29,7 @@ interface McpServerCardProps {
 const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEdit }) => {
   const { updateMcpServer, deleteMcpServer } = useMcpServerMutations(server.id)
   const [loading, setLoading] = useState(false)
-  const [deleting, setDeleting] = useState(false)
   const [version, setVersion] = useState<string | null>(null)
-  const mountedRef = useRef(true)
-  const versionRequestSeqRef = useRef(0)
-  const toggleActiveRef = useRef(false)
-  const deleteRef = useRef(false)
-  const deleteRunningRef = useRef(false)
   const runtimeStatus = useMcpRuntimeStatus(server.id, server.isActive)
 
   const updateServerBody = useCallback((body: UpdateMcpServerDto) => updateMcpServer({ body }), [updateMcpServer])
@@ -44,159 +37,82 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEd
   const { ensureServerTrusted } = useMcpServerTrust(updateServerBody)
   const { t } = useTranslation()
 
-  useEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
+  // Fetch version for active servers
+  const fetchServerVersion = useCallback(async (s: McpServer) => {
+    if (!s.isActive) return
+    try {
+      const v = await window.api.mcp.getServerVersion(s.id)
+      setVersion(v)
+    } catch {
+      setVersion(null)
     }
   }, [])
 
-  // Fetch version for active servers
-  const getServerVersion = useCallback(async (s: Pick<McpServer, 'id' | 'isActive'>) => {
-    if (!s.isActive) return null
-    return window.api.mcp.getServerVersion(s.id)
-  }, [])
-
   useEffect(() => {
-    let cancelled = false
-    const requestSeq = ++versionRequestSeqRef.current
-
     if (server.isActive) {
-      void getServerVersion({ id: server.id, isActive: server.isActive })
-        .then((nextVersion) => {
-          if (!cancelled && mountedRef.current && requestSeq === versionRequestSeqRef.current) {
-            setVersion(nextVersion)
-          }
-        })
-        .catch(() => {
-          if (!cancelled && mountedRef.current && requestSeq === versionRequestSeqRef.current) {
-            setVersion(null)
-          }
-        })
+      void fetchServerVersion(server)
     } else {
       setVersion(null)
     }
-
-    return () => {
-      cancelled = true
-    }
-  }, [server.id, server.isActive, getServerVersion])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [server.isActive, server.id, fetchServerVersion])
 
   const handleToggleActive = useCallback(
     async (active: boolean) => {
-      if (toggleActiveRef.current) {
-        return
+      let serverForUpdate = server
+      if (active) {
+        const trustedServer = await ensureServerTrusted(server)
+        if (!trustedServer) return
+        serverForUpdate = trustedServer
       }
 
-      toggleActiveRef.current = true
       setLoading(true)
+      logger.debug('toggle activate', { serverId: serverForUpdate.id, active })
       try {
-        let serverForUpdate = server
-        if (active) {
-          const trustedServer = await ensureServerTrusted(server)
-          if (!trustedServer) return
-          serverForUpdate = trustedServer
-        }
-
-        logger.debug('toggle activate', { serverId: serverForUpdate.id, active })
         if (active) {
           await updateMcpServer({ body: { isActive: true } })
           try {
-            const requestSeq = ++versionRequestSeqRef.current
-            const nextVersion = await getServerVersion({ ...serverForUpdate, isActive: true })
-            if (mountedRef.current && requestSeq === versionRequestSeqRef.current) {
-              setVersion(nextVersion)
-            }
+            await fetchServerVersion({ ...serverForUpdate, isActive: true })
             await window.api.mcp.refreshTools(serverForUpdate.id)
           } catch (error: any) {
-            if (mountedRef.current) {
-              window.modal.error({
-                title: t('settings.mcp.startError'),
-                content: formatMcpError(error),
-                centered: true
-              })
-            }
+            window.modal.error({
+              title: t('settings.mcp.startError'),
+              content: formatMcpError(error),
+              centered: true
+            })
           }
         } else {
           await updateMcpServer({ body: { isActive: false } })
           await window.api.mcp.stopServer(serverForUpdate.id)
-          versionRequestSeqRef.current++
-          if (mountedRef.current) {
-            setVersion(null)
-          }
+          setVersion(null)
         }
       } catch (error: any) {
-        if (mountedRef.current) {
-          window.modal.error({
-            title: active ? t('settings.mcp.startError') : t('settings.mcp.updateError'),
-            content: formatMcpError(error),
-            centered: true
-          })
-        }
+        window.modal.error({
+          title: active ? t('settings.mcp.startError') : t('settings.mcp.updateError'),
+          content: formatMcpError(error),
+          centered: true
+        })
       } finally {
-        if (mountedRef.current) {
-          setLoading(false)
-        }
-        toggleActiveRef.current = false
+        setLoading(false)
       }
     },
-    [server, ensureServerTrusted, getServerVersion, updateMcpServer, t]
+    [server, ensureServerTrusted, fetchServerVersion, updateMcpServer, t]
   )
 
   const handleDelete = useCallback(() => {
-    const showDeleteError = (error: unknown) => {
-      if (mountedRef.current) {
-        window.toast?.error(`${t('settings.mcp.deleteError')}: ${formatErrorMessage(error)}`)
-      }
-    }
-
     try {
-      if (deleteRef.current || deleteRunningRef.current) {
-        return
-      }
-
-      const clearDeleteGuard = () => {
-        if (deleteRunningRef.current) return
-        deleteRef.current = false
-      }
-
-      deleteRef.current = true
       window.modal.confirm({
         title: t('settings.mcp.deleteServer'),
         content: t('settings.mcp.deleteServerConfirm'),
         centered: true,
-        onCancel: clearDeleteGuard,
         onOk: async () => {
-          if (deleteRunningRef.current) {
-            return
-          }
-
-          deleteRunningRef.current = true
-          if (mountedRef.current) {
-            setDeleting(true)
-          }
-          try {
-            await window.api.mcp.removeServer(server.id)
-            await deleteMcpServer({})
-            if (mountedRef.current) {
-              window.toast?.success(t('settings.mcp.deleteSuccess'))
-            }
-          } catch (error) {
-            showDeleteError(error)
-            throw error
-          } finally {
-            if (mountedRef.current) {
-              setDeleting(false)
-            }
-            deleteRunningRef.current = false
-            deleteRef.current = false
-          }
+          await window.api.mcp.removeServer(server.id)
+          await deleteMcpServer({})
+          window.toast.success(t('settings.mcp.deleteSuccess'))
         }
       })
     } catch (error: any) {
-      deleteRunningRef.current = false
-      deleteRef.current = false
-      showDeleteError(error)
+      window.toast.error(`${t('settings.mcp.deleteError')}: ${error.message}`)
     }
   }, [server, deleteMcpServer, t])
 
@@ -205,7 +121,7 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEd
       event.stopPropagation()
 
       if (server.providerUrl) {
-        openHttpExternalUrl(server.providerUrl)
+        window.open(server.providerUrl, '_blank')
       }
     },
     [server.providerUrl]
@@ -241,7 +157,7 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEd
     [handleDelete]
   )
 
-  const isLoading = loading || deleting
+  const isLoading = loading
 
   const Fallback = useCallback(
     (props: FallbackProps) => {
@@ -281,7 +197,7 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEd
                   <CircleXIcon size={16} />
                 </Tooltip>
               </Button>
-              <Button variant="destructive" size="sm" onClick={handleDeleteClick} disabled={isLoading}>
+              <Button variant="destructive" size="sm" onClick={handleDeleteClick}>
                 <Tooltip content={t('common.delete')}>
                   <DeleteIcon size={16} />
                 </Tooltip>
@@ -291,7 +207,7 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEd
         />
       )
     },
-    [handleDeleteClick, isLoading, t]
+    [handleDeleteClick, t]
   )
 
   return (
@@ -343,8 +259,7 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEd
               size="icon-sm"
               variant="ghost"
               className="size-7 rounded-md text-muted-foreground shadow-none hover:text-destructive"
-              onClick={handleDeleteClick}
-              disabled={isLoading}>
+              onClick={handleDeleteClick}>
               <DeleteIcon size={14} className="lucide-custom" />
             </Button>
           )}

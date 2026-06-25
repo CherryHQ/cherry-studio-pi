@@ -19,17 +19,17 @@ import { dataApiService } from '@data/DataApiService'
 import { usePreference } from '@data/hooks/usePreference'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { loggerService } from '@logger'
-import { summarizeObjectShapeForLog, summarizeTextForLog } from '@renderer/aiCore/utils/logging'
 import { useCodeStyle } from '@renderer/context/CodeStyleProvider'
 import { useTimer } from '@renderer/hooks/useTimer'
-import type { McpServer } from '@renderer/types'
-import { objectKeys, safeValidateMcpConfig } from '@renderer/types'
-import { parseJSON } from '@renderer/utils'
+import { safeValidateMcpConfig } from '@renderer/types/mcp'
 import { formatZodError } from '@renderer/utils/error'
+import { parseJSON } from '@renderer/utils/json'
+import { objectKeys } from '@renderer/utils/object'
 import type { CreateMcpServerDto } from '@shared/data/api/schemas/mcpServers'
+import type { McpServer } from '@shared/data/types/mcpServer'
 import { UploadIcon } from 'lucide-react'
 import type { FC } from 'react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import * as z from 'zod'
@@ -103,8 +103,6 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
   const [fontSize] = usePreference('chat.message.font_size')
   const { activeCmTheme } = useCodeStyle()
   const [loading, setLoading] = useState(false)
-  const loadingRef = useRef(false)
-  const mountedRef = useRef(true)
   const [importMethod, setImportMethod] = useState<'json' | 'dxt' | 'mcpb'>(initialImportMethod)
   const [packageFile, setPackageFile] = useState<File | null>(null)
   const { setTimeoutTimer } = useTimer()
@@ -123,14 +121,6 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
     setImportMethod(initialImportMethod)
   }, [initialImportMethod])
 
-  useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
-
   /**
    * 从JSON字符串中解析MCP服务器配置
    * @param inputValue - JSON格式的服务器配置字符串
@@ -144,13 +134,13 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
     const trimmedInput = inputValue.trim()
     const parsedJson = parseJSON(trimmedInput)
     if (parsedJson === null) {
-      logger.error('Failed to parse MCP server JSON.', { input: summarizeTextForLog(trimmedInput) })
+      logger.error('Failed to parse json.', { input: trimmedInput })
       return { serverToAdd: null, error: t('settings.mcp.addServer.importFrom.invalid') }
     }
 
     const { data: validConfig, error } = safeValidateMcpConfig(parsedJson)
     if (error) {
-      logger.error('Failed to validate MCP server JSON.', { parsedJson: summarizeObjectShapeForLog(parsedJson), error })
+      logger.error('Failed to validate json.', { parsedJson, error })
       return { serverToAdd: null, error: formatZodError(error, t('settings.mcp.addServer.importFrom.invalid')) }
     }
 
@@ -174,31 +164,7 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
     return { serverToAdd, error: null }
   }
 
-  const updateServerConnectivityState = async (createdServer: McpServer, notifyUser: boolean) => {
-    try {
-      const isConnected = await window.api.mcp.checkMcpConnectivity(createdServer.id)
-      logger.debug(`Connectivity check for ${createdServer.name}: ${isConnected}`)
-      await dataApiService.patch(`/mcp-servers/${createdServer.id}`, {
-        body: { isActive: isConnected }
-      })
-    } catch (error) {
-      logger.error(`Connectivity state update failed for ${createdServer.name}:`, error as Error)
-      if (notifyUser && mountedRef.current) {
-        window.toast?.error(createdServer.name + t('settings.mcp.addServer.importFrom.connectionFailed'))
-      } else {
-        logger.warn(
-          `DXT server ${createdServer.name} connectivity state update failed; this is normal for servers requiring additional configuration`
-        )
-      }
-    }
-  }
-
   const handleOk = async (jsonValues?: JsonFieldType) => {
-    if (loadingRef.current) {
-      return
-    }
-
-    loadingRef.current = true
     try {
       setLoading(true)
 
@@ -206,7 +172,7 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
         const isMcpbImport = importMethod === 'mcpb'
 
         if (!packageFile) {
-          window.toast?.error(
+          window.toast.error(
             t(
               isMcpbImport
                 ? 'settings.mcp.addServer.importFrom.noMcpbFile'
@@ -225,7 +191,7 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
             : await window.api.mcp.uploadDxt(packageFile)
 
           if (!result.success) {
-            window.toast?.error(
+            window.toast.error(
               result.error ||
                 t(
                   isMcpbImport
@@ -241,7 +207,7 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
 
           // Check for duplicate names
           if (existingServers && existingServers.some((server) => server.name === manifest.name)) {
-            window.toast?.error(t('settings.mcp.addServer.importFrom.nameExists', { name: manifest.name }))
+            window.toast.error(t('settings.mcp.addServer.importFrom.nameExists', { name: manifest.name }))
             setLoading(false)
             return
           }
@@ -259,7 +225,7 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
             })
             .filter((arg) => arg.trim() !== '' && arg !== '--' && arg !== '=' && !arg.startsWith('--='))
 
-          logger.debug('Processed DXT args', { argsCount: processedArgs.length })
+          logger.debug(`Processed ${isMcpbImport ? 'MCPB' : 'DXT'} args:`, processedArgs)
 
           // Create MCP server DTO from package manifest (ID auto-generated by DB)
           const serverDto: CreateMcpServerDto = toCreateMcpServerDto({
@@ -286,32 +252,42 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
           })
 
           const createdServer = await onSuccess(serverDto)
-          if (mountedRef.current) {
-            form.reset({ serverConfig: '' })
-            setPackageFile(null)
-            onClose()
+          form.reset({ serverConfig: '' })
+          setPackageFile(null)
+          onClose()
 
-            // Check server connectivity in background (with timeout)
-            setTimeoutTimer(
-              'handleOk',
-              () => {
-                void updateServerConnectivityState(createdServer, false)
-              },
-              1000
-            ) // Delay to ensure server is properly added to store
-          }
+          // Check server connectivity in background (with timeout)
+          setTimeoutTimer(
+            'handleOk',
+            () => {
+              window.api.mcp
+                .checkMcpConnectivity(createdServer.id)
+                .then((isConnected) => {
+                  logger.debug(`Connectivity check for ${createdServer.name}: ${isConnected}`)
+                  void dataApiService.patch(`/mcp-servers/${createdServer.id}`, {
+                    body: { isActive: isConnected }
+                  })
+                })
+                .catch((connError: any) => {
+                  logger.error(`Connectivity check failed for ${createdServer.name}:`, connError)
+                  // Don't show error for package servers as they might need additional setup
+                  logger.warn(
+                    `Package server ${createdServer.name} connectivity check failed, this is normal for servers requiring additional configuration`
+                  )
+                })
+            },
+            1000
+          ) // Delay to ensure server is properly added to store
         } catch (error) {
           logger.error(`${isMcpbImport ? 'MCPB' : 'DXT'} processing error:`, error as Error)
-          if (mountedRef.current) {
-            window.toast?.error(
-              t(
-                isMcpbImport
-                  ? 'settings.mcp.addServer.importFrom.mcpbProcessFailed'
-                  : 'settings.mcp.addServer.importFrom.dxtProcessFailed'
-              )
+          window.toast.error(
+            t(
+              isMcpbImport
+                ? 'settings.mcp.addServer.importFrom.mcpbProcessFailed'
+                : 'settings.mcp.addServer.importFrom.dxtProcessFailed'
             )
-            setLoading(false)
-          }
+          )
+          setLoading(false)
           return
         }
       } else {
@@ -350,27 +326,29 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
         })
 
         const createdServer = await onSuccess(serverDto)
-        if (mountedRef.current) {
-          form.reset({ serverConfig: '' })
-          onClose()
-        }
+        form.reset({ serverConfig: '' })
+        onClose()
 
         // 在背景非同步檢查伺服器可用性並更新狀態
-        void updateServerConnectivityState(createdServer, true)
+        window.api.mcp
+          .checkMcpConnectivity(createdServer.id)
+          .then((isConnected) => {
+            logger.debug(`Connectivity check for ${createdServer.name}: ${isConnected}`)
+            void dataApiService.patch(`/mcp-servers/${createdServer.id}`, {
+              body: { isActive: isConnected }
+            })
+          })
+          .catch((connError: any) => {
+            logger.error(`Connectivity check failed for ${createdServer.name}:`, connError)
+            window.toast.error(createdServer.name + t('settings.mcp.addServer.importFrom.connectionFailed'))
+          })
       }
     } finally {
-      loadingRef.current = false
-      if (mountedRef.current) {
-        setLoading(false)
-      }
+      setLoading(false)
     }
   }
 
   const handleClose = () => {
-    if (loadingRef.current) {
-      return
-    }
-
     form.reset({ serverConfig: '' })
     setPackageFile(null)
     setImportMethod(initialImportMethod)
@@ -463,7 +441,7 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
           </div>
         )}
         <DialogFooter>
-          <Button variant="outline" onClick={handleClose} disabled={loading}>
+          <Button variant="outline" onClick={handleClose}>
             {t('common.cancel')}
           </Button>
           {importMethod === 'json' ? (

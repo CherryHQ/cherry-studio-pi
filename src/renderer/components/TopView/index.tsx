@@ -1,8 +1,7 @@
 // import { loggerService } from '@logger'
 import { Box } from '@cherrystudio/ui'
 import { usePreference } from '@data/hooks/usePreference'
-import AppModalProvider, { type AppModalApi } from '@renderer/components/AppModal'
-import { ensureWindowModalFallback, resetWindowModalFallbackIfCurrent } from '@renderer/components/AppModal/fallback'
+import AppModalProvider from '@renderer/components/AppModal'
 import { useAgentSessionAutoRenameSync } from '@renderer/hooks/agents/useSession'
 import { useAppInit } from '@renderer/hooks/useAppInit'
 import { useTopicAutoRenameSync } from '@renderer/hooks/useTopic'
@@ -13,27 +12,15 @@ import { useTranslation } from 'react-i18next'
 
 import { ToastProvider, useToasts } from './toast'
 
-type TopViewShowPayload = {
-  element: React.FC | React.ReactNode
-  id: string
-}
-
-const noopPop = () => {}
-const noopShow = ({ element, id }: TopViewShowPayload) => {
+let onPop = () => {}
+let onShow = ({ element, id }: { element: React.FC | React.ReactNode; id: string }) => {
   void element
   id
 }
-const noopHide = (id: string) => {
+let onHide = (id: string) => {
   id
 }
-const noopHideAll = () => {}
-
-let onPop = noopPop
-let onShow = noopShow
-let onHide = noopHide
-let onHideAll = noopHideAll
-
-ensureWindowModalFallback()
+let onHideAll = () => {}
 
 interface Props {
   children?: React.ReactNode
@@ -49,7 +36,6 @@ type ElementItem = {
 const TopViewContent: React.FC<Props> = ({ children }) => {
   const [elements, setElements] = useState<ElementItem[]>([])
   const elementsRef = useRef<ElementItem[]>([])
-  const modalRef = useRef<AppModalApi | undefined>(undefined)
   elementsRef.current = elements
 
   const [exitFullscreenPref] = usePreference('shortcut.app.fullscreen.exit')
@@ -65,56 +51,34 @@ const TopViewContent: React.FC<Props> = ({ children }) => {
     window.toast = toast
   }, [toast])
 
-  useEffect(() => {
-    ensureWindowModalFallback()
-
-    return () => {
-      resetWindowModalFallbackIfCurrent(modalRef.current)
-      modalRef.current = undefined
-    }
-  }, [])
-
-  const handlePop = useCallback(() => {
+  onPop = () => {
     const views = [...elementsRef.current]
     views.pop()
     elementsRef.current = views
     setElements(elementsRef.current)
-  }, [])
+  }
 
-  const handleShow = useCallback(({ element, id }: ElementItem) => {
-    const next = elementsRef.current.filter((el) => el.id !== id).concat([{ element, id }])
-    elementsRef.current = next
-    setElements(next)
-  }, [])
+  onShow = ({ element, id }: ElementItem) => {
+    if (!elementsRef.current.find((el) => el.id === id)) {
+      elementsRef.current = elementsRef.current.concat([{ element, id }])
+      setElements(elementsRef.current)
+    }
+  }
 
-  const handleHide = useCallback((id: string) => {
+  onHide = (id: string) => {
     elementsRef.current = elementsRef.current.filter((el) => el.id !== id)
     setElements(elementsRef.current)
-  }, [])
+  }
 
-  const handleHideAll = useCallback(() => {
+  onHideAll = () => {
     setElements([])
     elementsRef.current = []
-  }, [])
-
-  useEffect(() => {
-    onPop = handlePop
-    onShow = handleShow
-    onHide = handleHide
-    onHideAll = handleHideAll
-
-    return () => {
-      if (onPop === handlePop) onPop = noopPop
-      if (onShow === handleShow) onShow = noopShow
-      if (onHide === handleHide) onHide = noopHide
-      if (onHideAll === handleHideAll) onHideAll = noopHideAll
-    }
-  }, [handleHide, handleHideAll, handlePop, handleShow])
+  }
 
   const FullScreenContainer: React.FC<PropsWithChildren> = useCallback(({ children }) => {
     return (
       <Box className="topview-fullscreen-container absolute h-full w-full flex-1">
-        <Box className="topview-backdrop absolute h-full w-full" />
+        <Box className="absolute h-full w-full" onClick={onPop} />
         {children}
       </Box>
     )
@@ -139,7 +103,6 @@ const TopViewContent: React.FC<Props> = ({ children }) => {
       {children}
       <AppModalProvider
         onReady={(modal) => {
-          modalRef.current = modal
           window.modal = modal
         }}
       />
@@ -176,7 +139,7 @@ export const TopView = {
   show: (element: React.FC | React.ReactNode, id: string) => onShow({ element, id }),
   hide: (id: string) => onHide(id),
   clear: () => onHideAll(),
-  pop: () => onPop()
+  pop: onPop
 }
 
 export default TopViewContainer

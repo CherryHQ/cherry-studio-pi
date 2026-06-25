@@ -1,133 +1,130 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import HtmlArtifactsCard from '../HtmlArtifactsCard'
 
-const mockCreateTempFile = vi.fn()
-const mockWrite = vi.fn()
-const mockOpenPath = vi.fn()
-const mockOpenExternal = vi.fn()
-const mockSave = vi.fn()
-const mockToastError = vi.fn()
-const mockToastSuccess = vi.fn()
+const mocks = vi.hoisted(() => ({
+  createTempFile: vi.fn(),
+  error: vi.fn(),
+  HtmlArtifactsPopup: vi.fn(({ open }) => (open ? <div data-testid="html-artifacts-popup" /> : null)),
+  loggerError: vi.fn(),
+  openPath: vi.fn(),
+  save: vi.fn(),
+  success: vi.fn(),
+  write: vi.fn()
+}))
 
-function deferred<T = void>() {
-  let resolve!: (value: T | PromiseLike<T>) => void
-  let reject!: (reason?: unknown) => void
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise
-    reject = rejectPromise
-  })
-  return { promise, resolve, reject }
-}
+vi.mock('@cherrystudio/ui', () => ({
+  Button: ({ children, ...props }: any) => (
+    <button type="button" {...props}>
+      {children}
+    </button>
+  )
+}))
+
+vi.mock('@cherrystudio/ui/lib/utils', () => ({
+  cn: (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(' ')
+}))
 
 vi.mock('@logger', () => ({
   loggerService: {
     withContext: () => ({
-      error: vi.fn()
+      error: mocks.loggerError,
+      info: vi.fn(),
+      warn: vi.fn()
     })
   }
 }))
 
-vi.mock('../HtmlArtifactsPopup', () => ({
-  default: () => null
+vi.mock('@renderer/utils/error', () => ({
+  formatErrorMessageWithPrefix: vi.fn((error, prefix) => `${prefix}: ${(error as Error).message}`)
 }))
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string) => {
-      const map: Record<string, string> = {
-        'chat.artifacts.button.openExternal': 'Open external',
-        'chat.artifacts.button.download': 'Download',
-        'chat.artifacts.button.preview': 'Preview',
-        'chat.artifacts.preview.openExternal.error.content': 'Open failed',
-        'message.download.success': 'Downloaded'
-      }
-      return map[key] ?? key
-    }
-  }),
-  initReactI18next: {
-    type: '3rdParty',
-    init: vi.fn()
-  }
+    t: (key: string, fallback?: string) => fallback ?? key
+  })
+}))
+
+vi.mock('../HtmlArtifactsPopup', () => ({
+  default: mocks.HtmlArtifactsPopup
 }))
 
 describe('HtmlArtifactsCard', () => {
+  const html = '<!doctype html><html><head><title>Sample Page</title></head><body>Hello</body></html>'
+
   beforeEach(() => {
     vi.clearAllMocks()
-    mockCreateTempFile.mockResolvedValue('/tmp/artifacts-preview.html')
-    mockWrite.mockResolvedValue(undefined)
-    mockOpenPath.mockResolvedValue(undefined)
-    mockOpenExternal.mockResolvedValue(undefined)
-    ;(window as any).api = {
-      ...(window.api as any),
-      file: {
-        ...(window.api as any)?.file,
-        createTempFile: mockCreateTempFile,
-        write: mockWrite,
-        openPath: mockOpenPath,
-        save: mockSave
-      },
-      shell: {
-        openExternal: mockOpenExternal
+    mocks.createTempFile.mockResolvedValue('/tmp/artifacts-preview.html')
+    mocks.openPath.mockResolvedValue(undefined)
+    mocks.save.mockResolvedValue('/tmp/Sample-Page.html')
+    mocks.write.mockResolvedValue(undefined)
+
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      writable: true,
+      value: {
+        file: {
+          createTempFile: mocks.createTempFile,
+          openPath: mocks.openPath,
+          save: mocks.save,
+          write: mocks.write
+        }
       }
-    }
-    ;(window as any).toast = {
-      ...(window.toast as any),
-      error: mockToastError,
-      success: mockToastSuccess
-    }
-  })
-
-  it('opens generated HTML artifacts through the file API', async () => {
-    const html = '<html><head><title>Demo</title></head><body>Hello</body></html>'
-    render(<HtmlArtifactsCard html={html} />)
-
-    fireEvent.click(screen.getByText('Open external'))
-
-    await waitFor(() => expect(mockOpenPath).toHaveBeenCalledWith('/tmp/artifacts-preview.html'))
-    expect(mockCreateTempFile).toHaveBeenCalledWith('artifacts-preview.html')
-    expect(mockWrite).toHaveBeenCalledWith('/tmp/artifacts-preview.html', html)
-    expect(mockOpenExternal).not.toHaveBeenCalled()
-  })
-
-  it('shows a toast when external artifact opening fails', async () => {
-    mockOpenPath.mockRejectedValueOnce(new Error('open failed'))
-    render(<HtmlArtifactsCard html="<html><body>Hello</body></html>" />)
-
-    fireEvent.click(screen.getByText('Open external'))
-
-    await waitFor(() => expect(mockToastError).toHaveBeenCalledWith('Open failed'))
-  })
-
-  it('shows a toast when artifact download fails', async () => {
-    mockSave.mockRejectedValueOnce(new Error('save failed'))
-    render(<HtmlArtifactsCard html="<html><head><title>Demo</title></head><body>Hello</body></html>" />)
-
-    fireEvent.click(screen.getByText('code_block.download.label'))
-
-    await waitFor(() => expect(mockToastError).toHaveBeenCalledWith('common.save_failed: save failed'))
-    expect(mockToastSuccess).not.toHaveBeenCalled()
-  })
-
-  it('ignores artifact download failures after unmount', async () => {
-    const saveOperation = deferred<string | null>()
-    mockSave.mockReturnValueOnce(saveOperation.promise)
-    const { unmount } = render(
-      <HtmlArtifactsCard html="<html><head><title>Demo</title></head><body>Hello</body></html>" />
-    )
-
-    fireEvent.click(screen.getByText('code_block.download.label'))
-
-    await waitFor(() => expect(mockSave).toHaveBeenCalled())
-    unmount()
-
-    await act(async () => {
-      saveOperation.reject(new Error('save failed after unmount'))
-      await saveOperation.promise.catch(() => undefined)
     })
 
-    expect(mockToastError).not.toHaveBeenCalled()
-    expect(mockToastSuccess).not.toHaveBeenCalled()
+    Object.defineProperty(window, 'toast', {
+      configurable: true,
+      writable: true,
+      value: {
+        error: mocks.error,
+        success: mocks.success
+      }
+    })
+  })
+
+  it('opens the generated HTML file through the file API', async () => {
+    render(<HtmlArtifactsCard html={html} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'chat.artifacts.button.openExternal' }))
+
+    await waitFor(() => expect(mocks.openPath).toHaveBeenCalledWith('/tmp/artifacts-preview.html'))
+    expect(mocks.createTempFile).toHaveBeenCalledWith('artifacts-preview.html')
+    expect(mocks.write).toHaveBeenCalledWith('/tmp/artifacts-preview.html', html)
+    expect(mocks.error).not.toHaveBeenCalled()
+  })
+
+  it('shows an error when opening the generated HTML file fails', async () => {
+    mocks.openPath.mockRejectedValueOnce(new Error('open failed'))
+
+    render(<HtmlArtifactsCard html={html} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'chat.artifacts.button.openExternal' }))
+
+    await waitFor(() =>
+      expect(mocks.error).toHaveBeenCalledWith('chat.artifacts.preview.openExternal.error.content: open failed')
+    )
+    expect(mocks.loggerError).toHaveBeenCalledWith('Failed to open HTML artifact externally', expect.any(Error))
+  })
+
+  it('downloads the HTML artifact', async () => {
+    render(<HtmlArtifactsCard html={html} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'code_block.download.label' }))
+
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledWith('Sample-Page.html', html))
+    expect(mocks.success).toHaveBeenCalledWith('message.download.success')
+    expect(mocks.error).not.toHaveBeenCalled()
+  })
+
+  it('shows an error when downloading the HTML artifact fails', async () => {
+    mocks.save.mockRejectedValueOnce(new Error('save failed'))
+
+    render(<HtmlArtifactsCard html={html} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'code_block.download.label' }))
+
+    await waitFor(() => expect(mocks.error).toHaveBeenCalledWith('message.download.failed: save failed'))
+    expect(mocks.success).not.toHaveBeenCalled()
   })
 })

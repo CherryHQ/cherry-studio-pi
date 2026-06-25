@@ -6,7 +6,7 @@ import { getBuiltInMcpServerDescriptionLabelKey } from '@renderer/i18n/label'
 import { cn } from '@renderer/utils/style'
 import { Check, Plus } from 'lucide-react'
 import type { FC } from 'react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingTitle } from '..'
@@ -17,30 +17,6 @@ const BuiltinMcpServerList: FC = () => {
   const { addMcpServer, mcpServers } = useMcpServers()
   const [searchText, setSearchText] = useState('')
   const [filter, setFilter] = useState<'all' | 'installed' | 'available'>('all')
-  const mountedRef = useRef(true)
-  const addingServerIdsRef = useRef<Set<string>>(new Set())
-  const [addingServerIds, setAddingServerIds] = useState<Set<string>>(() => new Set())
-
-  const setServerAdding = useCallback((serverId: string, adding: boolean) => {
-    const nextServerIds = new Set(addingServerIdsRef.current)
-    if (adding) {
-      nextServerIds.add(serverId)
-    } else {
-      nextServerIds.delete(serverId)
-    }
-
-    addingServerIdsRef.current = nextServerIds
-    if (mountedRef.current) {
-      setAddingServerIds(nextServerIds)
-    }
-  }, [])
-
-  useEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
 
   const installedCount = useMemo(
     () =>
@@ -64,33 +40,6 @@ const BuiltinMcpServerList: FC = () => {
       return server.name.toLowerCase().includes(keyword) || description.includes(keyword)
     })
   }, [filter, mcpServers, searchText, t])
-
-  const handleInstallServer = useCallback(
-    async (server: (typeof builtinMcpServers)[number]) => {
-      if (
-        addingServerIdsRef.current.has(server.id) ||
-        mcpServers.some((existingServer) => existingServer.name === server.name)
-      ) {
-        return
-      }
-
-      setServerAdding(server.id, true)
-
-      try {
-        await addMcpServer(toCreateMcpServerDto(server))
-        if (mountedRef.current) {
-          window.toast?.success(t('settings.mcp.addSuccess'))
-        }
-      } catch {
-        if (mountedRef.current) {
-          window.toast?.error(t('settings.mcp.addError'))
-        }
-      } finally {
-        setServerAdding(server.id, false)
-      }
-    },
-    [addMcpServer, mcpServers, setServerAdding, t]
-  )
 
   return (
     <div className="mb-5">
@@ -129,7 +78,6 @@ const BuiltinMcpServerList: FC = () => {
       <div className="flex flex-col gap-2">
         {filteredServers.map((server) => {
           const isInstalled = mcpServers.some((existingServer) => existingServer.name === server.name)
-          const isAdding = addingServerIds.has(server.id)
 
           return (
             <div
@@ -186,9 +134,14 @@ const BuiltinMcpServerList: FC = () => {
                     variant="ghost"
                     size="sm"
                     className="h-7 rounded-lg px-2 text-muted-foreground text-xs shadow-none hover:bg-muted hover:text-foreground hover:shadow-none"
-                    disabled={isAdding}
-                    loading={isAdding}
-                    onClick={() => void handleInstallServer(server)}>
+                    onClick={async () => {
+                      try {
+                        await addMcpServer(toCreateMcpServerDto(server))
+                        window.toast.success(t('settings.mcp.addSuccess'))
+                      } catch {
+                        window.toast.error(t('settings.mcp.addError'))
+                      }
+                    }}>
                     <Plus size={13} />
                     {t('settings.skills.install')}
                   </Button>

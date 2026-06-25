@@ -1,16 +1,16 @@
-import type { SystemProvider, SystemProviderId } from '@renderer/types'
-import { OpenAIServiceTiers } from '@renderer/types'
+import { OpenAIServiceTiers, type SystemProvider, type SystemProviderId } from '@renderer/types/provider'
+import { CHERRYAI_API_BASE_URL, CHERRYAI_PROVIDER_ID, CHERRYAI_PROVIDER_NAME } from '@shared/data/presets/cherryai'
 
 import { TOKENFLUX_HOST } from './constant'
-import { SYSTEM_MODELS } from './models'
+import { qwenModel, SYSTEM_MODELS } from './models'
 
 export const CHERRYAI_PROVIDER: SystemProvider = {
-  id: 'cherryai' as SystemProviderId,
-  name: 'CherryAI',
+  id: CHERRYAI_PROVIDER_ID as SystemProviderId,
+  name: CHERRYAI_PROVIDER_NAME,
   type: 'openai',
   apiKey: '',
-  apiHost: 'https://api.cherry-ai.com',
-  models: [],
+  apiHost: CHERRYAI_API_BASE_URL,
+  models: [qwenModel],
   isSystem: true,
   enabled: true
 }
@@ -276,7 +276,7 @@ export const SYSTEM_PROVIDERS_CONFIG: Record<SystemProviderId, SystemProvider> =
     type: 'openai',
     apiKey: '',
     apiHost: 'https://openrouter.ai/api/v1/',
-    // Anthropic-compatible endpoint for Agent mode.
+    // Anthropic-compatible endpoint for Agent mode (Claude Code SDK)
     // https://openrouter.ai/docs/guides/guides/coding-agents/claude-code-integration
     anthropicApiHost: 'https://openrouter.ai/api',
     models: SYSTEM_MODELS.openrouter,
@@ -676,8 +676,6 @@ export const SYSTEM_PROVIDERS_CONFIG: Record<SystemProviderId, SystemProvider> =
     enabled: false
   }
 } as const
-
-export const INITIAL_STATE_EXCLUDED_PROVIDER_IDS = ['cephalon', 'tokenflux'] as const satisfies SystemProviderId[]
 
 export const SYSTEM_PROVIDERS: SystemProvider[] = Object.values(SYSTEM_PROVIDERS_CONFIG)
 

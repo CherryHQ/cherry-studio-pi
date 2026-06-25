@@ -1,7 +1,7 @@
 import { Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, Input } from '@cherrystudio/ui'
 import { backupToWebdav } from '@renderer/services/BackupService'
 import dayjs from 'dayjs'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface WebdavModalProps {
@@ -21,38 +21,18 @@ export function useWebdavBackupModal({ backupMethod }: { backupMethod?: typeof b
   const [customFileName, setCustomFileName] = useState('')
   const [isModalVisible, setIsModalVisible] = useState(false)
   const [backuping, setBackuping] = useState(false)
-  const mountedRef = useRef(true)
-  const backupingRef = useRef(false)
-
-  useEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
 
   const handleBackup = async () => {
-    if (backupingRef.current) {
-      return
-    }
-
-    backupingRef.current = true
     setBackuping(true)
     try {
       await (backupMethod ?? backupToWebdav)({ showMessage: true, customFileName })
     } finally {
-      backupingRef.current = false
-      if (mountedRef.current) {
-        setBackuping(false)
-        setIsModalVisible(false)
-      }
+      setBackuping(false)
+      setIsModalVisible(false)
     }
   }
 
   const handleCancel = () => {
-    if (backupingRef.current) {
-      return
-    }
     setIsModalVisible(false)
   }
 
@@ -61,10 +41,7 @@ export function useWebdavBackupModal({ backupMethod }: { backupMethod?: typeof b
     const deviceType = await window.api.system.getDeviceType()
     const hostname = await window.api.system.getHostname()
     const timestamp = dayjs().format('YYYYMMDDHHmmss')
-    const defaultFileName = `cherry-studio-pi.${timestamp}.${hostname}.${deviceType}.zip`
-    if (!mountedRef.current) {
-      return
-    }
+    const defaultFileName = `cherry-studio.${timestamp}.${hostname}.${deviceType}.zip`
     setCustomFileName(defaultFileName)
     setIsModalVisible(true)
   }, [])
@@ -103,10 +80,10 @@ export function WebdavBackupModal({
           placeholder={customLabels?.filenamePlaceholder || t('settings.data.webdav.backup.modal.filename.placeholder')}
         />
         <DialogFooter>
-          <Button variant="outline" onClick={handleCancel} disabled={backuping}>
+          <Button variant="outline" onClick={handleCancel}>
             {t('common.cancel')}
           </Button>
-          <Button loading={backuping} disabled={backuping} onClick={handleBackup}>
+          <Button loading={backuping} onClick={handleBackup}>
             {t('common.confirm')}
           </Button>
         </DialogFooter>

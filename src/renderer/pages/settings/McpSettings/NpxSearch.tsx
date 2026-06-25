@@ -1,12 +1,11 @@
 import { Badge, Button, Center, Flex, Input, RowFlex, Spinner } from '@cherrystudio/ui'
 import logo from '@renderer/assets/images/cherry-text-logo.svg'
 import { useMcpServers } from '@renderer/hooks/useMcpServer'
-import type { McpServer } from '@renderer/types'
-import { getMcpConfigSampleFromReadme } from '@renderer/utils'
-import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
+import { getMcpConfigSampleFromReadme } from '@renderer/utils/mcp'
+import type { McpServer } from '@shared/data/types/mcpServer'
 import { Check, Plus } from 'lucide-react'
 import { npxFinder } from 'npx-scope-finder'
-import { type FC, useCallback, useEffect, useRef, useState } from 'react'
+import { type FC, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface SearchResult {
@@ -32,134 +31,69 @@ const NpxSearch: FC = () => {
   const [searchLoading, setSearchLoading] = useState(false)
   const [searchResults, setSearchResults] = useState<SearchResult[]>(_searchResults)
   const { addMcpServer, mcpServers } = useMcpServers()
-  const mountedRef = useRef(true)
-  const searchRequestSeqRef = useRef(0)
-  const addingPackagesRef = useRef<Set<string>>(new Set())
-  const [addingPackages, setAddingPackages] = useState<Set<string>>(() => new Set())
 
-  const setPackageAdding = useCallback((packageName: string, adding: boolean) => {
-    const nextPackages = new Set(addingPackagesRef.current)
-    if (adding) {
-      nextPackages.add(packageName)
-    } else {
-      nextPackages.delete(packageName)
-    }
-
-    addingPackagesRef.current = nextPackages
-    if (mountedRef.current) {
-      setAddingPackages(nextPackages)
-    }
-  }, [])
+  _searchResults = searchResults
 
   // Add new function to handle npm scope search
-  const handleNpmSearch = useCallback(
-    async (scopeOverride?: string) => {
-      const searchScope = (scopeOverride || npmScope).trim()
+  const handleNpmSearch = async (scopeOverride?: string) => {
+    const searchScope = scopeOverride || npmScope
 
-      if (!searchScope) {
-        window.toast?.warning(t('settings.mcp.npx_list.scope_required'))
-        return
+    if (!searchScope.trim()) {
+      window.toast.warning(t('settings.mcp.npx_list.scope_required'))
+      return
+    }
+
+    if (searchLoading) {
+      return
+    }
+
+    setSearchLoading(true)
+
+    try {
+      // Call npxFinder to search for packages
+      const packages = await npxFinder(searchScope)
+      // Map the packages to our desired format
+      const formattedResults: SearchResult[] = packages.map((pkg) => {
+        let configSample
+        if (pkg.original?.readme) {
+          configSample = getMcpConfigSampleFromReadme(pkg.original.readme)
+        }
+
+        return {
+          key: pkg.name,
+          name: pkg.name?.split('/')[1] || '',
+          description: pkg.description || 'No description available',
+          version: pkg.version || 'Latest',
+          usage: `npx ${pkg.name}`,
+          npmLink: pkg.links?.npm || `https://www.npmjs.com/package/${pkg.name}`,
+          fullName: pkg.name || '',
+          type: 'stdio',
+          configSample
+        }
+      })
+
+      setSearchResults(formattedResults)
+
+      if (formattedResults.length === 0) {
+        window.toast.info(t('settings.mcp.npx_list.no_packages'))
       }
-
-      const requestSeq = ++searchRequestSeqRef.current
-      setSearchLoading(true)
-
-      try {
-        // Call npxFinder to search for packages
-        const packages = await npxFinder(searchScope)
-        if (!mountedRef.current || requestSeq !== searchRequestSeqRef.current) {
-          return
-        }
-
-        // Map the packages to our desired format
-        const formattedResults: SearchResult[] = packages.map((pkg) => {
-          let configSample
-          if (pkg.original?.readme) {
-            configSample = getMcpConfigSampleFromReadme(pkg.original.readme)
-          }
-
-          return {
-            key: pkg.name,
-            name: pkg.name?.split('/')[1] || '',
-            description: pkg.description || 'No description available',
-            version: pkg.version || 'Latest',
-            usage: `npx ${pkg.name}`,
-            npmLink: pkg.links?.npm || `https://www.npmjs.com/package/${pkg.name}`,
-            fullName: pkg.name || '',
-            type: 'stdio',
-            configSample
-          }
-        })
-
-        setSearchResults(formattedResults)
-        _searchResults = formattedResults
-
-        if (formattedResults.length === 0) {
-          window.toast?.info(t('settings.mcp.npx_list.no_packages'))
-        }
-      } catch (error: unknown) {
-        if (!mountedRef.current || requestSeq !== searchRequestSeqRef.current) {
-          return
-        }
-
-        setSearchResults([])
-        _searchResults = []
-        window.toast?.error(formatErrorMessageWithPrefix(error, t('settings.mcp.npx_list.search_error')))
-      } finally {
-        if (mountedRef.current && requestSeq === searchRequestSeqRef.current) {
-          setSearchLoading(false)
-        }
+    } catch (error: unknown) {
+      setSearchResults([])
+      _searchResults = []
+      if (error instanceof Error) {
+        window.toast.error(`${t('settings.mcp.npx_list.search_error')}: ${error.message}`)
+      } else {
+        window.toast.error(t('settings.mcp.npx_list.search_error'))
       }
-    },
-    [npmScope, t]
-  )
+    } finally {
+      setSearchLoading(false)
+    }
+  }
 
   useEffect(() => {
-    mountedRef.current = true
     void handleNpmSearch()
-    return () => {
-      mountedRef.current = false
-      searchRequestSeqRef.current += 1
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  const handleAddPackage = useCallback(
-    async (record: SearchResult) => {
-      const packageName = record.fullName || record.name
-
-      if (addingPackagesRef.current.has(packageName) || mcpServers.some((server) => server.name === record.name)) {
-        return
-      }
-
-      setPackageAdding(packageName, true)
-
-      const newServer = {
-        name: record.name,
-        description: `${record.description}\n\n${t('settings.mcp.npx_list.usage')}: ${record.usage}\n${t('settings.mcp.npx_list.npm')}: ${record.npmLink}`,
-        command: 'npx',
-        args: record.configSample?.args ?? ['-y', record.fullName],
-        env: record.configSample?.env,
-        isActive: false,
-        type: record.type,
-        searchKey: record.fullName
-      }
-
-      try {
-        await addMcpServer(newServer)
-        if (mountedRef.current) {
-          window.toast?.success(t('settings.mcp.addSuccess'))
-        }
-      } catch (error) {
-        if (mountedRef.current) {
-          window.toast?.error(formatErrorMessageWithPrefix(error, t('settings.mcp.addError')))
-        }
-      } finally {
-        setPackageAdding(packageName, false)
-      }
-    },
-    [addMcpServer, mcpServers, setPackageAdding, t]
-  )
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-2 pt-5">
@@ -206,8 +140,6 @@ const NpxSearch: FC = () => {
         <div className="mx-auto flex w-full max-w-300 flex-1 flex-col gap-2 overflow-y-auto pr-1">
           {searchResults?.map((record) => {
             const isInstalled = mcpServers.some((server) => server.name === record.name)
-            const packageName = record.fullName || record.name
-            const isAdding = addingPackages.has(packageName)
             return (
               <div
                 key={record.name}
@@ -219,9 +151,30 @@ const NpxSearch: FC = () => {
                     <Button
                       variant="ghost"
                       size="icon-sm"
-                      onClick={() => void handleAddPackage(record)}
-                      disabled={isInstalled || isAdding}
-                      loading={isAdding}>
+                      onClick={async () => {
+                        if (isInstalled) {
+                          return
+                        }
+
+                        const newServer = {
+                          name: record.name,
+                          description: `${record.description}\n\n${t('settings.mcp.npx_list.usage')}: ${record.usage}\n${t('settings.mcp.npx_list.npm')}: ${record.npmLink}`,
+                          command: 'npx',
+                          args: record.configSample?.args ?? ['-y', record.fullName],
+                          env: record.configSample?.env,
+                          isActive: false,
+                          type: record.type,
+                          searchKey: record.fullName
+                        }
+
+                        try {
+                          await addMcpServer(newServer)
+                          window.toast.success(t('settings.mcp.addSuccess'))
+                        } catch {
+                          window.toast.error(t('settings.mcp.addError'))
+                        }
+                      }}
+                      disabled={isInstalled}>
                       {isInstalled ? <Check size={14} className="text-primary" /> : <Plus size={14} />}
                     </Button>
                   </Flex>

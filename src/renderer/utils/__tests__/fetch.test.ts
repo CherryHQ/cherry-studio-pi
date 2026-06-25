@@ -29,8 +29,7 @@ global.DOMParser = vi.fn().mockImplementation(() => ({
 global.window = {
   api: {
     searchService: {
-      openUrlInSearchWindow: vi.fn(),
-      closeSearchWindow: vi.fn()
+      openUrlInSearchWindow: vi.fn()
     }
   }
 } as any
@@ -79,20 +78,7 @@ describe('fetch', () => {
       const result = await fetchWebContent('https://example.com', 'markdown', true)
 
       expect(result.content).toBe('# Test content')
-      expect(window.api.searchService.openUrlInSearchWindow).toHaveBeenCalledWith(
-        'search-window-test-id',
-        'https://example.com'
-      )
-      expect(window.api.searchService.closeSearchWindow).toHaveBeenCalledWith('search-window-test-id')
-    })
-
-    it('should close the browser search window when browser fetch fails', async () => {
-      vi.mocked(window.api.searchService.openUrlInSearchWindow).mockRejectedValueOnce(new Error('browser failed'))
-
-      const result = await fetchWebContent('https://example.com', 'markdown', true)
-
-      expect(result.content).toBe('No content found')
-      expect(window.api.searchService.closeSearchWindow).toHaveBeenCalledWith('search-window-test-id')
+      expect(window.api.searchService.openUrlInSearchWindow).toHaveBeenCalled()
     })
 
     it('should handle errors gracefully', async () => {
@@ -206,13 +192,7 @@ describe('fetch', () => {
       const result = await fetchRedirectUrl('https://example.com')
 
       expect(result).toBe('https://redirected.com/final')
-      expect(global.AbortSignal.timeout).toHaveBeenCalledWith(10000)
-      expect(global.fetch).toHaveBeenCalledWith(
-        'https://example.com',
-        expect.objectContaining({
-          signal: expect.any(Object)
-        })
-      )
+      expect(global.fetch).toHaveBeenCalledWith('https://example.com', expect.any(Object))
     })
 
     it('should return original URL on error', async () => {

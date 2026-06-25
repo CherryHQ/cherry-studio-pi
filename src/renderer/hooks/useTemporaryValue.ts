@@ -27,18 +27,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 export const useTemporaryValue = <T>(defaultValue: T, duration: number = 2000) => {
   const [value, setValue] = useState<T>(defaultValue)
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const mountedRef = useRef(true)
 
   const setTemporaryValue = useCallback(
     (tempValue: T) => {
-      if (!mountedRef.current) {
-        return
-      }
-
       // Clear any existing timeout
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current)
-        timeoutRef.current = null
       }
 
       // Set the new value
@@ -47,9 +41,7 @@ export const useTemporaryValue = <T>(defaultValue: T, duration: number = 2000) =
       // Set timeout to revert to default value
       if (tempValue !== defaultValue) {
         timeoutRef.current = setTimeout(() => {
-          if (mountedRef.current) {
-            setValue(defaultValue)
-          }
+          setValue(defaultValue)
           timeoutRef.current = null
         }, duration)
       }
@@ -59,13 +51,9 @@ export const useTemporaryValue = <T>(defaultValue: T, duration: number = 2000) =
 
   // Clear timeout on unmount
   useEffect(() => {
-    mountedRef.current = true
-
     return () => {
-      mountedRef.current = false
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current)
-        timeoutRef.current = null
       }
     }
   }, [])

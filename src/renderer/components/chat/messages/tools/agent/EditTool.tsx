@@ -1,5 +1,3 @@
-import { getFileName } from '@renderer/utils/file'
-
 import type { ToolDisclosureItem } from '../shared/ToolDisclosure'
 import { AgentFileDiffView } from './AgentFileDiffView'
 import { ClickableFilePath } from './ClickableFilePath'
@@ -25,7 +23,7 @@ function EditToolChildren({ input, output }: { input?: EditToolInput; output?: E
 }
 
 export function EditTool({ input, output }: { input?: EditToolInput; output?: EditToolOutput }): ToolDisclosureItem {
-  const filename = input?.file_path ? getFileName(input.file_path) : undefined
+  const filename = input?.file_path?.split('/').pop()
 
   return {
     key: AgentToolsType.Edit,

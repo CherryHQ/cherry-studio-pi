@@ -12,7 +12,10 @@ describe('numeric DataApi query params', () => {
     expect(ListAgentsQuerySchema.parse({ page: '2', limit: '50' })).toMatchObject({ page: 2, limit: 50 })
     expect(ListAssistantsQuerySchema.parse({ page: '2', limit: '50' })).toMatchObject({ page: 2, limit: 50 })
     expect(ListKnowledgeBasesQuerySchema.parse({ page: '2', limit: '50' })).toMatchObject({ page: 2, limit: 50 })
-    expect(ListKnowledgeItemsQuerySchema.parse({ page: '2', limit: '50' })).toMatchObject({ page: 2, limit: 50 })
+    expect(ListKnowledgeItemsQuerySchema.parse({ cursor: 'cursor-1', limit: '50' })).toMatchObject({
+      cursor: 'cursor-1',
+      limit: 50
+    })
     expect(ListPaintingsQuerySchema.parse({ limit: '50' })).toMatchObject({ limit: 50 })
     expect(TranslateHistoryQuerySchema.parse({ limit: '50' })).toMatchObject({ limit: 50 })
   })

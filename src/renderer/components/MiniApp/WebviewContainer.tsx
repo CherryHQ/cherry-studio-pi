@@ -1,6 +1,5 @@
 import { usePreference } from '@data/hooks/usePreference'
 import { loggerService } from '@logger'
-import { getErrorMessage } from '@renderer/utils/error'
 import type { DidNavigateInPageEvent, WebviewTag } from 'electron'
 import { memo, useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -43,17 +42,9 @@ const WebviewContainer = memo(
     )
 
     useEffect(() => {
-      const webview = webviewRef.current
-      if (!webview) return
+      if (!webviewRef.current) return
 
       let loadCallbackFired = false
-      let loadedCallbackTimer: ReturnType<typeof setTimeout> | undefined
-
-      const clearLoadedCallbackTimer = () => {
-        if (!loadedCallbackTimer) return
-        clearTimeout(loadedCallbackTimer)
-        loadedCallbackTimer = undefined
-      }
 
       const handleLoaded = () => {
         logger.debug(`WebView did-finish-load for app: ${appid}`)
@@ -61,9 +52,7 @@ const WebviewContainer = memo(
         if (!loadCallbackFired) {
           loadCallbackFired = true
           // Small delay to ensure content is actually visible
-          clearLoadedCallbackTimer()
-          loadedCallbackTimer = setTimeout(() => {
-            loadedCallbackTimer = undefined
+          setTimeout(() => {
             logger.debug(`Calling onLoadedCallback for app: ${appid}`)
             onLoadedCallback(appid)
           }, 100)
@@ -85,7 +74,7 @@ const WebviewContainer = memo(
       }
 
       const handleDomReady = () => {
-        const webviewId = webview.getWebContentsId()
+        const webviewId = webviewRef.current?.getWebContentsId()
         if (webviewId) {
           void window.api?.webview?.setSpellCheckEnabled?.(webviewId, enableSpellCheck)
           // Set link opening behavior for this webview
@@ -95,26 +84,24 @@ const WebviewContainer = memo(
 
       const handleStartLoading = () => {
         // Reset callback flag when starting a new load
-        clearLoadedCallbackTimer()
         loadCallbackFired = false
       }
 
-      webview.addEventListener('did-start-loading', handleStartLoading)
-      webview.addEventListener('dom-ready', handleDomReady)
-      webview.addEventListener('did-finish-load', handleLoaded)
-      webview.addEventListener('ready-to-show', handleReadyToShow)
-      webview.addEventListener('did-navigate-in-page', handleNavigate)
+      webviewRef.current.addEventListener('did-start-loading', handleStartLoading)
+      webviewRef.current.addEventListener('dom-ready', handleDomReady)
+      webviewRef.current.addEventListener('did-finish-load', handleLoaded)
+      webviewRef.current.addEventListener('ready-to-show', handleReadyToShow)
+      webviewRef.current.addEventListener('did-navigate-in-page', handleNavigate)
 
       // we set the url when the webview is ready
-      webview.src = url
+      webviewRef.current.src = url
 
       return () => {
-        clearLoadedCallbackTimer()
-        webview.removeEventListener('did-start-loading', handleStartLoading)
-        webview.removeEventListener('dom-ready', handleDomReady)
-        webview.removeEventListener('did-finish-load', handleLoaded)
-        webview.removeEventListener('ready-to-show', handleReadyToShow)
-        webview.removeEventListener('did-navigate-in-page', handleNavigate)
+        webviewRef.current?.removeEventListener('did-start-loading', handleStartLoading)
+        webviewRef.current?.removeEventListener('dom-ready', handleDomReady)
+        webviewRef.current?.removeEventListener('did-finish-load', handleLoaded)
+        webviewRef.current?.removeEventListener('ready-to-show', handleReadyToShow)
+        webviewRef.current?.removeEventListener('did-navigate-in-page', handleNavigate)
       }
       // because the appid and url are enough, no need to add onLoadedCallback
       // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -156,7 +143,7 @@ const WebviewContainer = memo(
           }
         } catch (error) {
           logger.error(`Failed to handle shortcut for webview ${appid}:`, error as Error)
-          window.toast?.error?.(t('miniApp.shortcut.failed', { message: getErrorMessage(error) }))
+          window.toast?.error?.(t('miniApp.shortcut.failed', { message: (error as Error).message }))
         }
       })
 
@@ -194,7 +181,7 @@ const WebviewContainer = memo(
         ref={handleRef}
         data-mini-app-id={appid}
         style={WebviewStyle}
-        allowpopups={'true' as unknown as boolean}
+        allowpopups={true}
         partition="persist:webview"
         useragent={
           appid === 'google'

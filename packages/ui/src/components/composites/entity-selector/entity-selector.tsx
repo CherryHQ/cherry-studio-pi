@@ -222,7 +222,6 @@ export function EntitySelector<T extends EntityItemBase>(props: EntitySelectorPr
     onKeyDown: userOnKeyDown,
     onEscapeKeyDown: userOnEscapeKeyDown,
     onOpenAutoFocus: userOnOpenAutoFocus,
-    onCloseAutoFocus: userOnCloseAutoFocus,
     style: userStyle,
     ...restPopoverContentProps
   } = popoverContentProps ?? {}
@@ -299,14 +298,6 @@ export function EntitySelector<T extends EntityItemBase>(props: EntitySelectorPr
               searchInputRef.current?.focus()
             }
             userOnOpenAutoFocus?.(event)
-          }}
-          onCloseAutoFocus={(event) => {
-            if (userOnCloseAutoFocus) {
-              userOnCloseAutoFocus(event)
-              return
-            }
-
-            event.preventDefault()
           }}
           className={cn(
             'flex max-h-[var(--radix-popover-content-available-height)] flex-col overflow-hidden rounded-lg border-border/60 bg-popover p-0 shadow-lg',

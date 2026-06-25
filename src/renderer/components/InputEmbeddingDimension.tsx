@@ -4,10 +4,10 @@ import { loggerService } from '@logger'
 import { RefreshIcon } from '@renderer/components/Icons'
 import { useProvider } from '@renderer/hooks/useProvider'
 import { ipcApi } from '@renderer/ipc'
-import type { Model } from '@renderer/types'
+import type { Model } from '@renderer/types/model'
 import { getErrorMessage } from '@renderer/utils/error'
 import { createUniqueModelId } from '@shared/data/types/model'
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 const logger = loggerService.withContext('DimensionsInput')
@@ -31,31 +31,8 @@ const InputEmbeddingDimension = ({
   const { t } = useTranslation()
   const { provider } = useProvider(model?.provider ?? '')
   const [loading, setLoading] = useState(false)
-  const mountedRef = useRef(true)
-  const dimensionRequestSeqRef = useRef(0)
-  const loadingRef = useRef(false)
 
   const disabled = useMemo(() => _disabled || !model || !provider, [_disabled, model, provider])
-  const uniqueModelId = useMemo(
-    () => (model && provider ? createUniqueModelId(provider.id, model.id) : undefined),
-    [model, provider]
-  )
-
-  useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-      dimensionRequestSeqRef.current += 1
-      loadingRef.current = false
-    }
-  }, [])
-
-  useEffect(() => {
-    dimensionRequestSeqRef.current += 1
-    loadingRef.current = false
-    setLoading(false)
-  }, [uniqueModelId])
 
   const handleDimensionChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -66,38 +43,24 @@ const InputEmbeddingDimension = ({
   )
 
   const handleFetchDimension = useCallback(async () => {
-    if (loadingRef.current) {
-      return
-    }
-
     if (!model) {
       logger.warn('Failed to get embedding dimensions: no model')
-      window.toast?.error(t('knowledge.embedding_model_required'))
+      window.toast.error(t('knowledge.embedding_model_required'))
       return
     }
 
     if (!provider) {
       logger.warn('Failed to get embedding dimensions: no provider')
-      window.toast?.error(t('knowledge.provider_not_found'))
+      window.toast.error(t('knowledge.provider_not_found'))
       return
     }
 
-    if (!uniqueModelId) {
-      return
-    }
-
-    const requestSeq = ++dimensionRequestSeqRef.current
-    loadingRef.current = true
     setLoading(true)
     try {
       const { embeddings } = await ipcApi.request('ai.embed_many', {
-        uniqueModelId,
+        uniqueModelId: createUniqueModelId(provider.id, model.id),
         values: ['test']
       })
-      if (!mountedRef.current || requestSeq !== dimensionRequestSeqRef.current) {
-        return
-      }
-
       const dimension = embeddings[0].length
       // for controlled input
       if (ref?.current) {
@@ -105,17 +68,12 @@ const InputEmbeddingDimension = ({
       }
       onChange?.(dimension)
     } catch (error) {
-      if (mountedRef.current && requestSeq === dimensionRequestSeqRef.current) {
-        logger.error(t('message.error.get_embedding_dimensions'), error as Error)
-        window.toast?.error(t('message.error.get_embedding_dimensions') + '\n' + getErrorMessage(error))
-      }
+      logger.error(t('message.error.get_embedding_dimensions'), error as Error)
+      window.toast.error(t('message.error.get_embedding_dimensions') + '\n' + getErrorMessage(error))
     } finally {
-      if (mountedRef.current && requestSeq === dimensionRequestSeqRef.current) {
-        loadingRef.current = false
-        setLoading(false)
-      }
+      setLoading(false)
     }
-  }, [model, provider, uniqueModelId, t, onChange, ref])
+  }, [model, provider, t, onChange, ref])
 
   return (
     <div className="flex w-full" style={style}>

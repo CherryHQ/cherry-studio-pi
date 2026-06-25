@@ -2,16 +2,12 @@ import { Button, InfoTooltip, Input, RowFlex } from '@cherrystudio/ui'
 import { usePreference } from '@data/hooks/usePreference'
 import { loggerService } from '@logger'
 import { useTheme } from '@renderer/context/ThemeProvider'
-import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
-import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import type { FC } from 'react'
-import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingRow, SettingRowTitle, SettingTitle } from '..'
 
 const logger = loggerService.withContext('SiyuanSettings')
-const INTEGRATION_CHECK_TIMEOUT_MS = 10_000
 
 const SiyuanSettings: FC = () => {
   const [siyuanApiUrl, setSiyuanApiUrl] = usePreference('data.integration.siyuan.api_url')
@@ -21,94 +17,57 @@ const SiyuanSettings: FC = () => {
 
   const { t } = useTranslation()
   const { theme } = useTheme()
-  const [checkingConnection, setCheckingConnection] = useState(false)
-  const checkingConnectionRef = useRef(false)
-  const mountedRef = useRef(true)
-
-  useEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
-
-  const showSaveFailed = useSaveFailedToast()
 
   const handleApiUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    void setSiyuanApiUrl(e.target.value).catch(showSaveFailed)
+    void setSiyuanApiUrl(e.target.value)
   }
 
   const handleTokenChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    void setSiyuanToken(e.target.value).catch(showSaveFailed)
+    void setSiyuanToken(e.target.value)
   }
 
   const handleBoxIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    void setSiyuanBoxId(e.target.value).catch(showSaveFailed)
+    void setSiyuanBoxId(e.target.value)
   }
 
   const handleRootPathChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    void setSiyuanRootPath(e.target.value).catch(showSaveFailed)
+    void setSiyuanRootPath(e.target.value)
   }
 
   const handleSiyuanHelpClick = () => {
-    void window.api.openWebsite('https://docs.cherry-ai.com/advanced-basic/siyuan').catch((error) => {
-      logger.error('Failed to open Siyuan documentation', error as Error)
-      window.toast?.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
-    })
+    void window.api.openWebsite('https://docs.cherry-ai.com/advanced-basic/siyuan')
   }
 
   const handleCheckConnection = async () => {
-    if (checkingConnectionRef.current) {
-      return
-    }
-
     try {
       if (!siyuanApiUrl || !siyuanToken) {
-        window.toast?.error(t('settings.data.siyuan.check.empty_config'))
+        window.toast.error(t('settings.data.siyuan.check.empty_config'))
         return
       }
 
-      checkingConnectionRef.current = true
-      setCheckingConnection(true)
       const response = await fetch(`${siyuanApiUrl}/api/notebook/lsNotebooks`, {
         method: 'POST',
-        signal: AbortSignal.timeout(INTEGRATION_CHECK_TIMEOUT_MS),
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Token ${siyuanToken}`
         }
       })
 
-      if (!mountedRef.current) {
-        return
-      }
-
       if (!response.ok) {
-        window.toast?.error(t('settings.data.siyuan.check.fail'))
+        window.toast.error(t('settings.data.siyuan.check.fail'))
         return
       }
 
       const data = await response.json()
-      if (!mountedRef.current) {
-        return
-      }
-
       if (data.code !== 0) {
-        window.toast?.error(t('settings.data.siyuan.check.fail'))
+        window.toast.error(t('settings.data.siyuan.check.fail'))
         return
       }
 
-      window.toast?.success(t('settings.data.siyuan.check.success'))
+      window.toast.success(t('settings.data.siyuan.check.success'))
     } catch (error) {
       logger.error('Check Siyuan connection failed:', error as Error)
-      if (mountedRef.current) {
-        window.toast?.error(t('settings.data.siyuan.check.error'))
-      }
-    } finally {
-      checkingConnectionRef.current = false
-      if (mountedRef.current) {
-        setCheckingConnection(false)
-      }
+      window.toast.error(t('settings.data.siyuan.check.error'))
     }
   }
 
@@ -148,12 +107,7 @@ const SiyuanSettings: FC = () => {
               placeholder={t('settings.data.siyuan.token_placeholder')}
               style={{ width: '100%' }}
             />
-            <Button
-              onClick={handleCheckConnection}
-              variant="outline"
-              className="h-9 shrink-0"
-              disabled={checkingConnection}
-              loading={checkingConnection}>
+            <Button onClick={handleCheckConnection} variant="outline" className="h-9 shrink-0">
               {t('settings.data.siyuan.check.button')}
             </Button>
           </RowFlex>

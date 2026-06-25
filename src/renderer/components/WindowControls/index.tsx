@@ -1,7 +1,7 @@
 import { Tooltip } from '@cherrystudio/ui'
 import { usePreference } from '@data/hooks/usePreference'
-import { loggerService } from '@logger'
 import { isLinux, isWin } from '@renderer/config/constant'
+import { ipcApi } from '@renderer/ipc'
 import { useIpcOn } from '@renderer/ipc/useIpcOn'
 import { Minus, Square, X } from 'lucide-react'
 import type { SVGProps } from 'react'
@@ -15,7 +15,6 @@ interface WindowRestoreIconProps extends SVGProps<SVGSVGElement> {
 }
 
 const DEFAULT_DELAY = 1000
-const logger = loggerService.withContext('WindowControls')
 
 export const WindowRestoreIcon = ({ size = '1.1em', ...props }: WindowRestoreIconProps) => (
   <svg
@@ -50,67 +49,47 @@ export const WindowRestoreIcon = ({ size = '1.1em', ...props }: WindowRestoreIco
   </svg>
 )
 
+/**
+ * Whether the renderer draws the OS window controls. Windows is always frameless (custom
+ * controls); Linux is frameless unless the user opted into the system title bar, in which
+ * case the OS draws them. Exported so frameless surfaces can reserve corner space to match.
+ */
+export function useHasWindowControls(): boolean {
+  const [useSystemTitleBar] = usePreference('app.use_system_title_bar')
+  return isWin || (isLinux && !useSystemTitleBar)
+}
+
 const WindowControls: React.FC = () => {
   const [isMaximized, setIsMaximized] = useState(false)
   const { t } = useTranslation()
-  const [useSystemTitleBar] = usePreference('app.use_system_title_bar')
+  const hasWindowControls = useHasWindowControls()
 
   useEffect(() => {
     // Check initial maximized state
-    let cancelled = false
-    void window.api.windowManager
-      .isMaximized()
-      .then((value) => {
-        if (!cancelled) setIsMaximized(value)
-      })
-      .catch((error) => {
-        logger.warn('Failed to read maximized state', error as Error)
-      })
-
-    // Listen for maximized state changes
-    const unsubscribe = window.api.windowManager.onMaximizedChange(setIsMaximized)
-
-    return () => {
-      cancelled = true
-      unsubscribe()
-    }
+    void ipcApi.request('window.is_maximized').then(setIsMaximized)
   }, [])
 
   // Listen for maximized state changes (auto-unsubscribes on unmount)
   useIpcOn('window.maximized_changed', setIsMaximized)
 
-  // Only show on Windows and Linux
-  if (!isWin && !isLinux) {
-    return null
-  }
-
-  // Hide on Linux if using system title bar
-  if (isLinux && useSystemTitleBar) {
+  if (!hasWindowControls) {
     return null
   }
 
   const handleMinimize = () => {
-    void window.api.windowManager.minimize().catch((error) => {
-      logger.warn('Failed to minimize window', error as Error)
-    })
+    void ipcApi.request('window.minimize')
   }
 
   const handleMaximize = () => {
     if (isMaximized) {
-      void window.api.windowManager.unmaximize().catch((error) => {
-        logger.warn('Failed to restore window', error as Error)
-      })
+      void ipcApi.request('window.unmaximize')
     } else {
-      void window.api.windowManager.maximize().catch((error) => {
-        logger.warn('Failed to maximize window', error as Error)
-      })
+      void ipcApi.request('window.maximize')
     }
   }
 
   const handleClose = () => {
-    void window.api.windowManager.close().catch((error) => {
-      logger.warn('Failed to close window', error as Error)
-    })
+    void ipcApi.request('window.close')
   }
 
   const tooltipTriggerWrap = { placeholder: 'relative z-10 flex h-full min-h-0' } as const

@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { TracePage } from '../TracePage'
@@ -35,7 +35,6 @@ describe('TracePage', () => {
   afterEach(() => {
     cleanup()
     vi.restoreAllMocks()
-    vi.useRealTimers()
   })
 
   it('keeps the trace list vertically scrollable without forcing horizontal table width', async () => {
@@ -75,28 +74,5 @@ describe('TracePage', () => {
     expect(screen.getByTestId('trace-table')).toHaveClass('min-w-0', 'overflow-hidden')
     expect(screen.getByTestId('trace-table')).not.toHaveClass('min-w-[640px]')
     expect(spanName).toHaveClass('min-w-0', 'flex-1')
-  })
-
-  it('preserves nested trace polling error details', async () => {
-    vi.useFakeTimers()
-    mocks.getTraceData.mockRejectedValue({ error: { message: 'trace store unavailable' } })
-
-    render(
-      <div style={{ height: 240, width: 360 }}>
-        <TracePage topicId="topic-a" traceId="trace-a" />
-      </div>
-    )
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0)
-    })
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(300)
-    })
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(300)
-    })
-
-    expect(screen.getByText('trace.pollError: trace store unavailable')).toBeInTheDocument()
   })
 })

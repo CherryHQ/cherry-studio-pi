@@ -1,5 +1,5 @@
 import type * as CherryUi from '@cherrystudio/ui'
-import type { NormalToolResponse } from '@renderer/types'
+import type { NormalToolResponse } from '@renderer/types/mcpTool'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { parse as parsePartialJson } from 'partial-json'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -747,7 +747,6 @@ describe('AgentToolRenderer', () => {
       expect(openAgentToolFlow).toHaveBeenCalledWith({
         toolCallId: 'call-123',
         toolName: 'Agent',
-        sourceMessageId: undefined,
         title: 'Inspect renderer'
       })
       expect(screen.queryByRole('button', { name: 'code_block.expand' })).toBeNull()

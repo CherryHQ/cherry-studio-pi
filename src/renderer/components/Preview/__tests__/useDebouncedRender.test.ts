@@ -1,16 +1,10 @@
-import { act, renderHook } from '@testing-library/react'
-import type { MutableRefObject } from 'react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { renderHook } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
 
 import { useDebouncedRender } from '../hooks/useDebouncedRender'
 
 describe('useDebouncedRender', () => {
   const mockRenderFunction = vi.fn()
-
-  beforeEach(() => {
-    mockRenderFunction.mockReset()
-    vi.useRealTimers()
-  })
 
   it('should return expected interface', () => {
     const { result } = renderHook(() => useDebouncedRender('test content', mockRenderFunction))
@@ -51,52 +45,5 @@ describe('useDebouncedRender', () => {
     expect(result.current).toHaveProperty('cancelRender')
     expect(result.current).toHaveProperty('clearError')
     expect(result.current).toHaveProperty('setLoading')
-  })
-
-  it('should keep stale render failures from overwriting newer successful renders', async () => {
-    vi.useFakeTimers()
-
-    let rejectFirstRender!: (error: Error) => void
-    const renderFunction = vi
-      .fn()
-      .mockImplementationOnce(
-        () =>
-          new Promise<void>((_, reject) => {
-            rejectFirstRender = reject
-          })
-      )
-      .mockResolvedValueOnce(undefined)
-
-    const { result, rerender } = renderHook(
-      ({ value }) => useDebouncedRender(value, renderFunction, { debounceDelay: 0 }),
-      {
-        initialProps: { value: 'first' }
-      }
-    )
-
-    const container = document.createElement('div')
-    ;(result.current.containerRef as MutableRefObject<HTMLDivElement | null>).current = container
-
-    await act(async () => {
-      await vi.runOnlyPendingTimersAsync()
-    })
-
-    expect(renderFunction).toHaveBeenCalledWith('first', container)
-
-    rerender({ value: 'second' })
-
-    await act(async () => {
-      await vi.runOnlyPendingTimersAsync()
-    })
-
-    expect(renderFunction).toHaveBeenCalledWith('second', container)
-
-    await act(async () => {
-      rejectFirstRender(new Error('stale render failed'))
-      await Promise.resolve()
-    })
-
-    expect(result.current.error).toBe(null)
-    expect(result.current.isLoading).toBe(false)
   })
 })

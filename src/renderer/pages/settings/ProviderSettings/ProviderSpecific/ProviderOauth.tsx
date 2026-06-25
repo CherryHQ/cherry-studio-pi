@@ -40,12 +40,7 @@ const ProviderOauth: FC<Props> = ({ providerId }) => {
       i18nKey="settings.provider.oauth.description"
       components={{
         website: (
-          <a
-            className="text-inherit hover:underline"
-            href={officialWebsite ?? ''}
-            rel="noopener noreferrer"
-            target="_blank"
-          />
+          <a className="text-inherit hover:underline" href={officialWebsite ?? ''} rel="noreferrer" target="_blank" />
         )
       }}
       values={{ provider: providerWebsite }}

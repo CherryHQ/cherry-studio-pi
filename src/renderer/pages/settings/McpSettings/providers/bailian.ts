@@ -1,10 +1,7 @@
 import { loggerService } from '@logger'
-import type { McpServer } from '@renderer/types'
+import type { McpServer } from '@shared/data/types/mcpServer'
 import i18next from 'i18next'
 import { nanoid } from 'nanoid'
-
-import { fetchWithProviderTimeout, getProviderSyncErrorDetails, getProviderSyncErrorMessage } from './request'
-import { clearMcpProviderToken, getMcpProviderToken, saveMcpProviderToken } from './tokenStorage'
 
 const logger = loggerService.withContext('BailianSyncUtils')
 
@@ -14,16 +11,16 @@ const TOKEN_STORAGE_KEY = 'bailian_token'
 
 // Token 工具函数
 export const saveBailianToken = (token: string): void => {
-  saveMcpProviderToken(TOKEN_STORAGE_KEY, token)
+  localStorage.setItem(TOKEN_STORAGE_KEY, token)
 }
 
 export const getBailianToken = (): string | null => {
-  const token = getMcpProviderToken(TOKEN_STORAGE_KEY)
+  const token = localStorage.getItem(TOKEN_STORAGE_KEY)
   return token
 }
 
 export const clearBailianToken = (): void => {
-  clearMcpProviderToken(TOKEN_STORAGE_KEY)
+  localStorage.removeItem(TOKEN_STORAGE_KEY)
 }
 
 export const hasBailianToken = (): boolean => {
@@ -76,7 +73,7 @@ async function fetchAllMcpServers(token: string): Promise<BailianServer[]> {
   do {
     const url = `${BAILIAN_HOST}/api/v1/mcps/user/list?pageNo=${pageNum}&pageSize=${PAGE_SIZE}`
 
-    const response = await fetchWithProviderTimeout(url, {
+    const response = await fetch(url, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -183,8 +180,8 @@ export const syncBailianServers = async (token: string): Promise<BailianSyncResu
 
     // 其他情况
     logger.error('Bailian sync error:', error as Error)
-    message = getProviderSyncErrorMessage(t, error)
-    errorDetails = getProviderSyncErrorDetails(error)
+    message = t('settings.mcp.sync.error')
+    errorDetails = String(error)
     return {
       success: false,
       message,

@@ -94,14 +94,13 @@ export function useExecutionOverlay(
   // overlay state. Runs as an effect (not in the render body) so the teardown
   // happens after commit, never during a concurrent/abandoned render.
   useEffect(() => {
-    const readers = readersRef.current
     setSnapshots({})
     return () => {
-      for (const r of readers.values()) {
+      for (const r of readersRef.current.values()) {
         r.cancel()
         r.unregister()
       }
-      readers.clear()
+      readersRef.current.clear()
     }
   }, [topicId])
 

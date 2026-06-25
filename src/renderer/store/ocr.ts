@@ -17,7 +17,7 @@
 import type { PayloadAction } from '@reduxjs/toolkit'
 import { createSlice } from '@reduxjs/toolkit'
 import { BUILTIN_OCR_PROVIDERS, DEFAULT_OCR_PROVIDER } from '@renderer/config/ocr'
-import type { OcrProvider, OcrProviderConfig } from '@renderer/types'
+import type { OcrProvider, OcrProviderConfig } from '@renderer/types/ocr'
 
 export interface OcrState {
   providers: OcrProvider[]
@@ -38,12 +38,6 @@ const ocrSlice = createSlice({
     }
   },
   reducers: {
-    hydrateOcrState: (_state, action: PayloadAction<Partial<OcrState>>) => {
-      return {
-        ...initialState,
-        ...action.payload
-      }
-    },
     setOcrProviders(state, action: PayloadAction<OcrProvider[]>) {
       state.providers = action.payload
     },
@@ -78,7 +72,6 @@ const ocrSlice = createSlice({
 })
 
 export const {
-  hydrateOcrState,
   setOcrProviders,
   addOcrProvider,
   removeOcrProvider,

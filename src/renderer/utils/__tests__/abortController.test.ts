@@ -173,21 +173,6 @@ describe('abortController', () => {
       expect(removeEventListenerSpy).toHaveBeenCalledWith('abort', expect.any(Function))
     })
 
-    it('should cleanup event listener without leaking rejection when finallyPromise rejects', async () => {
-      const controller = new AbortController()
-      const finallyPromise = Promise.reject(new Error('backend failed'))
-      const handledFinallyPromise = finallyPromise.catch(() => undefined)
-
-      const removeEventListenerSpy = vi.spyOn(controller.signal, 'removeEventListener')
-
-      void createAbortPromise(controller.signal, finallyPromise)
-
-      await handledFinallyPromise
-      await new Promise((resolve) => setTimeout(resolve, 0))
-
-      expect(removeEventListenerSpy).toHaveBeenCalledWith('abort', expect.any(Function))
-    })
-
     it('should not reject when finallyPromise resolves normally', async () => {
       // 测试正常完成情况
       const controller = new AbortController()

@@ -13,12 +13,17 @@
  * filter (drops embedding / rerank / image-generation models — none of
  * those make sense as chat targets).
  */
+
+import { ENDPOINT_TYPE } from '@cherrystudio/provider-registry'
 import { useProviders } from '@renderer/hooks/useProvider'
 import type { AgentType } from '@shared/data/types/agent'
 import type { Model } from '@shared/data/types/model'
+import { isNonChatModel } from '@shared/utils/model'
 import { useCallback, useMemo } from 'react'
 
-import { isSelectableAgentModel } from './agentModelFilter'
+const NATIVE_ANTHROPIC_PROVIDER_IDS = new Set(['anthropic'])
+
+const baseAgentFilter = (model: Model): boolean => !isNonChatModel(model)
 
 /**
  * Returns a memoized `(model) => boolean` predicate that matches the agent's
@@ -27,12 +32,27 @@ import { isSelectableAgentModel } from './agentModelFilter'
 export function useAgentModelFilter(agentType: AgentType | undefined): (model: Model) => boolean {
   const { providers } = useProviders()
 
-  const providerById = useMemo(() => new Map(providers.map((provider) => [provider.id, provider])), [providers])
+  // Set of provider ids that can serve Anthropic-shaped requests — either the
+  // native `anthropic` adapter or a provider with an explicit
+  // `endpointConfigs['anthropic-messages']` entry.
+  const claudeCompatibleProviderIds = useMemo(() => {
+    const ids = new Set<string>(NATIVE_ANTHROPIC_PROVIDER_IDS)
+    for (const provider of providers) {
+      if (provider.endpointConfigs?.[ENDPOINT_TYPE.ANTHROPIC_MESSAGES]) {
+        ids.add(provider.id)
+      }
+    }
+    return ids
+  }, [providers])
 
   return useCallback(
     (model: Model) => {
-      return isSelectableAgentModel(model, agentType, providerById.get(model.providerId))
+      if (!baseAgentFilter(model)) return false
+      if (agentType === 'claude-code') {
+        return claudeCompatibleProviderIds.has(model.providerId)
+      }
+      return true
     },
-    [agentType, providerById]
+    [agentType, claudeCompatibleProviderIds]
   )
 }

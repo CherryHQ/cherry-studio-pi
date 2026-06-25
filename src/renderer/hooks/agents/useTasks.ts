@@ -29,10 +29,10 @@ export const useCreateTask = () => {
     async (agentId: string, req: CreateTaskRequest): Promise<ScheduledTaskEntity | undefined> => {
       try {
         const result = await createTrigger({ params: { agentId }, body: req as never })
-        window.toast?.success({ key: 'create-task', title: t('common.create_success') })
+        window.toast.success({ key: 'create-task', title: t('common.create_success') })
         return result as unknown as ScheduledTaskEntity
       } catch (error) {
-        window.toast?.error(
+        window.toast.error(
           formatErrorMessageWithPrefix(error, t('agent.cherryClaw.tasks.error.createFailed', 'Failed to create task'))
         )
         return undefined
@@ -52,10 +52,10 @@ export const useUpdateTask = () => {
     async (agentId: string, taskId: string, updates: UpdateTaskRequest): Promise<ScheduledTaskEntity | undefined> => {
       try {
         const result = await updateTrigger({ params: { agentId, taskId }, body: updates as never })
-        window.toast?.success({ key: 'update-task', title: t('common.update_success') })
+        window.toast.success({ key: 'update-task', title: t('common.update_success') })
         return result as unknown as ScheduledTaskEntity
       } catch (error) {
-        window.toast?.error(
+        window.toast.error(
           formatErrorMessageWithPrefix(error, t('agent.cherryClaw.tasks.error.updateFailed', 'Failed to update task'))
         )
         return undefined
@@ -72,10 +72,10 @@ export const useRunTask = () => {
     async (taskId: string): Promise<boolean> => {
       try {
         await ipcApi.request('ai.run_agent_task', taskId)
-        window.toast?.success({ key: 'run-task', title: t('agent.cherryClaw.tasks.runTriggered') })
+        window.toast.success({ key: 'run-task', title: t('agent.cherryClaw.tasks.runTriggered') })
         return true
       } catch (error) {
-        window.toast?.error(
+        window.toast.error(
           formatErrorMessageWithPrefix(error, t('agent.cherryClaw.tasks.error.runFailed', 'Failed to run task'))
         )
         return false
@@ -95,10 +95,10 @@ export const useDeleteTask = () => {
     async (agentId: string, taskId: string): Promise<boolean> => {
       try {
         await deleteTrigger({ params: { agentId, taskId } })
-        window.toast?.success({ key: 'delete-task', title: t('common.delete_success') })
+        window.toast.success({ key: 'delete-task', title: t('common.delete_success') })
         return true
       } catch (error) {
-        window.toast?.error(
+        window.toast.error(
           formatErrorMessageWithPrefix(error, t('agent.cherryClaw.tasks.error.deleteFailed', 'Failed to delete task'))
         )
         return false

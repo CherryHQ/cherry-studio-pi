@@ -17,7 +17,7 @@
 import type { PayloadAction } from '@reduxjs/toolkit'
 import { createSlice } from '@reduxjs/toolkit'
 import type { RootState } from '@renderer/store/index'
-import type { EditorView } from '@renderer/types'
+import type { EditorView } from '@renderer/types/app'
 import type { NotesSortType } from '@renderer/types/note'
 
 export interface NotesSettings {
@@ -64,12 +64,6 @@ const noteSlice = createSlice({
   name: 'note',
   initialState,
   reducers: {
-    hydrateNoteState: (_state, action: PayloadAction<Partial<NoteState>>) => {
-      return {
-        ...initialState,
-        ...action.payload
-      }
-    },
     setActiveNodeId: (state, action: PayloadAction<string | undefined>) => {
       state.activeNodeId = action.payload
     },
@@ -95,7 +89,6 @@ const noteSlice = createSlice({
 })
 
 export const {
-  hydrateNoteState,
   setActiveNodeId,
   setActiveFilePath,
   updateNotesSettings,

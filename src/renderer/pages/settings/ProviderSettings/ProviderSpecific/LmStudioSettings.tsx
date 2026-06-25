@@ -2,7 +2,7 @@ import { EditableNumber } from '@cherrystudio/ui'
 import { loggerService } from '@logger'
 import { useProvider } from '@renderer/hooks/useProvider'
 import type { FC } from 'react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -23,15 +23,6 @@ const LmStudioSettings: FC<Props> = ({ providerId }) => {
 
   const keepAliveTime = provider?.settings?.keepAliveTime ?? 0
   const [keepAliveMinutes, setKeepAliveMinutes] = useState(keepAliveTime)
-  const mountedRef = useRef(true)
-
-  useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
 
   useEffect(() => {
     setKeepAliveMinutes(provider?.settings?.keepAliveTime ?? 0)
@@ -43,10 +34,8 @@ const LmStudioSettings: FC<Props> = ({ providerId }) => {
       await updateProvider({ providerSettings: { ...provider?.settings, keepAliveTime: keepAliveMinutes } })
     } catch (error) {
       logger.error('Failed to save LM Studio keep alive time', { providerId, error })
-      if (mountedRef.current) {
-        window.toast?.error(t('settings.provider.save_failed'))
-        setKeepAliveMinutes(keepAliveTime)
-      }
+      window.toast.error(t('settings.provider.save_failed'))
+      setKeepAliveMinutes(keepAliveTime)
     }
   }
 

@@ -1,5 +1,4 @@
 import { ConfirmDialog } from '@cherrystudio/ui'
-import { getErrorMessage } from '@renderer/utils/error'
 import type { FC } from 'react'
 import { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -79,12 +78,12 @@ const DeleteDialogContent: FC<{ resource: ResourceItem; onClose: () => void; onD
     try {
       await onDelete()
     } catch (error) {
-      window.toast?.error(getErrorMessage(error))
+      window.toast.error(error instanceof Error ? error.message : t('common.delete_failed'))
       throw error
     } finally {
       setPending(false)
     }
-  }, [onDelete])
+  }, [onDelete, t])
 
   const { title, description, confirmText } = useMemo(() => {
     if (resource.type === 'agent') {

@@ -40,13 +40,7 @@ export function ProviderHelpTextRow({ children, className }: { children: ReactNo
   return <div className={cn('flex flex-row items-center py-1.25', className)}>{children}</div>
 }
 
-export function ProviderHelpLink({
-  children,
-  className,
-  rel,
-  target,
-  ...props
-}: React.AnchorHTMLAttributes<HTMLAnchorElement>) {
+export function ProviderHelpLink({ children, className, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) {
   return (
     <a
       className={cn(
@@ -54,8 +48,6 @@ export function ProviderHelpLink({
         providerSettingsTypography.label,
         className
       )}
-      rel={rel ?? (target === '_blank' ? 'noopener noreferrer' : undefined)}
-      target={target}
       {...props}>
       {children}
     </a>

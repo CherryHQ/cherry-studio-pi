@@ -98,7 +98,7 @@ export default function AskUserQuestionComposer({ request, onRespond, className 
           messageId: request.messageId,
           toolCallId: request.toolCallId
         })
-        window.toast?.error?.(t('agent.toolPermission.error.sendFailed'))
+        window.toast.error(t('agent.toolPermission.error.sendFailed'))
         setIsSubmitting(false)
       }
     },

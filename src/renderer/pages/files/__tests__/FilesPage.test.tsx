@@ -4,9 +4,9 @@ import '@testing-library/jest-dom/vitest'
 import type { FileEntryStats } from '@shared/data/api/schemas/files'
 import type { FileEntry } from '@shared/data/types/file'
 import { IpcError } from '@shared/ipc/errors'
-import { fileErrorCodes } from '@shared/ipc/file'
+import { fileErrorCodes } from '@shared/ipc/errors/file'
 import { mockUseInfiniteQuery, mockUseQuery } from '@test-mocks/renderer/useDataApi'
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const platformState = vi.hoisted(() => ({
@@ -505,7 +505,7 @@ describe('FilesPage file operations', () => {
     expect(ipcMocks.request).not.toHaveBeenCalledWith('file.batch_permanent_delete', { ids: [trashedEntry.id] })
     expect(screen.getByText('files.permanent_delete_confirm.title')).toBeInTheDocument()
 
-    fireEvent.click(within(screen.getByRole('dialog')).getByText('files.permanent_delete'))
+    fireEvent.click(screen.getByText('files.permanent_delete'))
 
     await waitFor(() => {
       expect(ipcMocks.request).toHaveBeenCalledWith('file.batch_permanent_delete', { ids: [trashedEntry.id] })

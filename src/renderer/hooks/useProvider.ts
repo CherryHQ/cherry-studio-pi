@@ -35,10 +35,6 @@ function providerRefreshPaths(providerId: string): ConcreteApiPaths[] {
   ]
 }
 
-function providerCatalogRefreshPaths(providerId: string): ConcreteApiPaths[] {
-  return [...providerRefreshPaths(providerId), '/models', '/pins']
-}
-
 // ─── Layer 1: List + Create ────────────────────────────────────────────
 export function useProviders(query?: ListProvidersQuery, options?: { swrOptions?: SWRConfiguration }) {
   const filtered = query ? (omitBy(query, isUndefined) as ListProvidersQuery) : undefined
@@ -58,7 +54,7 @@ export function useProviders(query?: ListProvidersQuery, options?: { swrOptions?
     isLoading: isCreating,
     error: createError
   } = useMutation('POST', '/providers', {
-    refresh: ['/providers', '/models']
+    refresh: ['/providers']
   })
 
   const createProvider = useCallback(
@@ -103,42 +99,40 @@ export function useProvider(providerId: string | null | undefined) {
 // ─── Layer 3: Pure mutations ──────────────────────────────────────────
 export function useProviderMutations(providerId: string) {
   // P0: all mutations refresh list + entity + all sub-paths — no manual invalidate needed.
-  const catalogRefresh = providerCatalogRefreshPaths(providerId)
+  const refresh = providerRefreshPaths(providerId)
 
   const {
     trigger: patchTrigger,
     isLoading: isUpdating,
     error: updateError
-  } = useMutation('PATCH', '/providers/:providerId', { refresh: catalogRefresh })
+  } = useMutation('PATCH', '/providers/:providerId', { refresh })
 
   const {
     trigger: deleteTrigger,
     isLoading: isDeleting,
     error: deleteError
-  } = useMutation('DELETE', '/providers/:providerId', { refresh: catalogRefresh })
+  } = useMutation('DELETE', '/providers/:providerId', { refresh })
 
   // addApiKey/deleteApiKey use template paths so body/response types are schema-inferred.
   const {
     trigger: addApiKeyTrigger,
     isLoading: isAddingApiKey,
     error: addApiKeyError
-  } = useMutation('POST', '/providers/:providerId/api-keys', { refresh: catalogRefresh })
+  } = useMutation('POST', '/providers/:providerId/api-keys', { refresh })
 
   const {
     trigger: deleteApiKeyTrigger,
     isLoading: isDeletingApiKey,
     error: deleteApiKeyError
-  } = useMutation('DELETE', '/providers/:providerId/api-keys/:keyId', { refresh: catalogRefresh })
+  } = useMutation('DELETE', '/providers/:providerId/api-keys/:keyId', { refresh })
 
   const {
     trigger: updateApiKeyTrigger,
     isLoading: isUpdatingApiKey,
     error: updateApiKeyError
-  } = useMutation('PATCH', '/providers/:providerId/api-keys/:keyId', { refresh: catalogRefresh })
+  } = useMutation('PATCH', '/providers/:providerId/api-keys/:keyId', { refresh })
 
-  const { trigger: replaceApiKeysTrigger } = useMutation('PUT', '/providers/:providerId/api-keys', {
-    refresh: catalogRefresh
-  })
+  const { trigger: replaceApiKeysTrigger } = useMutation('PUT', '/providers/:providerId/api-keys', { refresh })
 
   const updateProvider = useCallback(
     async (updates: UpdateProviderDto) => {
@@ -286,12 +280,12 @@ export function useProviderActions() {
   // instance handles any provider ID without needing concrete-path rebinding.
   const { trigger: updateTrigger } = useMutation('PATCH', '/providers/:providerId', {
     // args is always present — callers always supply params.providerId
-    refresh: ({ args }) => providerCatalogRefreshPaths(args!.params.providerId)
+    refresh: ({ args }) => providerRefreshPaths(args!.params.providerId)
   })
 
   const { trigger: deleteTrigger } = useMutation('DELETE', '/providers/:providerId', {
     // args is always present — callers always supply params.providerId
-    refresh: ({ args }) => providerCatalogRefreshPaths(args!.params.providerId)
+    refresh: ({ args }) => providerRefreshPaths(args!.params.providerId)
   })
 
   const updateProviderById = useCallback(

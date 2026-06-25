@@ -42,7 +42,6 @@ export function useFullTextSearch(options: UseFullTextSearchOptions = {}): UseFu
 
   const abortControllerRef = useRef<AbortController | null>(null)
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const mountedRef = useRef(true)
 
   // Store options in refs to avoid reference changes
   const searchOptionsRef = useRef(searchOptions)
@@ -55,7 +54,7 @@ export function useFullTextSearch(options: UseFullTextSearchOptions = {}): UseFu
     enabledRef.current = enabled
   }, [searchOptions, maxResults, enabled])
 
-  const cancelSearch = useCallback((updateSearching = true) => {
+  const cancel = useCallback(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
       abortControllerRef.current = null
@@ -64,14 +63,8 @@ export function useFullTextSearch(options: UseFullTextSearchOptions = {}): UseFu
       clearTimeout(debounceTimerRef.current)
       debounceTimerRef.current = null
     }
-    if (updateSearching && mountedRef.current) {
-      setIsSearching(false)
-    }
+    setIsSearching(false)
   }, [])
-
-  const cancel = useCallback(() => {
-    cancelSearch()
-  }, [cancelSearch])
 
   const reset = useCallback(() => {
     cancel()
@@ -86,14 +79,11 @@ export function useFullTextSearch(options: UseFullTextSearchOptions = {}): UseFu
         return
       }
 
-      cancelSearch(false)
-      const normalizedKeyword = keyword.trim()
+      cancel()
 
-      if (!normalizedKeyword) {
+      if (!keyword) {
         setResults([])
         setStats({ total: 0, fileNameMatches: 0, contentMatches: 0, bothMatches: 0 })
-        setError(null)
-        setIsSearching(false)
         return
       }
 
@@ -106,12 +96,12 @@ export function useFullTextSearch(options: UseFullTextSearchOptions = {}): UseFu
       try {
         const searchResults = await searchAllFiles(
           nodes,
-          normalizedKeyword,
+          keyword.trim(),
           searchOptionsRef.current,
           abortController.signal
         )
 
-        if (abortController.signal.aborted || !mountedRef.current) {
+        if (abortController.signal.aborted) {
           return
         }
 
@@ -127,24 +117,16 @@ export function useFullTextSearch(options: UseFullTextSearchOptions = {}): UseFu
         setResults(limitedResults)
         setStats(newStats)
       } catch (err) {
-        if (
-          !abortController.signal.aborted &&
-          mountedRef.current &&
-          err instanceof Error &&
-          err.name !== 'AbortError'
-        ) {
+        if (err instanceof Error && err.name !== 'AbortError') {
           setError(err)
         }
       } finally {
-        if (abortControllerRef.current === abortController) {
-          abortControllerRef.current = null
-        }
-        if (!abortController.signal.aborted && mountedRef.current) {
+        if (!abortController.signal.aborted) {
           setIsSearching(false)
         }
       }
     },
-    [cancelSearch]
+    [cancel]
   )
 
   const search = useCallback(
@@ -161,12 +143,10 @@ export function useFullTextSearch(options: UseFullTextSearchOptions = {}): UseFu
   )
 
   useEffect(() => {
-    mountedRef.current = true
     return () => {
-      mountedRef.current = false
-      cancelSearch(false)
+      cancel()
     }
-  }, [cancelSearch])
+  }, [cancel])
 
   return {
     search,

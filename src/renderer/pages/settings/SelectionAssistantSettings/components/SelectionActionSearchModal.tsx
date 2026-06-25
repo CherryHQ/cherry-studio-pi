@@ -20,7 +20,6 @@ import {
 } from '@cherrystudio/ui'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { loggerService } from '@logger'
-import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import type { SelectionActionItem } from '@shared/data/preference/preferenceTypes'
 import { Globe } from 'lucide-react'
 import type { FC } from 'react'
@@ -198,10 +197,7 @@ const SelectionActionSearchModal: FC<SelectionActionSearchModalProps> = ({
     const customUrl = form.getValues('customUrl')
     if (customUrl) {
       const testUrl = customUrl.replace('{{queryString}}', 'cherry studio')
-      void window.api.openWebsite(testUrl).catch((error) => {
-        logger.error('Failed to open selection assistant test URL', error as Error)
-        window.toast?.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
-      })
+      void window.api.openWebsite(testUrl)
     }
   }
 

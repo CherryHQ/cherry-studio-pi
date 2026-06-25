@@ -21,9 +21,9 @@ import {
   API_SERVER_DEFAULTS,
   DEFAULT_CONTEXTCOUNT,
   DEFAULT_STREAM_OPTIONS_INCLUDE_USAGE,
-  DEFAULT_TEMPERATURE,
-  defaultByPassRules
+  DEFAULT_TEMPERATURE
 } from '@renderer/config/constant'
+import { defaultByPassRules } from '@renderer/config/constant'
 import { allMiniApps } from '@renderer/config/miniApps'
 import { isFunctionCallingModel, isNotSupportTextDeltaModel, qwenModel, SYSTEM_MODELS } from '@renderer/config/models'
 import { toSharedCompatModel } from '@renderer/config/models/bridge'
@@ -35,20 +35,22 @@ import i18n from '@renderer/i18n'
 import { DEFAULT_ASSISTANT_SETTINGS } from '@renderer/services/AssistantService'
 import store from '@renderer/store'
 import { defaultPreprocessProviders } from '@renderer/store/preprocess'
-import type {
-  BuiltinOcrProvider,
-  LegacyAssistant as Assistant,
-  Model,
-  Provider,
-  ProviderApiOptions,
-  SystemProviderId,
-  WebSearchProvider
-} from '@renderer/types'
-import { isBuiltinMcpServer, isSystemProvider, SystemProviderIds } from '@renderer/types'
-import { getDefaultGroupName, getLeadingEmoji, runAsyncFunction, uuid } from '@renderer/utils'
+import type { LegacyAssistant as Assistant } from '@renderer/types/assistant'
+import type { Model } from '@renderer/types/model'
+import type { BuiltinOcrProvider } from '@renderer/types/ocr'
+import {
+  isSystemProvider,
+  type Provider,
+  type ProviderApiOptions,
+  type SystemProviderId,
+  SystemProviderIds
+} from '@renderer/types/provider'
+import type { WebSearchProvider } from '@renderer/types/webSearchProvider'
+import { getDefaultGroupName, getLeadingEmoji } from '@renderer/utils/naming'
+import { uuid } from '@renderer/utils/uuid'
 import { TRANSLATE_PROMPT } from '@shared/ai/prompts'
-import { DefaultPreferences } from '@shared/data/preference/preferenceSchemas'
 import { parseTranslateLangCode, type TranslateLangCode, UpgradeChannel } from '@shared/data/preference/preferenceTypes'
+import { isBuiltinMcpServer } from '@shared/utils/mcp'
 import { isEmpty } from 'lodash'
 import { createMigrate } from 'redux-persist'
 
@@ -61,16 +63,20 @@ import { initialState as notesInitialState } from './note'
 import { initialState as settingsInitialState } from './settings'
 import { initialState as shortcutsInitialState } from './shortcuts'
 import { defaultWebSearchProviders } from './websearch'
-const logger = loggerService.withContext('Migrate')
 
-function markOnboardingCompletedDuringMigration() {
-  try {
-    if (typeof localStorage === 'undefined') return
-    localStorage.setItem('onboarding-completed', 'true')
-  } catch (error) {
-    logger.warn('migrate 205 skipped onboarding completion localStorage marker', error as Error)
-  }
-}
+const DEFAULT_LEGACY_SIDEBAR_ICONS = [
+  'assistants',
+  'store',
+  'paintings',
+  'translate',
+  'mini_app',
+  'knowledge',
+  'files',
+  'code_tools',
+  'notes'
+]
+
+const logger = loggerService.withContext('Migrate')
 
 // Inlined verbatim from the deleted v1 `@renderer/utils/provider` — this v1
 // Redux-persist migration was its only remaining source consumer.
@@ -695,7 +701,7 @@ const migrateConfig = {
       state.assistants.assistants.forEach((assistant) => {
         assistant.topics.forEach((topic) => {
           topic.assistantId = assistant.id
-          void runAsyncFunction(async () => {
+          void (async () => {
             const _topic = await db.topics.get(topic.id)
             if (_topic) {
               const messages = (_topic?.messages || []).map((message) => ({
@@ -704,7 +710,7 @@ const migrateConfig = {
               }))
               void db.topics.put({ ..._topic, messages }, topic.id)
             }
-          })
+          })()
         })
       })
       return state
@@ -905,7 +911,8 @@ const migrateConfig = {
         })
       }
       state.settings.sidebarIcons = {
-        visible: DefaultPreferences.default['ui.sidebar.icons.visible'],
+        // @ts-ignore eslint-disable-next-line
+        visible: DEFAULT_LEGACY_SIDEBAR_ICONS,
         disabled: []
       }
       return state
@@ -917,7 +924,8 @@ const migrateConfig = {
     try {
       if (!state.settings.sidebarIcons) {
         state.settings.sidebarIcons = {
-          visible: DefaultPreferences.default['ui.sidebar.icons.visible'],
+          // @ts-ignore eslint-disable-next-line
+          visible: DEFAULT_LEGACY_SIDEBAR_ICONS,
           disabled: []
         }
       }
@@ -2302,10 +2310,10 @@ const migrateConfig = {
   '136': (state: RootState) => {
     try {
       state.settings.sidebarIcons.visible = [...new Set(state.settings.sidebarIcons.visible)].filter((icon) =>
-        DefaultPreferences.default['ui.sidebar.icons.visible'].includes(icon)
+        DEFAULT_LEGACY_SIDEBAR_ICONS.includes(icon)
       )
       state.settings.sidebarIcons.disabled = [...new Set(state.settings.sidebarIcons.disabled)].filter((icon) =>
-        DefaultPreferences.default['ui.sidebar.icons.visible'].includes(icon)
+        DEFAULT_LEGACY_SIDEBAR_ICONS.includes(icon)
       )
       return state
     } catch (error) {
@@ -3424,7 +3432,7 @@ const migrateConfig = {
   },
   '205': (state: RootState) => {
     try {
-      markOnboardingCompletedDuringMigration()
+      localStorage.setItem('onboarding-completed', 'true')
 
       // Add anthropicApiHost to lmstudio and ollama providers for CodeTools compatibility
       state.llm.providers.forEach((provider) => {
@@ -3478,16 +3486,6 @@ const migrateConfig = {
       return state
     } catch (error) {
       logger.error('migrate 207 error', error as Error)
-      return state
-    }
-  },
-  '208': (state: RootState) => {
-    try {
-      state.settings.enableDataCollection = true
-      logger.info('migrate 208 success')
-      return state
-    } catch (error) {
-      logger.error('migrate 208 error', error as Error)
       return state
     }
   }
