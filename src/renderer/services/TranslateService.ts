@@ -1,3 +1,4 @@
+import { ipcApi } from '@renderer/ipc'
 import { isTranslateLangCode, type TranslateLangCode } from '@shared/data/preference/preferenceTypes'
 import type { TranslateLanguage } from '@shared/data/types/translate'
 import { t } from 'i18next'
@@ -9,7 +10,7 @@ const TRANSLATE_STREAM_PREFIX = 'translate:'
 /**
  * Translate `text` to `targetLanguage` via main's `Ai_Translate_Open` IPC.
  * Per-chunk `onResponse(accumulated, isComplete)` lets the caller pace the
- * display (see `useSmoothStream`). `signal` aborts via `Ai_Stream_Abort`.
+ * display (see `useSmoothStream`). `signal` aborts via the `ai.stream_abort` route.
  */
 export const translateText = async (
   text: string,
@@ -57,7 +58,7 @@ export const translateText = async (
   return new Promise<string>((resolve, reject) => {
     if (signal) {
       abortListener = () => {
-        void window.api.ai.streamAbort({ topicId: streamId }).catch(() => {
+        void ipcApi.request('ai.stream_abort', { topicId: streamId }).catch(() => {
           // Already aborted / stream gone — the renderer still resolves the user cancel immediately.
         })
         cleanup()
@@ -74,7 +75,7 @@ export const translateText = async (
     // inside `translate.open`, so the first chunk can land between `open()`'s
     // resolve and any post-await subscriber registration.
     unsubscribers.push(
-      window.api.ai.onStreamChunk(({ topicId, chunk }) => {
+      ipcApi.on('ai.stream_chunk', ({ topicId, chunk }) => {
         if (topicId !== streamId) return
         if (
           chunk &&
@@ -88,7 +89,7 @@ export const translateText = async (
     )
 
     unsubscribers.push(
-      window.api.ai.onStreamDone(({ topicId }) => {
+      ipcApi.on('ai.stream_done', ({ topicId }) => {
         if (topicId !== streamId) return
         const trimmed = accumulated.trim()
         cleanup()
@@ -102,7 +103,7 @@ export const translateText = async (
     )
 
     unsubscribers.push(
-      window.api.ai.onStreamError(({ topicId, error }) => {
+      ipcApi.on('ai.stream_error', ({ topicId, error }) => {
         if (topicId !== streamId) return
         cleanup()
         // Preserve error.name (e.g. 'AbortError') so downstream

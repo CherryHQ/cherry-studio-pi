@@ -1,6 +1,5 @@
 import { Button, Input, Slider, Tooltip } from '@cherrystudio/ui'
 import { loggerService } from '@logger'
-import { useCopilot } from '@renderer/hooks/useCopilot'
 import { useProvider } from '@renderer/hooks/useProvider'
 import { cn } from '@renderer/utils'
 import { openHttpExternalUrl } from '@renderer/utils/openExternal'
@@ -26,7 +25,9 @@ enum AuthStatus {
 const GithubCopilotSettings: FC<GithubCopilotSettingsProps> = ({ providerId }) => {
   const { t } = useTranslation()
   const { provider, updateProvider, addApiKey, deleteApiKey } = useProvider(providerId)
-  const { username, avatar, defaultHeaders, updateState } = useCopilot()
+  const username = provider?.settings?.oauthUsername
+  const avatar = provider?.settings?.oauthAvatar
+  const defaultHeaders = provider?.settings?.extraHeaders
 
   const [authStatus, setAuthStatus] = useState<AuthStatus>(AuthStatus.NOT_STARTED)
   const [deviceCode, setDeviceCode] = useState<string>('')
@@ -149,7 +150,6 @@ const GithubCopilotSettings: FC<GithubCopilotSettingsProps> = ({ providerId }) =
           }
         })
 
-        updateState({ username: login, avatar: userAvatar })
         if (mountedRef.current) {
           setAuthStatus(AuthStatus.AUTHENTICATED)
           window.toast?.success(t('settings.provider.copilot.auth_success'))
@@ -172,8 +172,7 @@ const GithubCopilotSettings: FC<GithubCopilotSettingsProps> = ({ providerId }) =
     finishAuthOperation,
     provider?.settings,
     t,
-    updateProvider,
-    updateState
+    updateProvider
   ])
 
   const handleLogout = useCallback(async () => {
@@ -192,13 +191,12 @@ const GithubCopilotSettings: FC<GithubCopilotSettingsProps> = ({ providerId }) =
           ...provider?.settings,
           isAuthed: false,
           oauthUsername: '',
-          oauthAvatar: ''
+          oauthAvatar: '',
+          extraHeaders: {}
         }
       })
 
       await window.api.copilot.logout()
-
-      updateState({ username: '', avatar: '', defaultHeaders: {} })
 
       if (mountedRef.current) {
         setAuthStatus(AuthStatus.NOT_STARTED)
@@ -218,16 +216,7 @@ const GithubCopilotSettings: FC<GithubCopilotSettingsProps> = ({ providerId }) =
     } finally {
       finishAuthOperation()
     }
-  }, [
-    beginAuthOperation,
-    deleteApiKey,
-    finishAuthOperation,
-    provider?.apiKeys,
-    provider?.settings,
-    t,
-    updateProvider,
-    updateState
-  ])
+  }, [beginAuthOperation, deleteApiKey, finishAuthOperation, provider?.apiKeys, provider?.settings, t, updateProvider])
 
   const handleCopyUserCode = useCallback(async () => {
     try {

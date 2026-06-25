@@ -3,7 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useEmbeddingDimensions } from '../useEmbeddingDimensions'
 
-const mockEmbedMany = vi.fn()
+const { mockEmbedMany } = vi.hoisted(() => ({ mockEmbedMany: vi.fn() }))
+
+vi.mock('@renderer/ipc', () => ({
+  ipcApi: { request: (_route: string, input: unknown) => mockEmbedMany(input) }
+}))
 
 type Deferred<T> = {
   promise: Promise<T>
@@ -18,16 +22,6 @@ function deferred<T>(): Deferred<T> {
 
   return { promise, resolve }
 }
-
-Object.assign(window, {
-  api: {
-    ...(window as typeof window & { api?: { ai?: Record<string, unknown> } }).api,
-    ai: {
-      ...(window as typeof window & { api?: { ai?: Record<string, unknown> } }).api?.ai,
-      embedMany: mockEmbedMany
-    }
-  }
-})
 
 describe('useEmbeddingDimensions', () => {
   beforeEach(() => {

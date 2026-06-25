@@ -4,6 +4,7 @@
 import { preferenceService } from '@data/PreferenceService'
 import { loggerService } from '@logger'
 import i18n from '@renderer/i18n'
+import { ipcApi } from '@renderer/ipc'
 import type { Assistant } from '@renderer/types'
 import type { ExportableMessage } from '@renderer/types/messageExport'
 import { removeSpecialCharactersForTopicName } from '@renderer/utils'
@@ -48,7 +49,7 @@ export async function fetchMessagesSummary({
   const conversation = JSON.stringify(structuredMessages)
 
   try {
-    const { text } = await window.api.ai.generateText({
+    const { text } = await ipcApi.request('ai.generate_text', {
       uniqueModelId: model.id,
       system: prompt,
       prompt: conversation
@@ -78,7 +79,7 @@ export async function fetchNoteSummary({ content }: { content: string; assistant
   const purifiedContent = purifyMarkdownImages(content.substring(0, 2000))
 
   try {
-    const { text } = await window.api.ai.generateText({
+    const { text } = await ipcApi.request('ai.generate_text', {
       uniqueModelId: model.id,
       system: prompt,
       prompt: purifiedContent
@@ -107,7 +108,7 @@ export async function fetchGenerate({
       if (throwOnError) throw new Error(i18n.t('error.model.not_exists'))
       return ''
     }
-    const { text } = await window.api.ai.generateText({
+    const { text } = await ipcApi.request('ai.generate_text', {
       uniqueModelId: resolvedModel.id,
       system: prompt,
       prompt: content
@@ -122,7 +123,7 @@ export async function fetchGenerate({
 
 export async function fetchModels(provider: Provider): Promise<Partial<Model>[]> {
   try {
-    return await window.api.ai.listModels({ providerId: provider.id })
+    return await ipcApi.request('ai.list_models', { providerId: provider.id })
   } catch (error) {
     logger.error('Failed to fetch models from provider', {
       providerId: provider.id,
@@ -138,7 +139,7 @@ export async function checkApi(
   options?: { timeout?: number; signal?: AbortSignal }
 ): Promise<{ latency: number }> {
   options?.signal?.throwIfAborted()
-  return await window.api.ai.checkModel({
+  return await ipcApi.request('ai.check_model', {
     uniqueModelId,
     timeout: options?.timeout ?? 15000
   })

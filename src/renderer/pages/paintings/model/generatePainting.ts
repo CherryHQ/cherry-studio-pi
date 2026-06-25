@@ -1,3 +1,4 @@
+import { ipcApi } from '@renderer/ipc'
 import type { FileMetadata, GenerateImageParams } from '@renderer/types'
 
 import { fileEntryToMetadata } from '../utils/fileEntryAdapter'
@@ -6,7 +7,7 @@ import type { PaintingProviderRuntime } from './types/paintingProviderRuntime'
 
 /**
  * Shared painting generate skeleton. Image generation runs in the MAIN process
- * via the `Ai_GenerateImage` IPC (`window.api.ai.generateImage`): main resolves
+ * via the `ai.generate_image` IpcApi route (`ipcApi.request`): main resolves
  * the provider from `uniqueModelId`, builds the AI SDK image request (including
  * per-vendor `providerOptions` via `buildImageProviderOptions`), runs any async
  * submit/poll loop, and returns base64 data URLs. The renderer only maps the
@@ -64,31 +65,38 @@ export function generatePainting(opts: GeneratePaintingOptions): Promise<FileMet
     const inputImages = (aiSdkParams.inputImages ?? []).filter((img): img is string => typeof img === 'string')
 
     const requestId = crypto.randomUUID()
-    const onAbort = () => window.api.ai.abortImage(requestId)
+    const onAbort = () => void ipcApi.request('ai.abort_image', { requestId })
     opts.signal.addEventListener('abort', onAbort, { once: true })
     try {
-      const result = await window.api.ai.generateImage(
-        {
-          uniqueModelId: `${opts.provider.id}::${opts.modelId}`,
-          prompt: opts.prompt,
-          ...(inputImages.length > 0 && { inputImages }),
-          ...(aiSdkParams.batchSize !== undefined && { n: aiSdkParams.batchSize }),
-          ...(aiSdkParams.imageSize && { size: aiSdkParams.imageSize }),
-          ...(aiSdkParams.negativePrompt && { negativePrompt: aiSdkParams.negativePrompt }),
-          ...(seed !== undefined && { seed }),
-          ...(aiSdkParams.quality && { quality: aiSdkParams.quality }),
-          ...(aiSdkParams.numInferenceSteps !== undefined && { numInferenceSteps: aiSdkParams.numInferenceSteps }),
-          ...(aiSdkParams.guidanceScale !== undefined && { guidanceScale: aiSdkParams.guidanceScale }),
-          ...(aiSdkParams.promptEnhancement !== undefined && { promptEnhancement: aiSdkParams.promptEnhancement }),
-          ...(aiSdkParams.personGeneration && { personGeneration: aiSdkParams.personGeneration }),
-          ...(aiSdkParams.aspectRatio && { aspectRatio: aiSdkParams.aspectRatio }),
-          ...(aiSdkParams.background && { background: aiSdkParams.background }),
-          ...(aiSdkParams.moderation && { moderation: aiSdkParams.moderation }),
-          ...(aiSdkParams.style && { style: aiSdkParams.style }),
-          ...(providerBag && { providerOptions: { [opts.provider.id]: providerBag } })
-        },
-        requestId
-      )
+      const result = await ipcApi
+        .request('ai.generate_image', {
+          requestId,
+          payload: {
+            uniqueModelId: `${opts.provider.id}::${opts.modelId}`,
+            prompt: opts.prompt,
+            ...(inputImages.length > 0 && { inputImages }),
+            ...(aiSdkParams.batchSize !== undefined && { n: aiSdkParams.batchSize }),
+            ...(aiSdkParams.imageSize && { size: aiSdkParams.imageSize }),
+            ...(aiSdkParams.negativePrompt && { negativePrompt: aiSdkParams.negativePrompt }),
+            ...(seed !== undefined && { seed }),
+            ...(aiSdkParams.quality && { quality: aiSdkParams.quality }),
+            ...(aiSdkParams.numInferenceSteps !== undefined && { numInferenceSteps: aiSdkParams.numInferenceSteps }),
+            ...(aiSdkParams.guidanceScale !== undefined && { guidanceScale: aiSdkParams.guidanceScale }),
+            ...(aiSdkParams.promptEnhancement !== undefined && { promptEnhancement: aiSdkParams.promptEnhancement }),
+            ...(aiSdkParams.personGeneration && { personGeneration: aiSdkParams.personGeneration }),
+            ...(aiSdkParams.aspectRatio && { aspectRatio: aiSdkParams.aspectRatio }),
+            ...(aiSdkParams.background && { background: aiSdkParams.background }),
+            ...(aiSdkParams.moderation && { moderation: aiSdkParams.moderation }),
+            ...(aiSdkParams.style && { style: aiSdkParams.style }),
+            ...(providerBag && { providerOptions: { [opts.provider.id]: providerBag } })
+          }
+        })
+        // A failure now crosses IpcApi as an IpcError, so an abort would no
+        // longer satisfy runPainting's silent-cancel check unless we restore it.
+        .catch((error) => {
+          if (opts.signal.aborted) throw createImageAbortError()
+          throw error
+        })
 
       if (opts.signal.aborted) {
         throw createImageAbortError()

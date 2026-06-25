@@ -28,6 +28,12 @@ vi.mock('@renderer/i18n', () => ({
   }
 }))
 
+vi.mock('@renderer/ipc', () => ({
+  ipcApi: {
+    request: (_route: string, input: unknown) => mocks.listModels(input)
+  }
+}))
+
 vi.mock('../ModelService', () => ({
   readDefaultModel: vi.fn(),
   readQuickModel: vi.fn()
@@ -36,13 +42,6 @@ vi.mock('../ModelService', () => ({
 describe('ApiService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    Object.assign(window, {
-      api: {
-        ai: {
-          listModels: mocks.listModels
-        }
-      }
-    })
   })
 
   it('preserves nested model listing errors in logs', async () => {

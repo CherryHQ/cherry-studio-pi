@@ -3,32 +3,36 @@ import { act, renderHook } from '@testing-library/react'
 import { createElement, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+const { ipcRequest, ipcOn } = vi.hoisted(() => ({
+  ipcRequest: vi.fn(),
+  ipcOn: vi.fn()
+}))
+
+vi.mock('@renderer/ipc', () => ({
+  ipcApi: {
+    request: ipcRequest,
+    on: ipcOn
+  }
+}))
+
 import { useTranslateMessage } from '../useTranslateMessage'
 
 /**
  * Regression: rendered with NO `TranslationOverlaySetterProvider` ancestor
  * (the agent-session / quick-assistant case), the hook must not throw and
- * `translate` must be a safe no-op — it used to crash via the strict
- * `useTranslationOverlaySetter()` guard.
+ * `translate` must be a safe no-op.
  */
 describe('useTranslateMessage', () => {
   const translateOpen = vi.fn()
-  const streamAbort = vi.fn()
-  const onStreamChunk = vi.fn()
-  const onStreamDone = vi.fn()
-  const onStreamError = vi.fn()
 
   beforeEach(() => {
     translateOpen.mockResolvedValue(undefined)
-    streamAbort.mockResolvedValue(undefined)
-    onStreamChunk.mockReturnValue(vi.fn())
-    onStreamDone.mockReturnValue(vi.fn())
-    onStreamError.mockReturnValue(vi.fn())
+    ipcRequest.mockResolvedValue(undefined)
+    ipcOn.mockReturnValue(vi.fn())
 
     vi.stubGlobal('window', {
       api: {
-        translate: { open: translateOpen },
-        ai: { streamAbort, onStreamChunk, onStreamDone, onStreamError }
+        translate: { open: translateOpen }
       }
     } as unknown as Window & typeof globalThis)
   })
@@ -42,7 +46,7 @@ describe('useTranslateMessage', () => {
     expect(() => renderHook(() => useTranslateMessage('msg-1'))).not.toThrow()
   })
 
-  it('translate() is a no-op (never opens a stream) when no overlay sink', async () => {
+  it('translate() is a no-op when no overlay sink is mounted', async () => {
     const { result } = renderHook(() => useTranslateMessage('msg-1'))
 
     await act(async () => {
@@ -57,9 +61,8 @@ describe('useTranslateMessage', () => {
     const unsubChunk = vi.fn()
     const unsubDone = vi.fn()
     const unsubError = vi.fn()
-    onStreamChunk.mockReturnValueOnce(unsubChunk)
-    onStreamDone.mockReturnValueOnce(unsubDone)
-    onStreamError.mockReturnValueOnce(unsubError)
+    ipcOn.mockReset()
+    ipcOn.mockReturnValueOnce(unsubChunk).mockReturnValueOnce(unsubDone).mockReturnValueOnce(unsubError)
 
     const wrapper = ({ children }: { children: ReactNode }) =>
       createElement(TranslationOverlaySetterProvider, { value: setOverlay }, children)
@@ -76,7 +79,7 @@ describe('useTranslateMessage', () => {
     })
 
     const streamId = translateOpen.mock.calls[0][0].streamId
-    expect(streamAbort).toHaveBeenCalledWith({ topicId: streamId })
+    expect(ipcRequest).toHaveBeenCalledWith('ai.stream_abort', { topicId: streamId })
     expect(setOverlay).toHaveBeenLastCalledWith('msg-1', null)
     expect(unsubChunk).toHaveBeenCalledOnce()
     expect(unsubDone).toHaveBeenCalledOnce()

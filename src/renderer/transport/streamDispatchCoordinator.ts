@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { ipcApi } from '@renderer/ipc'
 import { getErrorMessage } from '@renderer/utils/error'
 import type { AiStreamOpenRequest, AiStreamOpenResponse } from '@shared/ai/transport'
 
@@ -26,8 +27,8 @@ function notify(result: StreamDispatchResult): void {
 
 export const streamDispatchCoordinator = {
   dispatch(topicId: string, request: AiStreamOpenRequest): void {
-    window.api.ai
-      .streamOpen(request)
+    ipcApi
+      .request('ai.stream_open', request)
       .then((ack) => {
         if (ack.mode === 'blocked') {
           window.toast?.error(ack.message)

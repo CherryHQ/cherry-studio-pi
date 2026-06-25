@@ -5,6 +5,7 @@ import { useSession } from '@renderer/hooks/agents/useSession'
 import { ChatContextProvider, useChatContextProvider } from '@renderer/hooks/useChatContext'
 import { useSettings } from '@renderer/hooks/useSettings'
 import { useTimer } from '@renderer/hooks/useTimer'
+import { ipcApi } from '@renderer/ipc'
 import { PartsProvider } from '@renderer/pages/home/Messages/Blocks'
 import { ChatVirtualList, type ChatVirtualListHandle } from '@renderer/pages/home/Messages/ChatVirtualList'
 import MessageAnchorLine from '@renderer/pages/home/Messages/MessageAnchorLine'
@@ -132,11 +133,11 @@ const AgentSessionMessages = ({
   }, [scrollToBottom])
 
   useEffect(() => {
-    void window.api.ai.prewarmAgentSession({ sessionId }).catch((error) => {
+    void ipcApi.request('ai.prewarm_agent_session', { sessionId }).catch((error) => {
       logger.warn('Failed to prewarm agent session', error as Error)
     })
     return () => {
-      void window.api.ai.closeAgentSessionWarm({ sessionId }).catch((error) => {
+      void ipcApi.request('ai.close_agent_session_warm', { sessionId }).catch((error) => {
         logger.warn('Failed to close agent session warm query', error as Error)
       })
     }

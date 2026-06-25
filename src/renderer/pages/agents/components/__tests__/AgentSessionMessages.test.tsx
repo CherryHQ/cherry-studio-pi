@@ -108,6 +108,12 @@ vi.mock('@renderer/services/MessagesService', () => ({
   getGroupedMessages: mocks.getGroupedMessages
 }))
 
+// The mount effect fires ipcApi.request('ai.prewarm_agent_session' / 'ai.close_agent_session_warm');
+// a static mock keeps it from crashing (this suite doesn't assert on the warm-up calls).
+vi.mock('@renderer/ipc', () => ({
+  ipcApi: { request: vi.fn().mockResolvedValue(undefined), on: vi.fn(() => () => {}) }
+}))
+
 describe('AgentSessionMessages', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -117,15 +123,6 @@ describe('AgentSessionMessages', () => {
     mocks.setTimeoutTimer.mockImplementation((_key: string, fn: () => void) => {
       fn()
       return vi.fn()
-    })
-    Object.defineProperty(window, 'api', {
-      configurable: true,
-      value: {
-        ai: {
-          prewarmAgentSession: mocks.prewarmAgentSession,
-          closeAgentSessionWarm: mocks.closeAgentSessionWarm
-        }
-      }
     })
   })
 
