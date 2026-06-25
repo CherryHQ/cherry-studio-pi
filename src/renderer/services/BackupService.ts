@@ -4,7 +4,6 @@ import db from '@renderer/databases'
 import { upgradeToV7, upgradeToV8 } from '@renderer/databases/upgrades'
 import i18n from '@renderer/i18n'
 import store, { handleSaveData } from '@renderer/store'
-import { setLocalBackupSyncState, setS3SyncState, setWebDAVSyncState } from '@renderer/store/backup'
 import type { S3Config, WebDavConfig } from '@renderer/types'
 import { uuid } from '@renderer/utils'
 import { formatErrorMessageWithPrefix, getErrorMessage } from '@renderer/utils/error'
@@ -172,6 +171,35 @@ function requestRelaunchAfterRestore(source: string) {
       window.toast?.error(formatErrorMessageWithPrefix(error, i18n.t('common.operation_failed')))
     }
   }, 1000)
+}
+
+export interface RemoteSyncState {
+  lastSyncTime: number | null
+  syncing: boolean
+  lastSyncError: string | null
+}
+
+// Session-local, non-reactive sync status. BackupService is slated for replacement and v2 can no
+// longer perform real backups, so this only needs to stay internally consistent: the auto-sync
+// scheduler writes timestamps here and reads them back; the settings UI reads it best-effort.
+const backupSyncState: Record<'webdavSync' | 'localBackupSync' | 's3Sync', RemoteSyncState> = {
+  webdavSync: { lastSyncTime: null, syncing: false, lastSyncError: null },
+  localBackupSync: { lastSyncTime: null, syncing: false, lastSyncError: null },
+  s3Sync: { lastSyncTime: null, syncing: false, lastSyncError: null }
+}
+
+export const getBackupSyncState = () => backupSyncState
+
+const setWebDAVSyncState = (patch: Partial<RemoteSyncState>) => {
+  Object.assign(backupSyncState.webdavSync, patch)
+}
+
+const setS3SyncState = (patch: Partial<RemoteSyncState>) => {
+  Object.assign(backupSyncState.s3Sync, patch)
+}
+
+const setLocalBackupSyncState = (patch: Partial<RemoteSyncState>) => {
+  Object.assign(backupSyncState.localBackupSync, patch)
 }
 
 // 重试删除S3文件的辅助函数
@@ -395,7 +423,7 @@ export async function backupToWebdav({
 
   isManualBackupRunning = true
 
-  store.dispatch(setWebDAVSyncState({ syncing: true, lastSyncError: null }))
+  setWebDAVSyncState({ syncing: true, lastSyncError: null })
 
   const {
     webdavHost,
@@ -432,11 +460,9 @@ export async function backupToWebdav({
       disableStream: webdavDisableStream
     })
     if (success) {
-      store.dispatch(
-        setWebDAVSyncState({
-          lastSyncError: null
-        })
-      )
+      setWebDAVSyncState({
+        lastSyncError: null
+      })
       void notificationService.send({
         id: uuid(),
         type: 'success',
@@ -498,7 +524,7 @@ export async function backupToWebdav({
         throw new Error(i18n.t('message.backup.failed'))
       }
 
-      store.dispatch(setWebDAVSyncState({ lastSyncError: 'Backup failed' }))
+      setWebDAVSyncState({ lastSyncError: 'Backup failed' })
       showMessage && window.toast?.error(i18n.t('message.backup.failed'))
     }
   } catch (error: any) {
@@ -517,18 +543,16 @@ export async function backupToWebdav({
       source: 'backup',
       channel: 'system'
     })
-    store.dispatch(setWebDAVSyncState({ lastSyncError: errorMessage }))
+    setWebDAVSyncState({ lastSyncError: errorMessage })
     showMessage && window.toast?.error(formatErrorMessageWithPrefix(error, i18n.t('message.backup.failed')))
     logger.error('[Backup] backupToWebdav: Error uploading file to WebDAV:', error)
     throw error
   } finally {
     if (!autoBackupProcess) {
-      store.dispatch(
-        setWebDAVSyncState({
-          lastSyncTime: Date.now(),
-          syncing: false
-        })
-      )
+      setWebDAVSyncState({
+        lastSyncTime: Date.now(),
+        syncing: false
+      })
     }
     isManualBackupRunning = false
   }
@@ -585,7 +609,7 @@ export async function backupToS3({
 
   isManualBackupRunning = true
 
-  store.dispatch(setS3SyncState({ syncing: true, lastSyncError: null }))
+  setS3SyncState({ syncing: true, lastSyncError: null })
 
   const s3Config = getS3BackupSettings()
   let deviceType = 'unknown'
@@ -610,13 +634,11 @@ export async function backupToS3({
     })
 
     if (success) {
-      store.dispatch(
-        setS3SyncState({
-          lastSyncError: null,
-          syncing: false,
-          lastSyncTime: Date.now()
-        })
-      )
+      setS3SyncState({
+        lastSyncError: null,
+        syncing: false,
+        lastSyncTime: Date.now()
+      })
       void notificationService.send({
         id: uuid(),
         type: 'success',
@@ -664,7 +686,7 @@ export async function backupToS3({
         throw new Error(i18n.t('message.backup.failed'))
       }
 
-      store.dispatch(setS3SyncState({ lastSyncError: 'Backup failed' }))
+      setS3SyncState({ lastSyncError: 'Backup failed' })
       showMessage && window.toast?.error(i18n.t('message.backup.failed'))
     }
   } catch (error: any) {
@@ -682,18 +704,16 @@ export async function backupToS3({
       source: 'backup',
       channel: 'system'
     })
-    store.dispatch(setS3SyncState({ lastSyncError: errorMessage }))
+    setS3SyncState({ lastSyncError: errorMessage })
     logger.error('backupToS3: Error uploading file to S3:', error)
     showMessage && window.toast?.error(formatErrorMessageWithPrefix(error, i18n.t('message.backup.failed')))
     throw error
   } finally {
     if (!autoBackupProcess) {
-      store.dispatch(
-        setS3SyncState({
-          lastSyncTime: Date.now(),
-          syncing: false
-        })
-      )
+      setS3SyncState({
+        lastSyncTime: Date.now(),
+        syncing: false
+      })
     }
     isManualBackupRunning = false
   }
@@ -870,7 +890,7 @@ export function startAutoSync(immediate = false, type?: BackupType) {
     let logPrefix: string
 
     // 根据备份类型获取相应的配置和状态
-    const backup = store.getState().backup
+    const backup = getBackupSyncState()
 
     if (backupType === 'webdav') {
       if (webdavSyncTimeout) {
@@ -987,31 +1007,25 @@ export function startAutoSync(immediate = false, type?: BackupType) {
 
           if (backupType === 'webdav') {
             await backupToWebdav({ autoBackupProcess: true })
-            store.dispatch(
-              setWebDAVSyncState({
-                lastSyncError: null,
-                lastSyncTime: Date.now(),
-                syncing: false
-              })
-            )
+            setWebDAVSyncState({
+              lastSyncError: null,
+              lastSyncTime: Date.now(),
+              syncing: false
+            })
           } else if (backupType === 's3') {
             await backupToS3({ autoBackupProcess: true })
-            store.dispatch(
-              setS3SyncState({
-                lastSyncError: null,
-                lastSyncTime: Date.now(),
-                syncing: false
-              })
-            )
+            setS3SyncState({
+              lastSyncError: null,
+              lastSyncTime: Date.now(),
+              syncing: false
+            })
           } else if (backupType === 'local') {
             await backupToLocal({ autoBackupProcess: true })
-            store.dispatch(
-              setLocalBackupSyncState({
-                lastSyncError: null,
-                lastSyncTime: Date.now(),
-                syncing: false
-              })
-            )
+            setLocalBackupSyncState({
+              lastSyncError: null,
+              lastSyncTime: Date.now(),
+              syncing: false
+            })
           }
 
           scheduleNextBackup('fromNow', backupType)
@@ -1022,29 +1036,23 @@ export function startAutoSync(immediate = false, type?: BackupType) {
             logger.error(`${logPrefix} Auto backup failed after all retries:`, error)
 
             if (backupType === 'webdav') {
-              store.dispatch(
-                setWebDAVSyncState({
-                  lastSyncError: 'Auto backup failed',
-                  lastSyncTime: Date.now(),
-                  syncing: false
-                })
-              )
+              setWebDAVSyncState({
+                lastSyncError: 'Auto backup failed',
+                lastSyncTime: Date.now(),
+                syncing: false
+              })
             } else if (backupType === 's3') {
-              store.dispatch(
-                setS3SyncState({
-                  lastSyncError: 'Auto backup failed',
-                  lastSyncTime: Date.now(),
-                  syncing: false
-                })
-              )
+              setS3SyncState({
+                lastSyncError: 'Auto backup failed',
+                lastSyncTime: Date.now(),
+                syncing: false
+              })
             } else if (backupType === 'local') {
-              store.dispatch(
-                setLocalBackupSyncState({
-                  lastSyncError: 'Auto backup failed',
-                  lastSyncTime: Date.now(),
-                  syncing: false
-                })
-              )
+              setLocalBackupSyncState({
+                lastSyncError: 'Auto backup failed',
+                lastSyncTime: Date.now(),
+                syncing: false
+              })
             }
 
             const errorMessage = getBackupErrorMessage(error)
@@ -1245,7 +1253,7 @@ export async function backupToLocal({
 
   isManualBackupRunning = true
 
-  store.dispatch(setLocalBackupSyncState({ syncing: true, lastSyncError: null }))
+  setLocalBackupSyncState({ syncing: true, lastSyncError: null })
 
   const {
     localBackupDir: localBackupDirSetting,
@@ -1275,11 +1283,9 @@ export async function backupToLocal({
     })
 
     if (result) {
-      store.dispatch(
-        setLocalBackupSyncState({
-          lastSyncError: null
-        })
-      )
+      setLocalBackupSyncState({
+        lastSyncError: null
+      })
 
       if (showMessage) {
         void notificationService.send({
@@ -1323,11 +1329,9 @@ export async function backupToLocal({
         throw new Error(i18n.t('message.backup.failed'))
       }
 
-      store.dispatch(
-        setLocalBackupSyncState({
-          lastSyncError: 'Backup failed'
-        })
-      )
+      setLocalBackupSyncState({
+        lastSyncError: 'Backup failed'
+      })
 
       if (showMessage) {
         window.modal.error({
@@ -1346,11 +1350,9 @@ export async function backupToLocal({
 
     logger.error('[LocalBackup] Backup failed:', error)
 
-    store.dispatch(
-      setLocalBackupSyncState({
-        lastSyncError: errorMessage
-      })
-    )
+    setLocalBackupSyncState({
+      lastSyncError: errorMessage
+    })
 
     if (showMessage) {
       window.modal.error({
@@ -1362,12 +1364,10 @@ export async function backupToLocal({
     throw error
   } finally {
     if (!autoBackupProcess) {
-      store.dispatch(
-        setLocalBackupSyncState({
-          lastSyncTime: Date.now(),
-          syncing: false
-        })
-      )
+      setLocalBackupSyncState({
+        lastSyncTime: Date.now(),
+        syncing: false
+      })
     }
     isManualBackupRunning = false
   }

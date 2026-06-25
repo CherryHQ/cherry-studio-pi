@@ -239,16 +239,26 @@ vi.mock('@cherrystudio/ui', () => {
       React.createElement('div', { ...props, 'data-testid': 'accordion-content' }, children),
     ContextMenu: ({ children, ...props }) =>
       React.createElement('div', { ...props, 'data-testid': 'context-menu' }, children),
-    ContextMenuTrigger: ({ children, ...props }) =>
-      React.createElement('div', { ...props, 'data-testid': 'context-menu-trigger' }, children),
+    ContextMenuTrigger: ({ asChild, children, ...props }) => {
+      if (asChild && React.isValidElement(children)) {
+        return React.cloneElement(children, {
+          ...props,
+          ...(children.props || {}),
+          'data-testid': 'context-menu-trigger'
+        })
+      }
+      return React.createElement('div', { ...props, 'data-testid': 'context-menu-trigger' }, children)
+    },
     ContextMenuContent: ({ children, ...props }) =>
       React.createElement('div', { ...props, 'data-testid': 'context-menu-content' }, children),
-    ContextMenuItem: ({ children, onSelect, ...props }) =>
+    ContextMenuItem: ({ children, onSelect, variant: _variant, ...props }) =>
       React.createElement(
         'button',
         { ...props, type: 'button', onClick: onSelect, 'data-testid': 'context-menu-item' },
         children
       ),
+    ContextMenuItemContent: ({ badge, children, hasSubmenu: _hasSubmenu, icon }) =>
+      React.createElement('span', { 'data-testid': 'context-menu-item-content' }, icon, children, badge),
     ContextMenuSeparator: (props) => React.createElement('div', { ...props, 'data-testid': 'context-menu-separator' }),
     ImagePreviewContextMenu: ({ actions = [], children, context, item }) =>
       React.createElement(
@@ -328,12 +338,12 @@ vi.mock('@cherrystudio/ui', () => {
         ),
         React.createElement('button', { 'aria-label': labels.close, onClick: onClose, type: 'button' }, labels.close)
       ),
-    ImagePreviewTrigger: ({ alt, item, ...props }) =>
+    ImagePreviewTrigger: ({ alt, dialogProps: _dialogProps, item, items: _items, ...props }) =>
       React.createElement('img', { ...props, alt: alt ?? item?.alt, src: item?.src }),
     Dialog: ({ children, open, ...props }) =>
       open ? React.createElement('div', { ...props, 'data-testid': 'dialog' }, children) : null,
     DialogContent: ({ children, ...props }) =>
-      React.createElement('div', { ...props, 'data-testid': 'dialog-content' }, children),
+      React.createElement('div', { ...props, role: props.role ?? 'dialog', 'data-testid': 'dialog-content' }, children),
     DialogHeader: ({ children, ...props }) =>
       React.createElement('div', { ...props, 'data-testid': 'dialog-header' }, children),
     DialogTitle: ({ children, ...props }) =>

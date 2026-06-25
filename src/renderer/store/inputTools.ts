@@ -16,7 +16,7 @@
  */
 import type { PayloadAction } from '@reduxjs/toolkit'
 import { createSlice } from '@reduxjs/toolkit'
-import type { InputbarScope } from '@renderer/pages/home/Inputbar/types'
+import type { ComposerToolScope } from '@renderer/components/composer/tools/types'
 import { TopicType } from '@renderer/types'
 import type { InputBarToolType } from '@renderer/types/chat'
 
@@ -48,7 +48,7 @@ export const DEFAULT_TOOL_ORDER: ToolOrder = {
 // It is retained here so Redux-persisted state carrying the old key still typechecks.
 // Both entries will be collapsed to 'quick-assistant' alone when Redux is removed and the
 // corresponding persisted data is migrated out.
-export const DEFAULT_TOOL_ORDER_BY_SCOPE: Record<InputbarScope | 'mini-window', ToolOrder> = {
+export const DEFAULT_TOOL_ORDER_BY_SCOPE: Record<ComposerToolScope | 'mini-window', ToolOrder> = {
   [TopicType.Chat]: DEFAULT_TOOL_ORDER,
   [TopicType.Session]: {
     visible: ['create_session', 'permission_mode', 'slash_commands', 'attachment'],
@@ -60,6 +60,13 @@ export const DEFAULT_TOOL_ORDER_BY_SCOPE: Record<InputbarScope | 'mini-window', 
   },
   'quick-assistant': {
     visible: ['attachment', 'mention_models', 'quick_phrases'],
+    hidden: []
+  },
+  // Required for type exhaustiveness; painting tool visibility is driven by the
+  // registry's visibleInScopes (both attachment and quick_phrases), not this map —
+  // selectToolOrderForScope returns the chat order for any non-Session scope.
+  painting: {
+    visible: ['attachment'],
     hidden: []
   }
 }
@@ -86,7 +93,7 @@ const inputToolsSlice = createSlice({
         ...action.payload
       }
     },
-    setToolOrder: (state, action: PayloadAction<{ scope: InputbarScope; toolOrder: ToolOrder }>) => {
+    setToolOrder: (state, action: PayloadAction<{ scope: ComposerToolScope; toolOrder: ToolOrder }>) => {
       if (action.payload.scope === TopicType.Session) {
         state.sessionToolOrder = action.payload.toolOrder
       } else {
@@ -102,7 +109,10 @@ const inputToolsSlice = createSlice({
 export const { hydrateInputToolsState, setToolOrder, setIsCollapsed } = inputToolsSlice.actions
 
 // Selector to get tool order for a specific scope
-export const selectToolOrderForScope = (state: { inputTools: InputToolsState }, scope: InputbarScope): ToolOrder => {
+export const selectToolOrderForScope = (
+  state: { inputTools: InputToolsState },
+  scope: ComposerToolScope
+): ToolOrder => {
   return scope === TopicType.Session ? state.inputTools.sessionToolOrder : state.inputTools.toolOrder
 }
 

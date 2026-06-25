@@ -1,7 +1,7 @@
 import { loggerService } from '@logger'
-import { nanoid } from '@reduxjs/toolkit'
 import { getMcpServerType, type McpServer } from '@renderer/types'
 import i18next from 'i18next'
+import { nanoid } from 'nanoid'
 
 import { fetchWithProviderTimeout, getProviderSyncErrorDetails, getProviderSyncErrorMessage } from './request'
 import { clearMcpProviderToken, getMcpProviderToken, saveMcpProviderToken } from './tokenStorage'

@@ -48,6 +48,8 @@ function getNutstoreSettings() {
   }
 }
 
+export const getNutstoreSyncState = () => store.getState().nutstore.nutstoreSyncState
+
 function getNutstoreToken() {
   const { nutstoreToken } = getNutstoreSettings()
 
@@ -77,7 +79,7 @@ async function createNutstoreConfig(nutstoreToken: string): Promise<WebDavConfig
 }
 
 export async function checkConnection() {
-  const nutstoreToken = getNutstoreToken()
+  const nutstoreToken = await getNutstoreToken()
   if (!nutstoreToken) {
     return false
   }
@@ -151,7 +153,7 @@ export async function backupToNutstore({
   showMessage?: boolean
   customFileName?: string
 } = {}) {
-  const nutstoreToken = getNutstoreToken()
+  const nutstoreToken = await getNutstoreToken()
   if (!nutstoreToken) {
     return
   }
@@ -213,7 +215,7 @@ export async function backupToNutstore({
 }
 
 export async function restoreFromNutstore(fileName?: string) {
-  const nutstoreToken = getNutstoreToken()
+  const nutstoreToken = await getNutstoreToken()
   if (!nutstoreToken) {
     return
   }
@@ -255,7 +257,7 @@ export async function startNutstoreAutoSync() {
     logger.verbose('[Nutstore AutoSync] Restarting nutstore auto sync')
   }
 
-  const nutstoreToken = getNutstoreToken()
+  const nutstoreToken = await getNutstoreToken()
 
   if (!nutstoreToken) {
     logger.warn('[startNutstoreAutoSync] Invalid nutstore token, nutstore auto sync disabled')
@@ -268,7 +270,7 @@ export async function startNutstoreAutoSync() {
   stopNutstoreAutoSync()
   autoSyncStarted = true
 
-  scheduleNextBackup()
+  await scheduleNextBackup()
 
   function scheduleNextBackup() {
     if (!autoSyncStarted) {
@@ -292,7 +294,7 @@ export async function startNutstoreAutoSync() {
     const requiredInterval = nutstoreSyncInterval * 60 * 1000
 
     // 如果存在最后一次同步WebDAV的时间，以它为参考计算下一次同步的时间
-    const timeUntilNextSync = nutstoreSyncState?.lastSyncTime
+    const timeUntilNextSync = nutstoreSyncState.lastSyncTime
       ? Math.max(1000, nutstoreSyncState.lastSyncTime + requiredInterval - Date.now())
       : requiredInterval
 
@@ -312,7 +314,7 @@ export async function startNutstoreAutoSync() {
 
     if (isAutoBackupRunning || isManualBackupRunning) {
       logger.verbose('[Nutstore AutoSync] Backup already in progress, rescheduling')
-      scheduleNextBackup()
+      await scheduleNextBackup()
       return
     }
 
@@ -341,7 +343,7 @@ export function stopNutstoreAutoSync() {
 }
 
 export async function createDirectory(path: string, options?: CreateDirectoryOptions) {
-  const nutstoreToken = getNutstoreToken()
+  const nutstoreToken = await getNutstoreToken()
   if (!nutstoreToken) {
     return
   }
