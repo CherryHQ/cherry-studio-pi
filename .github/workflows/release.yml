@@ -238,6 +238,50 @@ jobs:
           }
           NODE
             rm -f "$RECENT_RELEASES_JSON"
+
+            RECENT_RELEASE_RUNS_JSON="$(mktemp)"
+            if ! gh run list --repo "${{ github.repository }}" --workflow release.yml --limit 20 --json databaseId,event,status,conclusion,createdAt,url > "$RECENT_RELEASE_RUNS_JSON"; then
+              echo "::error::Unable to inspect recent Release workflow runs before publishing."
+              rm -f "$RECENT_RELEASE_RUNS_JSON"
+              exit 1
+            fi
+
+            node - "$RECENT_RELEASE_RUNS_JSON" "$GITHUB_RUN_ID" "$CLOSE_RELEASE_WINDOW_MINUTES" <<'NODE'
+          const fs = require('node:fs')
+
+          const [file, currentRunIdText, windowMinutesText] = process.argv.slice(2)
+          const currentRunId = Number(currentRunIdText)
+          const windowMinutes = Number(windowMinutesText)
+          const windowMs = windowMinutes * 60 * 1000
+          const runs = JSON.parse(fs.readFileSync(file, 'utf8'))
+          const now = Date.now()
+
+          const recent = runs
+            .filter((run) => Number(run.databaseId) !== currentRunId)
+            .filter((run) => run.event === 'workflow_dispatch')
+            .filter((run) => run.status === 'completed' && run.conclusion === 'success')
+            .map((run) => ({
+              ...run,
+              timestamp: Date.parse(run.createdAt)
+            }))
+            .filter((run) => Number.isFinite(run.timestamp))
+            .find((run) => now - run.timestamp >= 0 && now - run.timestamp < windowMs)
+
+          if (recent) {
+            const runAt = new Date(recent.timestamp).toISOString()
+            console.error(`::error::Recent successful Release workflow run ${recent.databaseId} was created at ${runAt}.`)
+            console.error(
+              `Refusing to publish another release within ${windowMinutes} minutes of a successful Release workflow run. ` +
+                'Deleted GitHub Release pages do not bypass this guard. ' +
+                'If this is an intentional urgent hotfix, rerun the workflow with allow_close_release=true.'
+            )
+            if (recent.url) {
+              console.error(`Previous run: ${recent.url}`)
+            }
+            process.exit(1)
+          }
+          NODE
+            rm -f "$RECENT_RELEASE_RUNS_JSON"
           fi
 
           echo "Validated release tag $TAG at $TAG_COMMIT for version $VERSION."

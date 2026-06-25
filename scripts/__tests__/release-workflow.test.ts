@@ -77,6 +77,9 @@ describe('release workflow safety', () => {
     expect(workflow).toContain(
       'Refusing to publish ${currentTag} within ${windowMinutes} minutes of another release or draft'
     )
+    expect(workflow).toContain('gh run list --repo "${{ github.repository }}" --workflow release.yml')
+    expect(workflow).toContain('Recent successful Release workflow run')
+    expect(workflow).toContain('Deleted GitHub Release pages do not bypass this guard')
   })
 
   it('does not suggest chained version commit and tag pushes', () => {
