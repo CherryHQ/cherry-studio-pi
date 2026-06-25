@@ -1,6 +1,6 @@
 export type KeywordMatchMode = 'whole-word' | 'substring'
 
-function escapeRegex(text: string): string {
+export function escapeRegex(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
@@ -38,12 +38,12 @@ function addRegexFlag(flags: string, flag: string): string {
   return flags.includes(flag) ? flags : `${flags}${flag}`
 }
 
-function buildKeywordPattern(term: string, matchMode: KeywordMatchMode): string {
+export function buildKeywordPattern(term: string, matchMode: KeywordMatchMode): string {
   const escaped = escapeRegex(term)
   return matchMode === 'whole-word' ? buildWholeWordPattern(escaped) : escaped
 }
 
-function buildKeywordRegex(term: string, options: { matchMode: KeywordMatchMode; flags?: string }): RegExp {
+export function buildKeywordRegex(term: string, options: { matchMode: KeywordMatchMode; flags?: string }): RegExp {
   const flags = options.flags ?? 'i'
   const normalizedFlags = options.matchMode === 'whole-word' ? addRegexFlag(flags, 'u') : flags
   return new RegExp(buildKeywordPattern(term, options.matchMode), normalizedFlags)
@@ -54,4 +54,20 @@ export function buildKeywordRegexes(
   options: { matchMode: KeywordMatchMode; flags?: string }
 ): RegExp[] {
   return terms.filter((term) => term.length > 0).map((term) => buildKeywordRegex(term, options))
+}
+
+export function buildKeywordUnionRegex(
+  terms: string[],
+  options: { matchMode: KeywordMatchMode; flags?: string }
+): RegExp | null {
+  const uniqueTerms = Array.from(new Set(terms.filter((term) => term.length > 0)))
+  if (uniqueTerms.length === 0) return null
+
+  const patterns = uniqueTerms
+    .sort((a, b) => b.length - a.length)
+    .map((term) => buildKeywordPattern(term, options.matchMode))
+
+  const flags = options.flags ?? 'gi'
+  const normalizedFlags = options.matchMode === 'whole-word' ? addRegexFlag(flags, 'u') : flags
+  return new RegExp(patterns.join('|'), normalizedFlags)
 }

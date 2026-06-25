@@ -1,19 +1,7 @@
-import i18n from '@renderer/i18n'
 import type { Provider, SystemProvider } from '@renderer/types'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
 import { includeKeywords, matchKeywordsInProvider, matchKeywordsInString } from '../match'
-
-// 测试环境的 mock 偏好默认语言是 zh-CN，显式切到 en-US 以匹配英文断言
-const previousLanguage = i18n.language
-
-beforeAll(async () => {
-  await i18n.changeLanguage('en-US')
-})
-
-afterAll(async () => {
-  await i18n.changeLanguage(previousLanguage)
-})
 
 describe('match', () => {
   const provider = {
@@ -90,9 +78,9 @@ describe('match', () => {
       expect(matchKeywordsInProvider('foo', provider)).toBe(false)
     })
 
-    it('should match i18n name, id, and name for system provider', () => {
+    it('should match label key, id, and name for system provider', () => {
       expect(matchKeywordsInProvider('dashscope', sysProvider)).toBe(true)
-      expect(matchKeywordsInProvider('Alibaba', sysProvider)).toBe(true)
+      expect(matchKeywordsInProvider('provider.dashscope', sysProvider)).toBe(true)
       // system provider 现在也可以通过 name 字段匹配
       expect(matchKeywordsInProvider('doesnt matter', sysProvider)).toBe(true)
     })

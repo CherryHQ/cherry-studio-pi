@@ -1,5 +1,4 @@
 import { loggerService } from '@logger'
-import i18n from '@renderer/i18n'
 import imageCompression from 'browser-image-compression'
 import * as htmlToImage from 'html-to-image'
 
@@ -115,6 +114,7 @@ export const captureScrollable = async (elRef: React.RefObject<HTMLElement | nul
           el.scrollTop = originalScrollTop
         }, 0)
 
+        const { default: i18n } = await import('@renderer/i18n')
         window.toast?.error(i18n.t('message.error.dimension_too_large'))
         return Promise.reject()
       }

@@ -1,4 +1,3 @@
-import i18n from '@renderer/i18n'
 import { getProviderLabelKey } from '@renderer/i18n/label'
 import type { Provider } from '@renderer/types'
 import { isSystemProvider } from '@renderer/types'
@@ -55,6 +54,6 @@ export function matchKeywordsInProvider(keywords: string | string[], provider: P
  */
 function getProviderSearchString(provider: Provider) {
   return isSystemProvider(provider)
-    ? `${i18n.t(getProviderLabelKey(provider.id))} ${provider.id} ${provider.name}`
+    ? `${getProviderLabelKey(provider.id)} ${provider.id} ${provider.name}`
     : `${provider.id} ${provider.name}`
 }

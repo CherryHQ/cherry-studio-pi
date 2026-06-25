@@ -25,6 +25,27 @@ vi.mock('@renderer/utils/oauth', () => ({
   oauthWithCherryIn: vi.fn()
 }))
 
+const translations: Record<string, string> = {
+  'auth.get_key_success': 'Get key success',
+  'settings.provider.oauth.balance': 'Balance',
+  'settings.provider.oauth.cherryIn.login_button': 'Authorize with CherryIN',
+  'settings.provider.oauth.cherryIn.logged_in': 'Logged in',
+  'settings.provider.oauth.cherryIn.not_logged_in': 'Not logged in',
+  'settings.provider.oauth.cherryIn.service_attribution': 'This service is provided by open.cherryin.ai',
+  'settings.provider.oauth.cherryIn.tagline': 'After you sign in, you can use all model services',
+  'settings.provider.oauth.error': 'OAuth error',
+  'settings.provider.oauth.logout': 'Log out',
+  'settings.provider.oauth.logout_confirm': 'Are you sure you want to log out?',
+  'settings.provider.oauth.logout_success': 'Logged out',
+  'settings.provider.oauth.logout_warning': 'Logout warning',
+  'settings.provider.oauth.topup': 'Top up'
+}
+
+vi.mock('react-i18next', () => ({
+  Trans: ({ i18nKey }: { i18nKey: string }) => <>{translations[i18nKey] ?? i18nKey}</>,
+  useTranslation: () => ({ t: (key: string) => translations[key] ?? key })
+}))
+
 vi.mock('@cherrystudio/ui', async (importOriginal) => {
   const actual = await importOriginal<object>()
 
@@ -329,7 +350,7 @@ describe('CherryInOauth', () => {
 
     render(<CherryInOauth providerId="cherryin" />)
 
-    fireEvent.click(screen.getByRole('button', { name: /退出登录|Logout/i }))
+    fireEvent.click(screen.getByRole('button', { name: /退出登录|Log out/i }))
 
     const options = (window.modal.confirm as ReturnType<typeof vi.fn>).mock.calls[0][0]
     await act(async () => {
@@ -374,8 +395,8 @@ describe('CherryInOauth', () => {
 
     render(<CherryInOauth providerId="cherryin" />)
 
-    fireEvent.click(screen.getByRole('button', { name: /退出登录|Logout/i }))
-    fireEvent.click(screen.getByRole('button', { name: /退出登录|Logout/i }))
+    fireEvent.click(screen.getByRole('button', { name: /退出登录|Log out/i }))
+    fireEvent.click(screen.getByRole('button', { name: /退出登录|Log out/i }))
 
     expect(window.modal.confirm).toHaveBeenCalledTimes(1)
 
@@ -424,7 +445,7 @@ describe('CherryInOauth', () => {
 
     render(<CherryInOauth providerId="cherryin" />)
 
-    fireEvent.click(screen.getByRole('button', { name: /退出登录|Logout/i }))
+    fireEvent.click(screen.getByRole('button', { name: /退出登录|Log out/i }))
 
     const options = (window.modal.confirm as ReturnType<typeof vi.fn>).mock.calls[0][0]
     await act(async () => {

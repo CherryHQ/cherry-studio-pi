@@ -22,6 +22,15 @@ export function getUrlHostnameOrFallback(url: unknown): string {
   return getUrlHostname(value) || value
 }
 
+export function isValidProxyUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url.trim())
+    return ['http:', 'https:', 'socks:', 'socks4:', 'socks5:'].includes(parsed.protocol) && Boolean(parsed.hostname)
+  } catch {
+    return false
+  }
+}
+
 const CREDENTIAL_LABEL_PATTERN =
   /(?:^|[\s,，;；])(账号|账户|用户名|用户|密码|口令|account|username|user|password|pass|token)\s*[:：=]/i
 const ENCODED_LINE_BREAK_PATTERN = /%(?:0d|0a)/i
