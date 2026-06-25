@@ -79,7 +79,7 @@ async function createNutstoreConfig(nutstoreToken: string): Promise<WebDavConfig
 }
 
 export async function checkConnection() {
-  const nutstoreToken = await getNutstoreToken()
+  const nutstoreToken = getNutstoreToken()
   if (!nutstoreToken) {
     return false
   }
@@ -153,7 +153,7 @@ export async function backupToNutstore({
   showMessage?: boolean
   customFileName?: string
 } = {}) {
-  const nutstoreToken = await getNutstoreToken()
+  const nutstoreToken = getNutstoreToken()
   if (!nutstoreToken) {
     return
   }
@@ -215,7 +215,7 @@ export async function backupToNutstore({
 }
 
 export async function restoreFromNutstore(fileName?: string) {
-  const nutstoreToken = await getNutstoreToken()
+  const nutstoreToken = getNutstoreToken()
   if (!nutstoreToken) {
     return
   }
@@ -257,7 +257,7 @@ export async function startNutstoreAutoSync() {
     logger.verbose('[Nutstore AutoSync] Restarting nutstore auto sync')
   }
 
-  const nutstoreToken = await getNutstoreToken()
+  const nutstoreToken = getNutstoreToken()
 
   if (!nutstoreToken) {
     logger.warn('[startNutstoreAutoSync] Invalid nutstore token, nutstore auto sync disabled')
@@ -270,7 +270,7 @@ export async function startNutstoreAutoSync() {
   stopNutstoreAutoSync()
   autoSyncStarted = true
 
-  await scheduleNextBackup()
+  scheduleNextBackup()
 
   function scheduleNextBackup() {
     if (!autoSyncStarted) {
@@ -314,7 +314,7 @@ export async function startNutstoreAutoSync() {
 
     if (isAutoBackupRunning || isManualBackupRunning) {
       logger.verbose('[Nutstore AutoSync] Backup already in progress, rescheduling')
-      await scheduleNextBackup()
+      scheduleNextBackup()
       return
     }
 
@@ -343,7 +343,7 @@ export function stopNutstoreAutoSync() {
 }
 
 export async function createDirectory(path: string, options?: CreateDirectoryOptions) {
-  const nutstoreToken = await getNutstoreToken()
+  const nutstoreToken = getNutstoreToken()
   if (!nutstoreToken) {
     return
   }
