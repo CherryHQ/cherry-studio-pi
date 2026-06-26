@@ -26,6 +26,7 @@ export async function waitForAppReady(page: Page, timeout: number = 60000): Prom
         'textarea',
         '[contenteditable="true"]',
         '[class*="Sidebar"]',
+        '[class*="TabsContainer"]',
         '[class*="home-navbar"]',
         'a[href*="/settings/"]'
       ]

@@ -1,22 +1,23 @@
-import { ENDPOINT_TYPE } from '@cherrystudio/provider-registry'
 import { type Model, MODEL_CAPABILITY } from '@shared/data/types/model'
 import { renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const useProvidersMock = vi.hoisted(() => vi.fn())
+import { useAgentModelFilter } from '../useAgentModelFilter'
 
-vi.mock('@renderer/hooks/useProvider', () => ({
-  useProviders: useProvidersMock
+const providersMock = vi.hoisted(() => ({
+  providers: [] as Array<Record<string, unknown>>
 }))
 
-import { useAgentModelFilter } from '../useAgentModelFilter'
+vi.mock('@renderer/hooks/useProvider', () => ({
+  useProviders: () => ({ providers: providersMock.providers })
+}))
 
 function createModel(overrides: Partial<Model> = {}): Model {
   return {
-    id: 'openai::gpt-4.1',
+    id: 'openai::gpt-4o',
     providerId: 'openai',
-    name: 'GPT-4.1',
-    capabilities: [MODEL_CAPABILITY.FUNCTION_CALL],
+    name: 'GPT-4o',
+    capabilities: [],
     supportsStreaming: true,
     isEnabled: true,
     isHidden: false,
@@ -26,29 +27,70 @@ function createModel(overrides: Partial<Model> = {}): Model {
 
 describe('useAgentModelFilter', () => {
   beforeEach(() => {
-    useProvidersMock.mockReturnValue({
-      providers: [
-        { id: 'openai', endpointConfigs: {} },
-        { id: 'deepseek', endpointConfigs: { [ENDPOINT_TYPE.ANTHROPIC_MESSAGES]: {} } },
-        { id: 'anthropic', endpointConfigs: {} }
-      ]
-    })
+    providersMock.providers = [
+      {
+        id: 'gemini',
+        presetProviderId: 'gemini',
+        defaultChatEndpoint: 'google-generate-content',
+        authType: 'api-key'
+      },
+      {
+        id: 'google-custom',
+        presetProviderId: 'gemini',
+        defaultChatEndpoint: 'google-generate-content',
+        authType: 'api-key'
+      },
+      {
+        id: 'vertex',
+        defaultChatEndpoint: 'google-generate-content',
+        authType: 'iam-gcp'
+      },
+      {
+        id: 'deepseek',
+        defaultChatEndpoint: 'openai-chat-completions',
+        endpointConfigs: {
+          'anthropic-messages': { baseUrl: 'https://api.deepseek.com/anthropic' }
+        },
+        authType: 'api-key'
+      }
+    ]
   })
 
   it('lets Pi agents use every chat-capable provider model', () => {
     const { result } = renderHook(() => useAgentModelFilter('pi'))
 
     expect(result.current(createModel({ providerId: 'openai' }))).toBe(true)
-    expect(result.current(createModel({ providerId: 'deepseek' }))).toBe(true)
+    expect(result.current(createModel({ providerId: 'deepseek', id: 'deepseek::deepseek-chat' }))).toBe(true)
+    expect(result.current(createModel({ providerId: 'gemini', id: 'gemini::gemini-2.5-pro' }))).toBe(true)
     expect(result.current(createModel({ capabilities: [MODEL_CAPABILITY.EMBEDDING] }))).toBe(false)
   })
 
-  it('limits Claude SDK agents to native or Anthropic-compatible endpoint providers', () => {
+  it('allows chat-capable non-Gemini providers for Claude Code agents', () => {
     const { result } = renderHook(() => useAgentModelFilter('claude-code'))
 
-    expect(result.current(createModel({ providerId: 'anthropic' }))).toBe(true)
-    expect(result.current(createModel({ providerId: 'deepseek', name: 'DeepSeek Chat' }))).toBe(true)
-    expect(result.current(createModel({ providerId: 'openai' }))).toBe(false)
-    expect(result.current(createModel({ providerId: 'deepseek', capabilities: [MODEL_CAPABILITY.RERANK] }))).toBe(false)
+    expect(result.current(createModel())).toBe(true)
+    expect(result.current(createModel({ providerId: 'anthropic', id: 'anthropic::claude-sonnet' }))).toBe(true)
+    expect(result.current(createModel({ providerId: 'deepseek', id: 'deepseek::deepseek-chat' }))).toBe(true)
+    expect(result.current(createModel({ providerId: 'custom-openai', id: 'custom-openai::gpt-4o' }))).toBe(true)
+    expect(result.current(createModel({ providerId: 'vertex', id: 'vertex::gemini-2.5-pro' }))).toBe(true)
+  })
+
+  it('filters Gemini provider models for Claude Code agents', () => {
+    const { result } = renderHook(() => useAgentModelFilter('claude-code'))
+
+    expect(result.current(createModel({ providerId: 'gemini', id: 'gemini::gemini-2.5-pro' }))).toBe(false)
+    expect(result.current(createModel({ providerId: 'google-custom', id: 'google-custom::gemini-2.5-pro' }))).toBe(
+      false
+    )
+  })
+
+  it('continues to reject non-chat model classes', () => {
+    const { result } = renderHook(() => useAgentModelFilter('claude-code'))
+
+    expect(result.current(createModel({ capabilities: [MODEL_CAPABILITY.EMBEDDING] }))).toBe(false)
+    expect(result.current(createModel({ capabilities: [MODEL_CAPABILITY.RERANK] }))).toBe(false)
+    expect(result.current(createModel({ capabilities: [MODEL_CAPABILITY.IMAGE_GENERATION] }))).toBe(false)
+    expect(result.current(createModel({ capabilities: [MODEL_CAPABILITY.AUDIO_GENERATION] }))).toBe(false)
+    expect(result.current(createModel({ capabilities: [MODEL_CAPABILITY.VIDEO_GENERATION] }))).toBe(false)
   })
 })

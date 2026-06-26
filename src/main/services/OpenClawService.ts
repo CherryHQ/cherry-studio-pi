@@ -6,6 +6,8 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { application } from '@application'
+import { modelService } from '@data/services/ModelService'
+import { providerService } from '@data/services/ProviderService'
 import { loggerService } from '@logger'
 import { BaseService, DependsOn, Injectable, Phase, ServicePhase } from '@main/core/lifecycle'
 import { isWin } from '@main/core/platform'
@@ -15,9 +17,13 @@ import { isUserInChina } from '@main/utils/ipService'
 import { summarizeTextForLog } from '@main/utils/logging'
 import { crossPlatformSpawn, findExecutableInEnv, getBinaryPath, runInstallScript } from '@main/utils/process'
 import getShellEnv, { refreshShellEnv } from '@main/utils/shell-env'
+import type { EndpointType, Model as DataModel } from '@shared/data/types/model'
+import { ENDPOINT_TYPE, parseUniqueModelId, UniqueModelIdSchema } from '@shared/data/types/model'
+import type { Provider as DataProvider } from '@shared/data/types/provider'
 import { IpcChannel } from '@shared/IpcChannel'
 import type { OperationResult } from '@shared/types/codeTools'
 import { formatApiHost, hasAPIVersion, withoutTrailingSlash } from '@shared/utils/api'
+import { isNonChatModel } from '@shared/utils/model'
 
 import { storageV2SecretVaultService } from './storageV2/SecretVaultService'
 import { storageV2SettingsRepository } from './storageV2/StorageV2Repositories'
@@ -262,9 +268,10 @@ const OPENCLAW_API_TYPES = {
 /**
  * Placeholder API keys for providers that don't require authentication.
  * OpenClaw requires a non-empty apiKey value even for local providers.
- * Keys are matched by provider id first, then by provider type.
+ * Keys are matched by provider preset/id first, then by provider type.
  */
 const NO_KEY_PLACEHOLDERS: Record<string, string> = {
+  gpustack: 'gpustack',
   ollama: 'ollama',
   lmstudio: 'lmstudio'
 }
@@ -273,6 +280,8 @@ const NO_KEY_PLACEHOLDERS: Record<string, string> = {
  * Providers that always use Anthropic API format
  */
 const ANTHROPIC_ONLY_PROVIDERS: ProviderType[] = ['anthropic', 'vertex-anthropic']
+
+const UNSUPPORTED_SYNC_PROVIDER_IDS = new Set(['azure-openai', 'aws-bedrock', 'vertexai', 'vertex-anthropic'])
 
 /**
  * Endpoint types that use Anthropic API format
@@ -302,6 +311,7 @@ export class OpenClawService extends BaseService {
   private gatewayStatus: GatewayStatus = 'stopped'
   private gatewayPort: number = DEFAULT_GATEWAY_PORT
   private gatewayAuthToken: string = ''
+  private installPromise: Promise<OperationResult> | null = null
 
   public get gatewayUrl(): string {
     return `ws://127.0.0.1:${this.gatewayPort}/ws`
@@ -324,9 +334,7 @@ export class OpenClawService extends BaseService {
     this.ipcHandle(IpcChannel.OpenClaw_GetStatus, () => this.getStatus())
     this.ipcHandle(IpcChannel.OpenClaw_CheckHealth, () => this.checkHealth())
     this.ipcHandle(IpcChannel.OpenClaw_GetDashboardUrl, () => this.getDashboardUrl())
-    this.ipcHandle(IpcChannel.OpenClaw_SyncConfig, (_e, provider, primaryModel) =>
-      this.syncProviderConfig(provider, primaryModel)
-    )
+    this.ipcHandle(IpcChannel.OpenClaw_SyncConfig, (_e, uniqueModelId) => this.syncConfig(uniqueModelId))
     this.ipcHandle(IpcChannel.OpenClaw_GetChannels, () => this.getChannelStatus())
     this.ipcHandle(IpcChannel.OpenClaw_CheckUpdate, () => this.checkUpdate())
     this.ipcHandle(IpcChannel.OpenClaw_PerformUpdate, () => this.performUpdate())
@@ -454,6 +462,19 @@ export class OpenClawService extends BaseService {
    * Uses gitcode.com mirror for China users, GitHub releases for others.
    */
   public async install(): Promise<OperationResult> {
+    if (this.installPromise) {
+      return this.installPromise
+    }
+
+    this.installPromise = this.installInternal()
+    try {
+      return await this.installPromise
+    } finally {
+      this.installPromise = null
+    }
+  }
+
+  private async installInternal(): Promise<OperationResult> {
     try {
       this.sendInstallProgress('Checking download source...')
       const useMirror = await isUserInChina()
@@ -987,6 +1008,138 @@ export class OpenClawService extends BaseService {
   /**
    * Sync Cherry Studio Provider configuration to OpenClaw
    */
+  public async syncConfig(uniqueModelId: unknown): Promise<OperationResult> {
+    try {
+      const { provider, primaryModel } = await this.resolveSyncConfig(uniqueModelId)
+      return await this.syncProviderConfig(provider, primaryModel)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      logger.error('Failed to resolve OpenClaw sync config:', error as Error)
+      return { success: false, message: errorMessage }
+    }
+  }
+
+  private async resolveSyncConfig(uniqueModelId: unknown): Promise<{ provider: Provider; primaryModel: Model }> {
+    const parsed = UniqueModelIdSchema.safeParse(uniqueModelId)
+    if (!parsed.success) {
+      throw new Error('Invalid OpenClaw model selection')
+    }
+
+    const { providerId, modelId } = parseUniqueModelId(parsed.data)
+    const [provider, primaryModel, models, apiKeys] = await Promise.all([
+      providerService.getByProviderId(providerId),
+      modelService.getByKey(providerId, modelId),
+      modelService.list({ providerId, enabled: true }),
+      providerService.getApiKeys(providerId, { enabled: true })
+    ])
+
+    this.ensureSyncProviderSupported(provider)
+    if (isNonChatModel(primaryModel)) {
+      throw new Error('Selected OpenClaw model must support chat')
+    }
+
+    const endpointType = this.getModelEndpointType(primaryModel, provider)
+    const apiHost = provider.endpointConfigs?.[endpointType]?.baseUrl
+
+    if (!apiHost) {
+      throw new Error(`Provider ${provider.id} has no API host configured for ${endpointType}`)
+    }
+
+    const apiKey = this.resolveSyncApiKey(provider, apiKeys.map((entry) => entry.key).join(','))
+
+    return {
+      provider: {
+        id: provider.id,
+        type: this.toOpenClawProviderType(provider.presetProviderId ?? provider.id, endpointType),
+        name: provider.name,
+        apiKey,
+        apiHost,
+        anthropicApiHost:
+          endpointType === ENDPOINT_TYPE.ANTHROPIC_MESSAGES
+            ? provider.endpointConfigs?.[ENDPOINT_TYPE.ANTHROPIC_MESSAGES]?.baseUrl
+            : undefined,
+        models: models
+          .filter(
+            (model) =>
+              !model.isHidden && !isNonChatModel(model) && this.getModelEndpointType(model, provider) === endpointType
+          )
+          .map((model) => this.toOpenClawModel(model)),
+        presetProviderId: provider.presetProviderId
+      } as Provider,
+      primaryModel: this.toOpenClawModel(primaryModel)
+    }
+  }
+
+  private resolveSyncApiKey(provider: DataProvider, apiKey: string): string {
+    if (apiKey) {
+      return apiKey
+    }
+
+    const noKeyPlaceholder = this.getNoKeyPlaceholder(provider)
+    if (provider.authType === 'api-key' && !noKeyPlaceholder) {
+      throw new Error(`Provider ${provider.id} has no enabled API key configured`)
+    }
+
+    return noKeyPlaceholder ?? ''
+  }
+
+  private getModelEndpointType(model: DataModel, provider: DataProvider): EndpointType {
+    return model.endpointTypes?.[0] ?? provider.defaultChatEndpoint ?? ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS
+  }
+
+  private getNoKeyPlaceholder(provider: { id: string; type?: string; presetProviderId?: string }): string | undefined {
+    const providerKey = provider.presetProviderId ?? provider.id
+    return (
+      NO_KEY_PLACEHOLDERS[providerKey] ??
+      NO_KEY_PLACEHOLDERS[provider.id] ??
+      (provider.type ? NO_KEY_PLACEHOLDERS[provider.type] : undefined)
+    )
+  }
+
+  private toOpenClawProviderType(providerType: string, endpointType: EndpointType): Provider['type'] {
+    if (endpointType === ENDPOINT_TYPE.OPENAI_RESPONSES) {
+      return 'openai-response'
+    }
+    if (endpointType === ENDPOINT_TYPE.ANTHROPIC_MESSAGES) {
+      return 'anthropic'
+    }
+    if (endpointType === ENDPOINT_TYPE.GOOGLE_GENERATE_CONTENT) {
+      return 'gemini'
+    }
+    return providerType as Provider['type']
+  }
+
+  private ensureSyncProviderSupported(provider: DataProvider): void {
+    const providerKey = provider.presetProviderId ?? provider.id
+    if (UNSUPPORTED_SYNC_PROVIDER_IDS.has(providerKey)) {
+      throw new Error(`OpenClaw sync does not support ${provider.name} providers yet`)
+    }
+  }
+
+  private toOpenClawModel(model: DataModel): Model {
+    const { modelId } = parseUniqueModelId(model.id)
+    return {
+      id: model.apiModelId ?? modelId,
+      provider: model.providerId,
+      name: model.name,
+      group: model.group ?? '',
+      endpoint_type: this.toOpenClawEndpointType(model.endpointTypes?.[0])
+    }
+  }
+
+  private toOpenClawEndpointType(endpointType?: EndpointType): Model['endpoint_type'] {
+    if (endpointType === ENDPOINT_TYPE.ANTHROPIC_MESSAGES) {
+      return 'anthropic'
+    }
+    if (endpointType === ENDPOINT_TYPE.OPENAI_RESPONSES) {
+      return 'openai-response'
+    }
+    if (endpointType === ENDPOINT_TYPE.GOOGLE_GENERATE_CONTENT) {
+      return 'gemini'
+    }
+    return 'openai'
+  }
+
   public async syncProviderConfig(provider: Provider, primaryModel: Model): Promise<OperationResult> {
     try {
       // Ensure config directory exists
@@ -1047,7 +1200,7 @@ export class OpenClawService extends BaseService {
       // Providers like Ollama and LM Studio don't require real API keys,
       // but OpenClaw needs a non-empty placeholder value
       if (!apiKey) {
-        apiKey = NO_KEY_PLACEHOLDERS[provider.id] ?? NO_KEY_PLACEHOLDERS[provider.type] ?? 'no-key-required'
+        apiKey = this.getNoKeyPlaceholder(provider) ?? 'no-key-required'
       }
 
       // Build OpenClaw provider config
@@ -1262,6 +1415,9 @@ export class OpenClawService extends BaseService {
     // 2. Check model's endpoint_type (used by new-api and other mixed providers)
     if (isAnthropicEndpointType(model)) {
       return OPENCLAW_API_TYPES.ANTHROPIC
+    }
+    if (model.endpoint_type === 'openai-response') {
+      return OPENCLAW_API_TYPES.OPENAI_RESPOSNE
     }
 
     // 3. Check if provider has anthropicApiHost configured
