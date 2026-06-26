@@ -1,9 +1,7 @@
 import { loggerService } from '@logger'
 import { useProvider, useProviderApiKeys, useProviderMutations } from '@renderer/hooks/useProvider'
-import i18n from '@renderer/i18n'
 import { formatApiKeys, splitApiKeyString } from '@renderer/utils/api'
 import type { ApiKeyEntry } from '@shared/data/types/provider'
-import { debounce } from 'lodash'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -135,9 +133,18 @@ export function useProviderApiKey(providerId: string) {
         return
       }
 
-      await updateApiKeys(toApiKeyEntries(value, apiKeysData))
+      const normalizedValue = toEnabledApiKeyString(value)
+      const existingKeys = apiKeysData?.keys ?? []
+      const hasPersistedKey = existingKeys.some((item) => item.key.trim())
+
+      if (!normalizedValue && hasPersistedKey) {
+        logger.warn('Skipped empty inline API key save to avoid clearing provider credentials', { providerId })
+        throw new Error('Refusing to clear provider API keys from inline autosave')
+      }
+
+      await updateApiKeys(toApiKeyEntries(normalizedValue, apiKeysData))
     },
-    [apiKeysData, provider, updateApiKeys]
+    [apiKeysData, provider, providerId, updateApiKeys]
   )
 
   useEffect(() => {
@@ -148,18 +155,6 @@ export function useProviderApiKey(providerId: string) {
     saveApiKeyRef.current = saveApiKey
   }, [saveApiKey])
 
-  const saveLater = useMemo(
-    () =>
-      debounce((nextValue: string) => {
-        void saveApiKeyRef.current(nextValue).catch((error) => {
-          logger.error('Failed to save API keys', error as Error)
-          window.toast.error(i18n.t('settings.provider.api_key.save_failed'))
-          setValue((current) => ({ ...current, hasPendingSync: true }))
-        })
-      }, 150),
-    []
-  )
-
   useEffect(() => {
     const providerChanged = previousProviderIdRef.current !== providerId
     previousProviderIdRef.current = providerId
@@ -168,43 +163,25 @@ export function useProviderApiKey(providerId: string) {
       ? createApiKeyValue(serverApiKey)
       : syncApiKeyValueFromServer(valueRef.current, serverApiKey)
 
-    if (!nextValue.hasPendingSync) {
-      saveLater.cancel()
-    }
-
     setValue((previousValue) => (isSameApiKeyValue(previousValue, nextValue) ? previousValue : nextValue))
-  }, [providerId, saveLater, serverApiKey])
+  }, [providerId, serverApiKey])
 
-  useEffect(() => () => saveLater.flush(), [saveLater])
+  const setInputApiKey = useCallback((nextInputApiKey: string) => {
+    const normalizedInputApiKey = toEnabledApiKeyString(nextInputApiKey)
+    const hasPendingSync = normalizedInputApiKey !== valueRef.current.serverApiKey
 
-  const setInputApiKey = useCallback(
-    (nextInputApiKey: string) => {
-      const normalizedInputApiKey = toEnabledApiKeyString(nextInputApiKey)
-      const hasPendingSync = normalizedInputApiKey !== valueRef.current.serverApiKey
-
-      setValue((previousValue) => {
-        const nextValue = {
-          ...previousValue,
-          inputApiKey: nextInputApiKey,
-          hasPendingSync
-        }
-
-        return isSameApiKeyValue(previousValue, nextValue) ? previousValue : nextValue
-      })
-
-      if (hasPendingSync) {
-        saveLater(normalizedInputApiKey)
-        return
+    setValue((previousValue) => {
+      const nextValue = {
+        ...previousValue,
+        inputApiKey: nextInputApiKey,
+        hasPendingSync
       }
 
-      saveLater.cancel()
-    },
-    [saveLater]
-  )
+      return isSameApiKeyValue(previousValue, nextValue) ? previousValue : nextValue
+    })
+  }, [])
 
   const commitInputApiKeyNow = useCallback(async () => {
-    saveLater.cancel()
-
     const currentValue = valueRef.current
     const normalizedInputApiKey = toEnabledApiKeyString(currentValue.inputApiKey)
     if (normalizedInputApiKey === currentValue.serverApiKey) {
@@ -212,7 +189,7 @@ export function useProviderApiKey(providerId: string) {
     }
 
     await saveApiKeyRef.current(normalizedInputApiKey)
-  }, [saveLater])
+  }, [])
 
   return useMemo(
     () => ({

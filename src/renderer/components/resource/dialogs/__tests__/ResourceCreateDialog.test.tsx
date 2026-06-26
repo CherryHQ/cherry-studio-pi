@@ -62,6 +62,11 @@ vi.mock('react-i18next', async (importOriginal) => {
           'common.description': 'Description',
           'common.model': 'Model',
           'common.name': 'Name',
+          'library.config.dialogs.create.agent_mode.enhanced.description': 'Claude Agent SDK mode',
+          'library.config.dialogs.create.agent_mode.enhanced.title': 'Enhanced mode',
+          'library.config.dialogs.create.agent_mode.label': 'Runtime mode',
+          'library.config.dialogs.create.agent_mode.standard.description': 'Pi Agent mode',
+          'library.config.dialogs.create.agent_mode.standard.title': 'Standard mode',
           'library.config.dialogs.create.agent_title': 'New Agent',
           'library.config.dialogs.create.assistant_title': 'New Assistant',
           'library.config.dialogs.create.avatar_aria': 'Pick avatar',
@@ -136,6 +141,7 @@ describe('ResourceCreateDialog', () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined)
     render(<ResourceCreateDialog kind="agent" open onOpenChange={vi.fn()} onSubmit={onSubmit} />)
 
+    expect(screen.getByRole('button', { name: /Standard mode/ })).toHaveAttribute('aria-pressed', 'true')
     fireEvent.change(screen.getByPlaceholderText('Name this resource'), { target: { value: 'Build Agent' } })
     fireEvent.click(screen.getByRole('button', { name: 'Pick model' }))
     fireEvent.click(screen.getByRole('button', { name: 'Create' }))
@@ -145,8 +151,28 @@ describe('ResourceCreateDialog', () => {
         avatar: '🤖',
         name: 'Build Agent',
         modelId: MODEL.id,
-        description: ''
+        description: '',
+        agentType: 'pi'
       })
+    )
+  })
+
+  it('submits enhanced agent mode when selected', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    render(<ResourceCreateDialog kind="agent" open onOpenChange={vi.fn()} onSubmit={onSubmit} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /Enhanced mode/ }))
+    fireEvent.change(screen.getByPlaceholderText('Name this resource'), { target: { value: 'Build Agent' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Pick model' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agentType: 'claude-code',
+          modelId: MODEL.id
+        })
+      )
     )
   })
 

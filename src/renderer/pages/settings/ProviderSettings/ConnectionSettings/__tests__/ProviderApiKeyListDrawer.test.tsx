@@ -3,6 +3,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const updateApiKeysMock = vi.fn()
+const addApiKeyMock = vi.fn()
+const deleteApiKeyMock = vi.fn()
+const updateApiKeyMock = vi.fn()
 
 vi.mock('react-i18next', async (importOriginal) => {
   const actual = await importOriginal<object>()
@@ -28,6 +31,9 @@ vi.mock('@renderer/hooks/useProvider', () => ({
     data: { keys: [] }
   }),
   useProviderMutations: () => ({
+    addApiKey: addApiKeyMock,
+    deleteApiKey: deleteApiKeyMock,
+    updateApiKey: updateApiKeyMock,
     updateApiKeys: updateApiKeysMock
   })
 }))
@@ -46,6 +52,9 @@ describe('ProviderApiKeyListDrawer', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     updateApiKeysMock.mockResolvedValue(undefined)
+    addApiKeyMock.mockResolvedValue(undefined)
+    deleteApiKeyMock.mockResolvedValue(undefined)
+    updateApiKeyMock.mockResolvedValue(undefined)
     ;(window as any).toast = {
       error: vi.fn(),
       warning: vi.fn()
@@ -62,12 +71,8 @@ describe('ProviderApiKeyListDrawer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'common.save' }))
 
     await waitFor(() => {
-      expect(updateApiKeysMock).toHaveBeenCalledWith([
-        expect.objectContaining({
-          key: 'sk-new',
-          isEnabled: true
-        })
-      ])
+      expect(addApiKeyMock).toHaveBeenCalledWith('sk-new', undefined)
     })
+    expect(updateApiKeysMock).not.toHaveBeenCalled()
   })
 })

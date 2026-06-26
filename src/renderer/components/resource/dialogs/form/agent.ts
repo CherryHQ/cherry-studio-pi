@@ -1,11 +1,13 @@
 import {
   DEFAULT_HEARTBEAT_ENABLED,
   DEFAULT_HEARTBEAT_INTERVAL,
+  DEFAULT_MAX_TURNS,
   normalizePermissionMode
 } from '@renderer/hooks/agents/permissionMode'
 import type { AgentDetail } from '@renderer/pages/library/types'
-import type { UpdateAgentDto } from '@shared/data/api/schemas/agents'
-import type { AgentConfiguration } from '@shared/data/types/agent'
+import type { Tool } from '@shared/ai/tool'
+import type { CreateAgentDto, UpdateAgentDto } from '@shared/data/api/schemas/agents'
+import type { AgentConfiguration, AgentType } from '@shared/data/types/agent'
 import type { UniqueModelId } from '@shared/data/types/model'
 
 // ---------------------------------------------------------------------------
@@ -13,18 +15,27 @@ import type { UniqueModelId } from '@shared/data/types/model'
 // ---------------------------------------------------------------------------
 
 /**
- * Flat, controlled form-state for the Agent create/edit dialogs.
+ * Flat, controlled form-state for Agent create/edit dialogs.
  *
  * Every editable field (one per `AgentBase` column + the common
  * `configuration.*` sub-keys surfaced by the dialog) lives on this object.
- * The dialog diffs it against the baseline at save time and emits a minimal
- * `UpdateAgentDto`.
+ * Save handlers diff it against the baseline and emit a minimal DTO.
  */
 export interface AgentFormState {
+  /**
+   * Runtime selected during creation. Existing agents keep their persisted
+   * runtime and do not expose type switching from this editor.
+   *
+   * Pi (`pi`) is Cherry Studio Pi's default path; Claude SDK
+   * (`claude-code`) remains a compatible enhanced mode for complex tasks.
+   */
+  type: AgentType
   name: string
   description: string
   /** `''` is the explicit "no model selected yet" draft sentinel; once chosen it is always a valid UniqueModelId. */
   model: UniqueModelId | ''
+  /** Optional first-session workspace chosen during agent creation. Agent rows stay session-agnostic. */
+  workspacePath: string
   planModel: UniqueModelId | ''
   smallModel: UniqueModelId | ''
   instructions: string
@@ -35,6 +46,8 @@ export interface AgentFormState {
   // configuration.* derived fields we edit in the library UI.
   avatar: string
   permissionMode: string
+  /** 0 disables the explicit cap; any positive integer overrides the default. */
+  maxTurns: number
   /** Raw multi-line `KEY=VALUE` text; parsed at save time. */
   envVarsText: string
   soulEnabled: boolean
@@ -52,6 +65,16 @@ function asNumber(value: unknown): number {
 
 function asBoolean(value: unknown): boolean {
   return value === true
+}
+
+function asFormMaxTurns(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return 0
+  }
+  if (value <= 0 || value === DEFAULT_MAX_TURNS) {
+    return 0
+  }
+  return value
 }
 
 /**
@@ -96,26 +119,42 @@ function envVarsFromText(text: string): Record<string, string> {
 
 export function buildInitialAgentFormState(agent?: AgentDetail | null): AgentFormState {
   const cfg: AgentConfiguration = agent?.configuration ?? {}
+  const isCreate = !agent
   return {
+    type: agent?.type ?? 'pi',
     name: agent?.name ?? '',
     description: agent?.description ?? '',
     model: agent?.model ?? '',
+    workspacePath: '',
     planModel: agent?.planModel ?? '',
     smallModel: agent?.smallModel ?? '',
     instructions: agent?.instructions ?? '',
     mcps: [...(agent?.mcps ?? [])],
-    disabledTools: [...(agent?.disabledTools ?? [])],
+    disabledTools: uniqueStrings(agent?.disabledTools ?? []),
     avatar: asString(cfg.avatar),
-    permissionMode: asString(cfg.permission_mode),
+    permissionMode: isCreate ? 'bypassPermissions' : asString(cfg.permission_mode),
+    maxTurns: asFormMaxTurns(cfg.max_turns),
     envVarsText: envVarsToText(cfg.env_vars),
-    soulEnabled: asBoolean(cfg.soul_enabled),
+    soulEnabled: isCreate ? true : asBoolean(cfg.soul_enabled),
     heartbeatEnabled: cfg.heartbeat_enabled ?? DEFAULT_HEARTBEAT_ENABLED,
     heartbeatInterval: asNumber(cfg.heartbeat_interval) || DEFAULT_HEARTBEAT_INTERVAL
   }
 }
 
-export function applyAgentFormPatch(current: AgentFormState, patch: Partial<AgentFormState>): AgentFormState {
+export function applyAgentFormPatch(
+  current: AgentFormState,
+  patch: Partial<AgentFormState>,
+  _tools: Tool[] = []
+): AgentFormState {
+  void _tools
   const next: AgentFormState = { ...current, ...patch }
+
+  if (patch.type && patch.type !== current.type) {
+    next.disabledTools = []
+    next.model = ''
+    next.planModel = ''
+    next.smallModel = ''
+  }
 
   if (Object.prototype.hasOwnProperty.call(patch, 'permissionMode')) {
     const nextMode = normalizePermissionMode(patch.permissionMode)
@@ -134,6 +173,78 @@ export function applyAgentFormPatch(current: AgentFormState, patch: Partial<Agen
   }
 
   return next
+}
+
+/**
+ * Build the `configuration` object for a create / full-update payload by
+ * collapsing the flat form keys back into their canonical snake_case nested
+ * shape. Only keys with non-default values land in the output so the row
+ * stays lean; later PATCHes can add more keys via `diffAgentUpdate`.
+ */
+function buildConfigurationPayload(form: AgentFormState): AgentConfiguration | undefined {
+  const cfg: Record<string, unknown> = {}
+  if (form.avatar) cfg.avatar = form.avatar
+  if (form.permissionMode) cfg.permission_mode = form.permissionMode
+  if (form.maxTurns > 0) cfg.max_turns = form.maxTurns
+  if (form.envVarsText.trim()) cfg.env_vars = envVarsFromText(form.envVarsText)
+  if (form.soulEnabled) cfg.soul_enabled = true
+  if (!form.heartbeatEnabled) {
+    cfg.heartbeat_enabled = false
+  } else if (form.heartbeatInterval > 0 && form.heartbeatInterval !== DEFAULT_HEARTBEAT_INTERVAL) {
+    cfg.heartbeat_enabled = true
+    cfg.heartbeat_interval = form.heartbeatInterval
+  }
+  return Object.keys(cfg).length > 0 ? cfg : undefined
+}
+
+/**
+ * Convert the full form state into a `CreateAgentDto`. Used on the library's
+ * "新建智能体 → 配置 → 保存" flow: the row is only POSTed once the user clicks
+ * save from the config page, not on entry. Empty optional fields are omitted
+ * so the backend can apply its own defaults.
+ */
+export function buildCreateAgentPayload(form: AgentFormState, type: AgentType = form.type): CreateAgentDto {
+  const disabledTools = uniqueStrings(form.disabledTools)
+
+  return {
+    type,
+    name: form.name.trim(),
+    // Create is gated by validateAgentCreateForm (modelMissing=false), so the
+    // trimmed draft value is a real UniqueModelId here.
+    model: form.model.trim() as UniqueModelId,
+    description: form.description || undefined,
+    instructions: form.instructions || undefined,
+    planModel: form.planModel || undefined,
+    smallModel: form.smallModel || undefined,
+    mcps: form.mcps.length > 0 ? form.mcps : undefined,
+    disabledTools: disabledTools.length > 0 ? disabledTools : undefined,
+    configuration: buildConfigurationPayload(form)
+  }
+}
+
+export interface AgentCreateValidation {
+  nameMissing: boolean
+  modelMissing: boolean
+  isValid: boolean
+}
+
+export function validateAgentCreateForm(form: AgentFormState): AgentCreateValidation {
+  const nameMissing = form.name.trim() === ''
+  const modelMissing = form.model.trim() === ''
+  return {
+    nameMissing,
+    modelMissing,
+    isValid: !nameMissing && !modelMissing
+  }
+}
+
+/**
+ * Minimum requirements for a valid create payload: name + model. Matches the
+ * backend `requireFields(['type', 'name', 'model'])` guard in
+ * `src/main/data/api/handlers/agents.ts`.
+ */
+export function isCreatePayloadValid(form: AgentFormState): boolean {
+  return validateAgentCreateForm(form).isValid
 }
 
 /** Result of {@link diffAgentUpdate}. */
@@ -186,8 +297,9 @@ export function diffAgentUpdate(
     dto.mcps = next.mcps
     dirty = true
   }
-  if (!arraysEqual(baseline.disabledTools, next.disabledTools)) {
-    dto.disabledTools = next.disabledTools
+  const nextDisabledTools = uniqueStrings(next.disabledTools)
+  if (!stringSetsEqual(baseline.disabledTools, nextDisabledTools)) {
+    dto.disabledTools = nextDisabledTools
     dirty = true
   }
 
@@ -200,6 +312,10 @@ export function diffAgentUpdate(
   }
   if (baseline.permissionMode !== next.permissionMode) {
     cfgPatch.permission_mode = next.permissionMode || 'default'
+    cfgDirty = true
+  }
+  if (baseline.maxTurns !== next.maxTurns) {
+    cfgPatch.max_turns = next.maxTurns > 0 ? next.maxTurns : DEFAULT_MAX_TURNS
     cfgDirty = true
   }
   if (baseline.envVarsText !== next.envVarsText) {
@@ -232,15 +348,29 @@ export function diffAgentUpdate(
   return { dto }
 }
 
+function arraysEqual(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
+  return true
+}
+
+function uniqueStrings(values: readonly string[]): string[] {
+  return Array.from(new Set(values))
+}
+
 function configurationWithoutMaxTurns(configuration: AgentDetail['configuration']): Record<string, unknown> {
   const rest: Record<string, unknown> = { ...configuration }
   delete rest.max_turns
   return rest
 }
 
-function arraysEqual(a: readonly string[], b: readonly string[]): boolean {
-  if (a.length !== b.length) return false
-  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
+function stringSetsEqual(a: readonly string[], b: readonly string[]): boolean {
+  const aSet = new Set(a)
+  const bSet = new Set(b)
+  if (aSet.size !== bSet.size) return false
+  for (const value of aSet) {
+    if (!bSet.has(value)) return false
+  }
   return true
 }
 
@@ -249,20 +379,44 @@ function arraysEqual(a: readonly string[], b: readonly string[]): boolean {
 // ---------------------------------------------------------------------------
 
 /**
- * Single "what should save do next?" value consumed by edit dialog save
- * handlers.
+ * Single "what should save do next?" value consumed by
+ * `useResourceEditorState`. Encodes the Agent create-vs-update branch
+ * so the shell / state hook stay generic — the page only has to match
+ * on `kind` inside its `onCommit` closure.
  */
-export type AgentSaveIntent = { kind: 'update'; payload: UpdateAgentDto }
+export type AgentCreateSaveIntent = { kind: 'create'; payload: CreateAgentDto }
+export type AgentUpdateSaveIntent = { kind: 'update'; payload: UpdateAgentDto }
+export type AgentSaveIntent = AgentCreateSaveIntent | AgentUpdateSaveIntent
 
 /**
  * Resolve the current form into a save intent. Returns `null` when
- * there's nothing to do.
+ * there's nothing to do:
+ * - Create mode (`agent === null`): form must satisfy the backend's
+ *   required fields.
+ * - Edit mode: at least one editable column must differ from the baseline.
  */
 export function diffAgentSaveIntent(
   form: AgentFormState,
   baseline: AgentFormState,
+  agent: null
+): AgentCreateSaveIntent | null
+export function diffAgentSaveIntent(
+  form: AgentFormState,
+  baseline: AgentFormState,
   agent: AgentDetail
+): AgentUpdateSaveIntent | null
+export function diffAgentSaveIntent(
+  form: AgentFormState,
+  baseline: AgentFormState,
+  agent: AgentDetail | null
 ): AgentSaveIntent | null {
+  if (!agent) {
+    if (!isCreatePayloadValid(form)) return null
+    return {
+      kind: 'create',
+      payload: buildCreateAgentPayload(form)
+    }
+  }
   const result = diffAgentUpdate(baseline, form, agent)
   if (!result) return null
   return {

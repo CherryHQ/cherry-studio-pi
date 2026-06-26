@@ -35,6 +35,14 @@ function providerRefreshPaths(providerId: string): ConcreteApiPaths[] {
   ]
 }
 
+function providerApiKeyRefreshPaths(providerId: string): ConcreteApiPaths[] {
+  return [
+    '/providers',
+    `/providers/${providerId}` as ConcreteApiPaths,
+    `/providers/${providerId}/api-keys` as ConcreteApiPaths
+  ]
+}
+
 // ─── Layer 1: List + Create ────────────────────────────────────────────
 export function useProviders(query?: ListProvidersQuery, options?: { swrOptions?: SWRConfiguration }) {
   const filtered = query ? (omitBy(query, isUndefined) as ListProvidersQuery) : undefined
@@ -100,6 +108,7 @@ export function useProvider(providerId: string | null | undefined) {
 export function useProviderMutations(providerId: string) {
   // P0: all mutations refresh list + entity + all sub-paths — no manual invalidate needed.
   const refresh = providerRefreshPaths(providerId)
+  const apiKeyRefresh = providerApiKeyRefreshPaths(providerId)
 
   const {
     trigger: patchTrigger,
@@ -118,21 +127,23 @@ export function useProviderMutations(providerId: string) {
     trigger: addApiKeyTrigger,
     isLoading: isAddingApiKey,
     error: addApiKeyError
-  } = useMutation('POST', '/providers/:providerId/api-keys', { refresh })
+  } = useMutation('POST', '/providers/:providerId/api-keys', { refresh: apiKeyRefresh })
 
   const {
     trigger: deleteApiKeyTrigger,
     isLoading: isDeletingApiKey,
     error: deleteApiKeyError
-  } = useMutation('DELETE', '/providers/:providerId/api-keys/:keyId', { refresh })
+  } = useMutation('DELETE', '/providers/:providerId/api-keys/:keyId', { refresh: apiKeyRefresh })
 
   const {
     trigger: updateApiKeyTrigger,
     isLoading: isUpdatingApiKey,
     error: updateApiKeyError
-  } = useMutation('PATCH', '/providers/:providerId/api-keys/:keyId', { refresh })
+  } = useMutation('PATCH', '/providers/:providerId/api-keys/:keyId', { refresh: apiKeyRefresh })
 
-  const { trigger: replaceApiKeysTrigger } = useMutation('PUT', '/providers/:providerId/api-keys', { refresh })
+  const { trigger: replaceApiKeysTrigger } = useMutation('PUT', '/providers/:providerId/api-keys', {
+    refresh: apiKeyRefresh
+  })
 
   const updateProvider = useCallback(
     async (updates: UpdateProviderDto) => {

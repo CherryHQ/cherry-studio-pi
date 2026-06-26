@@ -112,6 +112,11 @@ describe('PiStreamState', () => {
     } as any)
 
     expect(first.find((chunk: any) => chunk.type === 'text-start')?.id).toBe('session-1:fallback-text:0')
+    expect(first.find((chunk: any) => chunk.type === 'text-delta')).toMatchObject({
+      type: 'text-delta',
+      id: 'session-1:fallback-text:0',
+      delta: 'first'
+    })
     expect(second.find((chunk: any) => chunk.type === 'text-start')?.id).toBe('session-1:fallback-text:1')
   })
 

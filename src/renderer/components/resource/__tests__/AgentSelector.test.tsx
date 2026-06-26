@@ -113,8 +113,11 @@ vi.mock('react-i18next', async (importOriginal) => {
           'common.description': 'Description',
           'common.model': 'Model',
           'common.name': 'Name',
+          'common.next': 'Next',
+          'common.previous': 'Previous',
           'common.required_field': 'Required',
           'common.save': 'Save',
+          'common.advanced_settings': 'Advanced settings',
           'agent.cherryClaw.heartbeat.enabledHelper': 'Send heartbeat messages.',
           'agent.cherryClaw.heartbeat.intervalHelper': 'Heartbeat interval.',
           'agent.edit.title': 'Edit agent',
@@ -136,6 +139,17 @@ vi.mock('react-i18next', async (importOriginal) => {
           'library.config.agent.field.small_model.label': 'Small model',
           'library.config.agent.field.soul_enabled.help': 'Use soul.md.',
           'library.config.agent.field.soul_enabled.label': 'Soul',
+          'library.config.agent.create_title': 'New Agent',
+          'library.config.agent.section.basic.desc': 'Name, avatar, model and directory',
+          'library.config.agent.section.basic.label': 'Basic',
+          'library.config.agent.section.mode.desc': 'Choose how this agent runs.',
+          'library.config.agent.section.prompt.desc': 'Write soul.md and behavior instructions',
+          'library.config.agent.section.prompt.label': 'Prompt',
+          'library.config.agent.section.tools.desc': 'Choose tools, MCP, skills and permissions',
+          'library.config.agent.section.tools.label': 'Tools',
+          'library.config.agent.section.tools.tab.mcp': 'MCP',
+          'library.config.agent.section.tools.tab.skills': 'Skills',
+          'library.config.agent.section.tools.tab.tools': 'Built-in tools',
           'library.config.basic.model_clear': 'Clear',
           'library.config.basic.model_not_found': 'Model {{id}} is unavailable.',
           'library.config.basic.model_pick': 'Pick model',
@@ -146,6 +160,11 @@ vi.mock('react-i18next', async (importOriginal) => {
           'selector.common.pinned_title': 'Pinned',
           'selector.common.unpin': 'Unpin',
           'library.config.dialogs.create.agent_title': 'New Agent',
+          'library.config.dialogs.create.agent_mode.enhanced.description': 'Claude Agent SDK mode',
+          'library.config.dialogs.create.agent_mode.enhanced.title': 'Enhanced mode',
+          'library.config.dialogs.create.agent_mode.label': 'Runtime mode',
+          'library.config.dialogs.create.agent_mode.standard.description': 'Pi Agent mode',
+          'library.config.dialogs.create.agent_mode.standard.title': 'Standard mode',
           'library.config.dialogs.create.avatar_aria': 'Pick avatar',
           'library.config.dialogs.create.dialog_description': 'Create a lightweight resource from the selector.',
           'library.config.dialogs.create.description_placeholder': 'Describe this resource',
@@ -312,7 +331,7 @@ function openPopover() {
 async function openCreateDialog() {
   openPopover()
   fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
-  await screen.findByRole('dialog')
+  await screen.findByRole('dialog', undefined, { timeout: 3000 })
 }
 
 describe('AgentSelector', () => {
@@ -435,35 +454,44 @@ describe('AgentSelector', () => {
     expect(togglePinMock).toHaveBeenCalledWith(ALPHA_AGENT_ID)
   })
 
-  it('opens the lightweight create dialog from the create action', async () => {
+  it('opens the full create wizard from the create action', async () => {
     renderSelector()
     await openCreateDialog()
 
     expect(screen.getByRole('heading', { name: 'New Agent' })).toBeInTheDocument()
-    expect(screen.getByPlaceholderText('Name this resource')).toBeInTheDocument()
-    expect(screen.getByText('Select a model')).toBeInTheDocument()
-    expect(screen.getByPlaceholderText('Describe this resource')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Standard mode/ })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.queryByPlaceholderText('Name this agent')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+
+    expect(screen.getByPlaceholderText('Name this agent')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Pick model' })).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Describe this agent')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    expect(screen.getByText('Please enter a name')).toBeInTheDocument()
   })
 
   it('creates an agent, refreshes, reopens the selector, and does not auto-select by default', async () => {
     const { onChange } = renderSelector()
     await openCreateDialog()
 
-    fireEvent.change(screen.getByPlaceholderText('Name this resource'), { target: { value: 'Created Agent' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    fireEvent.change(screen.getByPlaceholderText('Name this agent'), { target: { value: 'Created Agent' } })
     fireEvent.click(screen.getByRole('button', { name: 'Pick model' }))
-    fireEvent.change(screen.getByPlaceholderText('Describe this resource'), {
+    fireEvent.change(screen.getByPlaceholderText('Describe this agent'), {
       target: { value: 'Created from selector' }
     })
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
     fireEvent.click(screen.getByRole('button', { name: 'Create' }))
 
     await waitFor(() =>
       expect(createAgentMock).toHaveBeenCalledWith({
         body: {
-          type: 'claude-code',
+          type: 'pi',
           name: 'Created Agent',
           model: MODEL.id,
-          planModel: MODEL.id,
-          smallModel: MODEL.id,
           description: 'Created from selector',
           configuration: {
             avatar: '🤖',
@@ -490,8 +518,11 @@ describe('AgentSelector', () => {
     )
     await openCreateDialog()
 
-    fireEvent.change(screen.getByPlaceholderText('Name this resource'), { target: { value: 'Created Agent' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    fireEvent.change(screen.getByPlaceholderText('Name this agent'), { target: { value: 'Created Agent' } })
     fireEvent.click(screen.getByRole('button', { name: 'Pick model' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
     fireEvent.click(screen.getByRole('button', { name: 'Create' }))
 
     await waitFor(() => expect(refetchAgentsMock).toHaveBeenCalledTimes(1))
@@ -503,8 +534,11 @@ describe('AgentSelector', () => {
     renderSelector()
     await openCreateDialog()
 
-    fireEvent.change(screen.getByPlaceholderText('Name this resource'), { target: { value: 'Created Agent' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    fireEvent.change(screen.getByPlaceholderText('Name this agent'), { target: { value: 'Created Agent' } })
     fireEvent.click(screen.getByRole('button', { name: 'Pick model' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
     fireEvent.click(screen.getByRole('button', { name: 'Create' }))
 
     await waitFor(() => expect(refetchAgentsMock).toHaveBeenCalledTimes(1))

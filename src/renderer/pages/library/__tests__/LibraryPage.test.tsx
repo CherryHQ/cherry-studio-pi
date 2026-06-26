@@ -220,7 +220,13 @@ vi.mock('@renderer/components/resource/dialogs', () => ({
   }: {
     kind: 'assistant' | 'agent'
     open: boolean
-    onSubmit: (values: { avatar: string; name: string; modelId: string; description: string }) => Promise<void>
+    onSubmit: (values: {
+      avatar: string
+      name: string
+      modelId: string
+      description: string
+      agentType?: 'pi' | 'claude-code'
+    }) => Promise<void>
     onOpenChange: (open: boolean) => void
   }) =>
     open ? (
@@ -232,7 +238,8 @@ vi.mock('@renderer/components/resource/dialogs', () => ({
               avatar: kind === 'assistant' ? '💬' : '🤖',
               name: `${kind} name`,
               modelId: 'provider::model',
-              description: `${kind} description`
+              description: `${kind} description`,
+              ...(kind === 'agent' ? { agentType: 'pi' as const } : {})
             })
           }>
           finish {kind} create
@@ -290,6 +297,43 @@ vi.mock('@renderer/components/resource/dialogs', () => ({
             </button>
           </div>
         ) : null}
+      </div>
+    ) : null,
+  AgentCreateWizardDialog: ({
+    open,
+    onCreated,
+    onOpenChange
+  }: {
+    open: boolean
+    onCreated: (resource: { id: string }) => Promise<void> | void
+    onOpenChange: (open: boolean) => void
+  }) =>
+    open ? (
+      <div role="dialog" data-testid="agent-create-dialog">
+        <button
+          type="button"
+          onClick={async () => {
+            const created = await createAgentMock({
+              type: 'pi',
+              name: 'agent name',
+              model: 'provider::model',
+              planModel: 'provider::model',
+              smallModel: 'provider::model',
+              description: 'agent description',
+              configuration: {
+                avatar: '🤖',
+                permission_mode: 'bypassPermissions',
+                soul_enabled: true
+              }
+            })
+            onOpenChange(false)
+            await onCreated(created)
+          }}>
+          finish agent create
+        </button>
+        <button type="button" onClick={() => onOpenChange(false)}>
+          close agent create
+        </button>
       </div>
     ) : null
 }))
@@ -459,7 +503,7 @@ describe('LibraryPage create flow', () => {
       expect(screen.queryByTestId('agent-create-dialog')).not.toBeInTheDocument()
     })
     expect(createAgentMock).toHaveBeenCalledWith({
-      type: 'claude-code',
+      type: 'pi',
       name: 'agent name',
       model: 'provider::model',
       planModel: 'provider::model',

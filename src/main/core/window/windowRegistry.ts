@@ -145,17 +145,18 @@ export const WINDOW_TYPE_REGISTRY: Partial<Record<WindowType, WindowTypeMetadata
     type: WindowType.SubWindow,
     lifecycle: 'pooled',
     poolConfig: {
-      // INVARIANT: this pool is destroy-on-close (standbySize:1 + warmup:'eager', and NO
-      // recycleMaxSize). That is the *only* reason the SubWindow renderer is allowed to be
-      // single-init: SubWindowAppShell opens its tab once (an `initialized` ref guard) and
-      // ignores later WindowManager_Reused events. With no recycleMaxSize, close() always
-      // destroys, so a window is never handed back carrying a *different* tab — every open()
-      // either pops a pristine never-navigated standby or creates fresh. The renderer is NOT
-      // reuse-safe. Do NOT add recycleMaxSize (or otherwise enable recycle) here without first
-      // making the renderer re-initialize on window.reused; otherwise a recycled window would
-      // keep displaying its previous tab.
+      // INVARIANT: this pool is destroy-on-close (standbySize:1 and NO recycleMaxSize).
+      // That is the *only* reason the SubWindow renderer is allowed to be single-init:
+      // SubWindowAppShell opens its tab once (an `initialized` ref guard) and ignores later
+      // WindowManager_Reused events. With no recycleMaxSize, close() always destroys, so a
+      // window is never handed back carrying a *different* tab. The renderer is NOT reuse-safe.
+      // Do NOT add recycleMaxSize (or otherwise enable recycle) without first making the
+      // renderer re-initialize on window.reused; otherwise a recycled window would keep
+      // displaying its previous tab.
       standbySize: 1,
-      warmup: 'eager'
+      // Avoid paying a hidden renderer at app boot. The first detach creates synchronously;
+      // after that, WindowManager replenishes one clean standby for the next detach.
+      warmup: 'lazy'
     },
     htmlPath: 'windows/subWindow/index.html',
     // preload omitted → defaults to 'index.js' (full API preload).
@@ -420,9 +421,10 @@ export const WINDOW_TYPE_REGISTRY: Partial<Record<WindowType, WindowTypeMetadata
       macRestoreFocusOnHide: true
     },
     poolConfig: {
-      // Producer axis: always keep one pre-warmed idle window. On every open(),
-      // an async setImmediate replacement is scheduled so the next action recycles
-      // instantly — the action window is user-facing and must not block on create.
+      // Producer axis: keep one pre-warmed idle window after the feature is used. Creating it at
+      // app boot is too expensive for an infrequent surface, especially when selection is disabled.
+      // After the first open(), an async setImmediate replacement is scheduled so the next action
+      // recycles instantly.
       standbySize: 1,
       // Consumer axis: allow a small burst of concurrent action windows to be
       // recycled for reuse (triggered when a second action fires while the first
@@ -435,7 +437,7 @@ export const WINDOW_TYPE_REGISTRY: Partial<Record<WindowType, WindowTypeMetadata
       // buffer down to the standby window. standbySize is preserved as a
       // permanent availability commitment.
       inactivityTimeout: 300,
-      warmup: 'eager'
+      warmup: 'lazy'
     }
   }
 }

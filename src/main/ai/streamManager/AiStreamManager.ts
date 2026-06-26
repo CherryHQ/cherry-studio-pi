@@ -1104,8 +1104,9 @@ export class AiStreamManager extends BaseService {
 
   /** Broadcast done for a single execution to all topic listeners. */
   private async broadcastExecutionDone(stream: ActiveStream, exec: StreamExecution, isTopicDone = true): Promise<void> {
+    const finalMessage = ensureTerminalFinalMessage(exec)
     const result: StreamDoneResult = {
-      finalMessage: exec.finalMessage,
+      finalMessage,
       status: 'success',
       modelId: exec.modelId,
       isTopicDone,
@@ -1121,8 +1122,9 @@ export class AiStreamManager extends BaseService {
     exec: StreamExecution,
     isTopicDone = true
   ): Promise<void> {
+    const finalMessage = ensureTerminalFinalMessage(exec)
     const result = {
-      finalMessage: exec.finalMessage,
+      finalMessage,
       status: 'paused' as const,
       modelId: exec.modelId,
       isTopicDone,

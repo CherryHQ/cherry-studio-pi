@@ -26,6 +26,12 @@ const AwsBedrockSettings: FC<Props> = ({ providerId }) => {
   const { data: authConfig } = useProviderAuthConfig(providerId)
   const { inputApiKey, setInputApiKey, commitInputApiKeyNow } = useAuthenticationApiKey()
 
+  const commitApiKeyInput = useCallback(() => {
+    void Promise.resolve(commitInputApiKeyNow()).catch(() => {
+      window.toast.error(t('settings.provider.api_key.save_failed'))
+    })
+  }, [commitInputApiKeyNow, t])
+
   const isIamMode = provider?.authType === 'iam-aws'
   const iamConfig = authConfig?.type === 'iam-aws' ? authConfig : null
   const apiKeyAwsConfig = authConfig?.type === 'api-key-aws' ? authConfig : null
@@ -223,7 +229,13 @@ const AwsBedrockSettings: FC<Props> = ({ providerId }) => {
             value={inputApiKey}
             placeholder={t('settings.provider.aws-bedrock.api_key')}
             onChange={(e) => setInputApiKey(e.target.value)}
-            onBlur={() => void commitInputApiKeyNow()}
+            onBlur={commitApiKeyInput}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                commitApiKeyInput()
+              }
+            }}
             spellCheck={false}
           />
           <ProviderHelpTextRow>

@@ -369,6 +369,19 @@ describe('SelectorShell', () => {
     expect(screen.queryByTestId('lazy-body')).not.toBeInTheDocument()
   })
 
+  it('does not build default destroy content while closed', () => {
+    const renderContent = vi.fn(() => <div data-testid="destroy-body" />)
+
+    render(
+      <SelectorShell trigger={<button type="button">Open</button>} open={false} onOpenChange={vi.fn()}>
+        {renderContent}
+      </SelectorShell>
+    )
+
+    expect(renderContent).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('destroy-body')).not.toBeInTheDocument()
+  })
+
   it('does not expose a lazy-kept placement placeholder as available height', () => {
     render(
       <SelectorShell

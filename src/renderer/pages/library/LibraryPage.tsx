@@ -1,5 +1,6 @@
 import { Alert, Button } from '@cherrystudio/ui'
 import {
+  AgentCreateWizardDialog,
   AgentEditDialog,
   AssistantEditDialog,
   ResourceCreateDialog,
@@ -19,7 +20,6 @@ import { useNavigate } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { useAgentMutations } from './adapters/agentAdapter'
 import { useAssistantMutations } from './adapters/assistantAdapter'
 import { usePromptMutations, usePromptMutationsById } from './adapters/promptAdapter'
 import { DEFAULT_TAG_COLOR, getRandomTagColor, RESOURCE_TYPE_ORDER } from './constants'
@@ -129,8 +129,8 @@ export default function LibraryPage() {
   const assistantTagUiEnabled = isAssistantLibrary && isAssistantCatalogMine
 
   const { createAssistant, duplicateAssistant } = useAssistantMutations()
-  const { createAgent } = useAgentMutations()
-  const agentModelFilter = useAgentModelFilter('claude-code')
+  const standardAgentModelFilter = useAgentModelFilter('pi')
+  const enhancedAgentModelFilter = useAgentModelFilter('claude-code')
   const { createPrompt } = usePromptMutations()
   const promptDialogPrompt = promptDialog?.prompt ?? null
   const { updatePrompt } = usePromptMutationsById(promptDialogPrompt?.id ?? '')
@@ -154,6 +154,14 @@ export default function LibraryPage() {
     () => tagList.tags.map((t) => t.name).sort((a, b) => a.localeCompare(b, 'zh')),
     [tagList.tags]
   )
+  const createAgentModelFilters = useMemo(
+    () => ({ pi: standardAgentModelFilter, 'claude-code': enhancedAgentModelFilter }),
+    [enhancedAgentModelFilter, standardAgentModelFilter]
+  )
+  const editAgentModelFilter =
+    editDialog?.kind === 'agent' && editDialog.resource.type === 'claude-code'
+      ? enhancedAgentModelFilter
+      : standardAgentModelFilter
 
   const noop = useCallback(() => {}, [])
   const handleClosePromptDialog = useCallback(() => {
@@ -352,20 +360,6 @@ export default function LibraryPage() {
             modelId: values.modelId,
             description: values.description
           })
-        } else {
-          await createAgent({
-            type: 'claude-code',
-            name: values.name,
-            model: values.modelId,
-            planModel: values.modelId,
-            smallModel: values.modelId,
-            description: values.description,
-            configuration: {
-              avatar: values.avatar,
-              permission_mode: 'bypassPermissions',
-              soul_enabled: true
-            }
-          })
         }
 
         setCreateDialogOpen(false)
@@ -374,7 +368,7 @@ export default function LibraryPage() {
         setCreatingResource(false)
       }
     },
-    [createAgent, createAssistant, createDialogKind, creatingResource, refetch]
+    [createAssistant, createDialogKind, creatingResource, refetch]
   )
 
   const handleEditDialogOpenChange = useCallback((open: boolean) => {
@@ -502,12 +496,21 @@ export default function LibraryPage() {
       <ImportAssistantDialog open={assistantImportOpen} onOpenChange={setAssistantImportOpen} onImported={refetch} />
       <ImportSkillDialog open={skillImportOpen} onOpenChange={setSkillImportOpen} onInstalled={refetch} />
       <ResourceCreateDialog
-        kind={createDialogKind ?? 'assistant'}
-        open={createDialogOpen}
+        kind="assistant"
+        open={createDialogOpen && createDialogKind === 'assistant'}
         isSubmitting={creatingResource}
-        modelFilter={createDialogKind === 'agent' ? agentModelFilter : isSelectableAssistantModel}
+        modelFilter={isSelectableAssistantModel}
         onOpenChange={handleCreateDialogOpenChange}
         onSubmit={handleSubmitCreateResource}
+      />
+      <AgentCreateWizardDialog
+        open={createDialogOpen && createDialogKind === 'agent'}
+        agentModelFilters={createAgentModelFilters}
+        onOpenChange={handleCreateDialogOpenChange}
+        onCreated={() => {
+          setCreateDialogOpen(false)
+          refetch()
+        }}
       />
       {editDialog?.kind === 'assistant' ? (
         <AssistantEditDialog
@@ -522,7 +525,7 @@ export default function LibraryPage() {
         <AgentEditDialog
           open={editDialogOpen}
           resource={editDialog.resource}
-          modelFilter={agentModelFilter}
+          modelFilter={editAgentModelFilter}
           onOpenChange={handleEditDialogOpenChange}
           onSaved={handleEditSaved}
         />

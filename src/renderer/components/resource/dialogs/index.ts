@@ -1,4 +1,9 @@
-export { AgentEditDialog, type AgentEditDialogProps } from './edit/AgentEditDialog'
+export {
+  AgentCreateWizardDialog,
+  type AgentCreateWizardDialogProps,
+  AgentEditDialog,
+  type AgentEditDialogProps
+} from './edit/AgentEditDialog'
 export {
   AssistantEditDialog,
   type AssistantEditDialogProps,

@@ -73,8 +73,8 @@ function AgentEditDialogHost({
   onSaved
 }: ResourceEditDialogHostProps & { target: Extract<ResourceEditDialogTarget, { kind: 'agent' }> }) {
   const { t } = useTranslation()
-  const modelFilter = useAgentModelFilter('claude-code')
   const { agent, error, revalidate } = useAgent(target.id)
+  const modelFilter = useAgentModelFilter(agent?.type)
 
   useEffect(() => {
     if (!error) return

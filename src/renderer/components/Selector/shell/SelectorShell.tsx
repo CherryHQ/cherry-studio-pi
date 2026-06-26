@@ -355,7 +355,7 @@ export function SelectorShell({
     }
   }, [])
 
-  const shouldRenderContent = mountStrategy === 'lazy-keep' ? open || hasOpened : true
+  const shouldRenderContent = forceMount ? true : mountStrategy === 'lazy-keep' ? open || hasOpened : open
   const shouldForceMount = mountStrategy === 'lazy-keep' || forceMount ? true : undefined
   const resolvedPortalContainer = portalContainer ?? pagePortalContainer ?? localPortalContainer ?? undefined
   const layout = useMemo(

@@ -2084,6 +2084,7 @@
     "generate_random_seed": "生成随机种子",
     "get_embedding_dimension": "获取嵌入维度",
     "go_to_settings": "前往设置",
+    "help": "帮助",
     "html_preview": "HTML 预览",
     "i_know": "我知道了",
     "ignore": "忽略",
@@ -3046,6 +3047,9 @@
             "label": "基础设置",
             "title": "基础设置"
           },
+          "mode": {
+            "desc": "选择智能体的底层运行方式"
+          },
           "permission": {
             "desc": "控制 Agent 可执行操作的授权范围",
             "label": "权限模式",
@@ -3156,6 +3160,17 @@
       "breadcrumb": "资源库",
       "dialogs": {
         "create": {
+          "agent_mode": {
+            "enhanced": {
+              "description": "使用 Claude Agent SDK，适合更复杂的任务；需要兼容 Anthropic 的端点，响应可能更慢。",
+              "title": "增强模式"
+            },
+            "label": "运行模式",
+            "standard": {
+              "description": "使用 Pi Agent，适合大多数任务；响应更快、更省 token，支持所有可聊天模型。",
+              "title": "常规模式"
+            }
+          },
           "agent_title": "新建智能体",
           "assistant_title": "新建助手",
           "avatar_aria": "选择头像",

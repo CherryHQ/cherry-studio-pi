@@ -239,3 +239,16 @@ describe('WINDOW_TYPE_REGISTRY Main window — frame contract', () => {
     expect(result.titleBarStyle).toBe('hidden')
   })
 })
+
+describe('WINDOW_TYPE_REGISTRY warmup policy', () => {
+  it('does not eagerly create hidden high-cost pooled windows on app boot', () => {
+    expect(WINDOW_TYPE_REGISTRY[WindowType.SubWindow]).toMatchObject({
+      lifecycle: 'pooled',
+      poolConfig: { standbySize: 1, warmup: 'lazy' }
+    })
+    expect(WINDOW_TYPE_REGISTRY[WindowType.SelectionAction]).toMatchObject({
+      lifecycle: 'pooled',
+      poolConfig: { standbySize: 1, warmup: 'lazy' }
+    })
+  })
+})

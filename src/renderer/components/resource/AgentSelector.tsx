@@ -1,10 +1,6 @@
 import { loggerService } from '@logger'
-import {
-  ResourceCreateDialog,
-  type ResourceCreateDialogValues
-} from '@renderer/components/resource/dialogs/ResourceCreateDialog'
 import type { SelectorShellMountStrategy, SelectorShellProps } from '@renderer/components/Selector/shell/SelectorShell'
-import { useMutation, useQuery } from '@renderer/data/hooks/useDataApi'
+import { useQuery } from '@renderer/data/hooks/useDataApi'
 import { useAgentModelFilter } from '@renderer/hooks/agents/useAgentModelFilter'
 import { usePins } from '@renderer/hooks/usePins'
 import type { AgentDetail } from '@renderer/pages/library/types'
@@ -20,6 +16,34 @@ const AgentEditDialog = lazy(() =>
     default: module.AgentEditDialog
   }))
 )
+const AgentCreateWizardDialog = lazy(() =>
+  import('@renderer/components/resource/dialogs/edit/AgentEditDialog').then((module) => ({
+    default: module.AgentCreateWizardDialog
+  }))
+)
+
+function waitForDialogCloseFrame() {
+  if (typeof window === 'undefined') return Promise.resolve()
+
+  return new Promise<void>((resolve) => {
+    let resolved = false
+    const resolveOnce = () => {
+      if (resolved) return
+      resolved = true
+      resolve()
+    }
+
+    const timeoutId = window.setTimeout(resolveOnce, 50)
+    if (typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(() =>
+        window.requestAnimationFrame(() => {
+          window.clearTimeout(timeoutId)
+          resolveOnce()
+        })
+      )
+    }
+  })
+}
 
 export type AgentSelectorItem = ResourceSelectorShellItem
 
@@ -51,7 +75,8 @@ export type AgentSelectorProps = AgentSelectorSingleIdProps | AgentSelectorSingl
 export function AgentSelector(props: AgentSelectorProps) {
   const { trigger, open, onOpenChange, autoSelectOnCreate, side, align, sideOffset, mountStrategy } = props
   const { t } = useTranslation()
-  const modelFilter = useAgentModelFilter('claude-code')
+  const standardModelFilter = useAgentModelFilter('pi')
+  const enhancedModelFilter = useAgentModelFilter('claude-code')
   const [internalOpen, setInternalOpen] = useState(false)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
@@ -68,9 +93,6 @@ export function AgentSelector(props: AgentSelectorProps) {
   )
 
   const { data, isLoading, refetch } = useQuery('/agents', { query: { limit: 500 } })
-  const { trigger: createAgent, isLoading: isCreatingAgent } = useMutation('POST', '/agents', {
-    refresh: ['/agents']
-  })
   const {
     isLoading: isPinnedLoading,
     isRefreshing: isPinsRefreshing,
@@ -80,6 +102,11 @@ export function AgentSelector(props: AgentSelectorProps) {
     togglePin
   } = usePins('agent')
   const isPinActionDisabled = isPinnedLoading || isPinsRefreshing || isPinsMutating
+  const createModelFilters = useMemo(
+    () => ({ pi: standardModelFilter, 'claude-code': enhancedModelFilter }),
+    [enhancedModelFilter, standardModelFilter]
+  )
+  const editModelFilter = editingAgent?.type === 'claude-code' ? enhancedModelFilter : standardModelFilter
 
   const items: AgentSelectorItem[] = useMemo(
     () =>
@@ -123,30 +150,8 @@ export function AgentSelector(props: AgentSelectorProps) {
     }
   }, [])
 
-  const handleSubmitCreate = useCallback(
-    async (values: ResourceCreateDialogValues) => {
-      let created: AgentDetail
-      try {
-        created = await createAgent({
-          body: {
-            type: 'claude-code',
-            name: values.name,
-            model: values.modelId,
-            planModel: values.modelId,
-            smallModel: values.modelId,
-            description: values.description,
-            configuration: {
-              avatar: values.avatar,
-              permission_mode: 'bypassPermissions',
-              soul_enabled: true
-            }
-          }
-        })
-      } catch (error) {
-        logger.error('Failed to create agent from selector', error as Error)
-        throw error
-      }
-
+  const handleCreated = useCallback(
+    async (created: AgentDetail) => {
       setCreateDialogOpen(false)
       try {
         await refetch()
@@ -168,9 +173,10 @@ export function AgentSelector(props: AgentSelectorProps) {
         handleSelectorOpenChange(false)
         return
       }
+      await waitForDialogCloseFrame()
       handleSelectorOpenChange(true)
     },
-    [autoSelectOnCreate, createAgent, handleSelectorOpenChange, props, refetch, t]
+    [autoSelectOnCreate, handleSelectorOpenChange, props, refetch, t]
   )
 
   const handleEditSaved = useCallback(async () => {
@@ -185,14 +191,14 @@ export function AgentSelector(props: AgentSelectorProps) {
   }, [refetch, t])
 
   const createDialog = (
-    <ResourceCreateDialog
-      kind="agent"
-      open={createDialogOpen}
-      isSubmitting={isCreatingAgent}
-      onOpenChange={setCreateDialogOpen}
-      onSubmit={handleSubmitCreate}
-      modelFilter={modelFilter}
-    />
+    <Suspense fallback={null}>
+      <AgentCreateWizardDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+        onCreated={handleCreated}
+        agentModelFilters={createModelFilters}
+      />
+    </Suspense>
   )
 
   const editDialog =
@@ -203,7 +209,7 @@ export function AgentSelector(props: AgentSelectorProps) {
           resource={editingAgent}
           onOpenChange={handleEditDialogOpenChange}
           onSaved={handleEditSaved}
-          modelFilter={modelFilter}
+          modelFilter={editModelFilter}
         />
       </Suspense>
     ) : null
@@ -223,7 +229,10 @@ export function AgentSelector(props: AgentSelectorProps) {
     onTogglePin: handleTogglePin,
     isPinActionDisabled,
     onEditItem: handleEditItem,
-    onCreateNew: () => setCreateDialogOpen(true),
+    onCreateNew: () => {
+      handleSelectorOpenChange(false)
+      setCreateDialogOpen(true)
+    },
     loading: isLoading || isPinnedLoading,
     labels: {
       searchPlaceholder: t('selector.agent.search_placeholder'),

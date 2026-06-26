@@ -288,7 +288,7 @@ describe('useProviderMutations', () => {
     expect(deleteCall![2]).toEqual({ refresh: ['/providers', '/providers/openai', '/providers/openai/*'] })
   })
 
-  it('should set up POST api-keys mutation with /* wildcard refresh', () => {
+  it('should set up POST api-keys mutation with focused api-key refresh', () => {
     renderHook(() => useProviderMutations('openai'))
 
     const addKeyCall = mockUseMutation.mock.calls.find(
@@ -296,13 +296,12 @@ describe('useProviderMutations', () => {
     )
 
     expect(addKeyCall).toBeDefined()
-    // /* wildcard covers api-keys sub-path declaratively; no explicit sub-path needed
     expect(addKeyCall![2]).toEqual({
-      refresh: ['/providers', '/providers/openai', '/providers/openai/*']
+      refresh: ['/providers', '/providers/openai', '/providers/openai/api-keys']
     })
   })
 
-  it('should set up DELETE api-key mutation with /* wildcard refresh', () => {
+  it('should set up DELETE api-key mutation with focused api-key refresh', () => {
     renderHook(() => useProviderMutations('openai'))
 
     const deleteKeyCall = mockUseMutation.mock.calls.find(
@@ -311,11 +310,11 @@ describe('useProviderMutations', () => {
 
     expect(deleteKeyCall).toBeDefined()
     expect(deleteKeyCall![2]).toEqual({
-      refresh: ['/providers', '/providers/openai', '/providers/openai/*']
+      refresh: ['/providers', '/providers/openai', '/providers/openai/api-keys']
     })
   })
 
-  it('should set up PATCH api-key mutation with /* wildcard refresh', () => {
+  it('should set up PATCH api-key mutation with focused api-key refresh', () => {
     renderHook(() => useProviderMutations('openai'))
 
     const updateKeyCall = mockUseMutation.mock.calls.find(
@@ -324,11 +323,11 @@ describe('useProviderMutations', () => {
 
     expect(updateKeyCall).toBeDefined()
     expect(updateKeyCall![2]).toEqual({
-      refresh: ['/providers', '/providers/openai', '/providers/openai/*']
+      refresh: ['/providers', '/providers/openai', '/providers/openai/api-keys']
     })
   })
 
-  it('should set up PUT api-keys mutation with /* wildcard refresh', () => {
+  it('should set up PUT api-keys mutation with focused api-key refresh', () => {
     renderHook(() => useProviderMutations('openai'))
 
     const replaceKeysCall = mockUseMutation.mock.calls.find(
@@ -337,7 +336,7 @@ describe('useProviderMutations', () => {
 
     expect(replaceKeysCall).toBeDefined()
     expect(replaceKeysCall![2]).toEqual({
-      refresh: ['/providers', '/providers/openai', '/providers/openai/*']
+      refresh: ['/providers', '/providers/openai', '/providers/openai/api-keys']
     })
   })
 

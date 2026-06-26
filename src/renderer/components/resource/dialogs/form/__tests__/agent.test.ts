@@ -4,9 +4,12 @@ import { describe, expect, it } from 'vitest'
 import {
   type AgentFormState,
   applyAgentFormPatch,
+  buildCreateAgentPayload,
   buildInitialAgentFormState,
   diffAgentSaveIntent,
-  diffAgentUpdate
+  diffAgentUpdate,
+  isCreatePayloadValid,
+  validateAgentCreateForm
 } from '../agent'
 
 function createAgent(overrides: Partial<AgentDetail> = {}): AgentDetail {
@@ -19,10 +22,11 @@ function createAgent(overrides: Partial<AgentDetail> = {}): AgentDetail {
     modelName: null,
     instructions: '',
     mcps: [],
+    disabledTools: [],
     configuration: {},
-    orderKey: 'k',
     createdAt: '2026-04-20T00:00:00.000Z',
     updatedAt: '2026-04-20T00:00:00.000Z',
+    orderKey: 'k',
     ...overrides
   }
 }
@@ -33,20 +37,23 @@ describe('buildInitialAgentFormState', () => {
       name: 'Demo',
       description: 'd',
       model: 'p-1::m-1',
-      planModel: 'p-1::p-1',
-      smallModel: 'p-1::s-1',
+      planModel: 'p-1::planner',
+      smallModel: 'p-1::small',
       instructions: 'hi',
-      mcps: ['mcp-1']
+      mcps: ['mcp-1'],
+      disabledTools: ['Read']
     })
     const state = buildInitialAgentFormState(agent)
     expect(state).toMatchObject({
+      type: 'claude-code',
       name: 'Demo',
       description: 'd',
       model: 'p-1::m-1',
-      planModel: 'p-1::p-1',
-      smallModel: 'p-1::s-1',
+      planModel: 'p-1::planner',
+      smallModel: 'p-1::small',
       instructions: 'hi',
-      mcps: ['mcp-1']
+      mcps: ['mcp-1'],
+      disabledTools: ['Read']
     })
   })
 
@@ -55,6 +62,7 @@ describe('buildInitialAgentFormState', () => {
       configuration: {
         avatar: '🚀',
         permission_mode: 'bypassPermissions',
+        max_turns: 10,
         soul_enabled: true,
         heartbeat_enabled: true,
         heartbeat_interval: 15,
@@ -67,10 +75,22 @@ describe('buildInitialAgentFormState', () => {
     const state = buildInitialAgentFormState(agent)
     expect(state.avatar).toBe('🚀')
     expect(state.permissionMode).toBe('bypassPermissions')
+    expect(state.maxTurns).toBe(10)
     expect(state.soulEnabled).toBe(true)
     expect(state.heartbeatEnabled).toBe(true)
     expect(state.heartbeatInterval).toBe(15)
     expect(state.envVarsText).toBe('DEBUG=1\nNODE_ENV=production')
+  })
+
+  it('maps the default max_turns value to the form sentinel 0', () => {
+    const agent = createAgent({
+      configuration: {
+        max_turns: 100
+      }
+    })
+
+    const state = buildInitialAgentFormState(agent)
+    expect(state.maxTurns).toBe(0)
   })
 
   it('uses the legacy heartbeat defaults when configuration omits heartbeat keys', () => {
@@ -81,54 +101,185 @@ describe('buildInitialAgentFormState', () => {
   })
 })
 
-describe('applyAgentFormPatch', () => {
-  it('switching permission mode does not enable soul mode', () => {
+describe('agent create flow helpers', () => {
+  it('defaults new agents to Pi runtime with Soul mode enabled', () => {
     const draft = buildInitialAgentFormState()
-    const next = applyAgentFormPatch(draft, { permissionMode: 'acceptEdits' })
+
+    expect(draft.type).toBe('pi')
+    expect(draft.soulEnabled).toBe(true)
+    expect(draft.permissionMode).toBe('bypassPermissions')
+  })
+
+  it('requires both name and model before create save is enabled', () => {
+    const draft = buildInitialAgentFormState()
+
+    expect(isCreatePayloadValid(draft)).toBe(false)
+    expect(isCreatePayloadValid({ ...draft, name: 'Planner' })).toBe(false)
+    expect(isCreatePayloadValid({ ...draft, model: 'anthropic::claude-sonnet-4-5' })).toBe(false)
+    expect(isCreatePayloadValid({ ...draft, name: 'Planner', model: 'anthropic::claude-sonnet-4-5' })).toBe(true)
+  })
+
+  it('preserves UniqueModelIds in the create payload without legacy conversion', () => {
+    const draft = buildInitialAgentFormState()
+    const form: AgentFormState = {
+      ...draft,
+      name: 'Planner',
+      model: 'anthropic::claude-sonnet-4-5',
+      planModel: 'anthropic::claude-haiku-4-5',
+      smallModel: 'anthropic::claude-opus-4-5'
+    }
+
+    expect(buildCreateAgentPayload(form)).toMatchObject({
+      type: 'pi',
+      model: 'anthropic::claude-sonnet-4-5',
+      planModel: 'anthropic::claude-haiku-4-5',
+      smallModel: 'anthropic::claude-opus-4-5'
+    })
+  })
+
+  it('defaults new agents to the Pi runtime and keeps Claude SDK as an explicit enhanced mode', () => {
+    const draft = buildInitialAgentFormState()
+    const baseForm: AgentFormState = {
+      ...draft,
+      name: 'Planner',
+      model: 'anthropic::claude-sonnet-4-5'
+    }
+
+    expect(buildCreateAgentPayload(baseForm).type).toBe('pi')
+    expect(buildCreateAgentPayload({ ...baseForm, type: 'claude-code' }).type).toBe('claude-code')
+  })
+
+  it('reports missing required fields individually for page-level validation', () => {
+    const draft = buildInitialAgentFormState()
+
+    expect(validateAgentCreateForm(draft)).toEqual({
+      nameMissing: true,
+      modelMissing: true,
+      isValid: false
+    })
+    expect(validateAgentCreateForm({ ...draft, name: 'Planner' })).toEqual({
+      nameMissing: false,
+      modelMissing: true,
+      isValid: false
+    })
+  })
+
+  it('writes an explicit heartbeat disable in the create payload', () => {
+    const draft = buildInitialAgentFormState()
+    const payload = buildCreateAgentPayload({
+      ...draft,
+      name: 'Planner',
+      model: 'anthropic::claude-sonnet-4-5',
+      heartbeatEnabled: false
+    })
+
+    expect(payload.configuration).toMatchObject({
+      heartbeat_enabled: false
+    })
+  })
+
+  it('deduplicates disabled tools in the create payload', () => {
+    const draft = buildInitialAgentFormState()
+    const payload = buildCreateAgentPayload({
+      ...draft,
+      name: 'Planner',
+      model: 'anthropic::claude-sonnet-4-5',
+      disabledTools: ['Bash', 'Read', 'Bash']
+    })
+
+    expect(payload.disabledTools).toEqual(['Bash', 'Read'])
+  })
+
+  it('wraps valid create forms as a create save intent', () => {
+    const draft = buildInitialAgentFormState()
+    const form: AgentFormState = {
+      ...draft,
+      name: 'Planner',
+      model: 'openai::gpt-4.1'
+    }
+
+    expect(diffAgentSaveIntent(form, draft, null)).toMatchObject({
+      kind: 'create',
+      payload: {
+        type: 'pi',
+        name: 'Planner',
+        model: 'openai::gpt-4.1'
+      }
+    })
+  })
+})
+
+describe('applyAgentFormPatch', () => {
+  const tools = [
+    {
+      id: 'Read',
+      name: 'Read',
+      origin: 'builtin' as const,
+      approval: 'auto' as const
+    },
+    {
+      id: 'Glob',
+      name: 'Glob',
+      origin: 'builtin' as const,
+      approval: 'auto' as const
+    },
+    {
+      id: 'Edit',
+      name: 'Edit',
+      origin: 'builtin' as const,
+      approval: 'prompt' as const
+    }
+  ]
+
+  it('does not persist mode defaults when permission mode changes', () => {
+    const draft = buildInitialAgentFormState()
+    const next = applyAgentFormPatch(draft, { permissionMode: 'acceptEdits' }, tools)
 
     expect(next.permissionMode).toBe('acceptEdits')
-    expect(next.soulEnabled).toBe(false)
+    expect(next.disabledTools).toEqual([])
   })
 
-  it('switching to bypass permissions does not enable soul mode', () => {
+  it('enabling soul mode switches to bypass permissions without mutating disabled tools', () => {
     const draft = buildInitialAgentFormState()
-    const next = applyAgentFormPatch(draft, { permissionMode: 'bypassPermissions' })
-
-    expect(next.permissionMode).toBe('bypassPermissions')
-    expect(next.soulEnabled).toBe(false)
-  })
-
-  it('enabling soul mode switches to bypass permissions', () => {
-    const draft = buildInitialAgentFormState()
-    const next = applyAgentFormPatch(draft, { soulEnabled: true })
+    const next = applyAgentFormPatch(draft, { soulEnabled: true }, tools)
 
     expect(next.soulEnabled).toBe(true)
     expect(next.permissionMode).toBe('bypassPermissions')
+    expect(next.disabledTools).toEqual([])
   })
 
   it('leaving bypass permissions disables soul mode to match the legacy settings popup', () => {
     const draft = buildInitialAgentFormState(
       createAgent({
+        disabledTools: ['Edit'],
         configuration: { soul_enabled: true, permission_mode: 'bypassPermissions' }
       })
     )
-    const next = applyAgentFormPatch(draft, { permissionMode: 'default' })
+    const next = applyAgentFormPatch(draft, { permissionMode: 'default' }, tools)
 
     expect(next.permissionMode).toBe('default')
     expect(next.soulEnabled).toBe(false)
   })
-})
 
-describe('diffAgentSaveIntent', () => {
-  it('wraps update diffs for the edit dialog save handler', () => {
-    const agent = createAgent()
-    const baseline = buildInitialAgentFormState(agent)
-    const next = { ...baseline, name: 'Renamed' }
+  it('clears manually selected tools when switching runtime modes', () => {
+    const draft = buildInitialAgentFormState()
+    const next = applyAgentFormPatch(
+      {
+        ...draft,
+        model: 'openai::gpt-4.1',
+        planModel: 'openai::gpt-4.1-mini',
+        smallModel: 'openai::gpt-4.1-nano',
+        disabledTools: ['Read']
+      },
+      { type: 'claude-code' },
+      tools
+    )
 
-    expect(diffAgentSaveIntent(next, baseline, agent)).toEqual({
-      kind: 'update',
-      payload: { name: 'Renamed' }
-    })
+    expect(next.type).toBe('claude-code')
+    expect(next.model).toBe('')
+    expect(next.planModel).toBe('')
+    expect(next.smallModel).toBe('')
+    expect(next.disabledTools).toEqual([])
   })
 })
 
@@ -137,6 +288,17 @@ describe('diffAgentUpdate', () => {
     const agent = createAgent()
     const baseline = buildInitialAgentFormState(agent)
     expect(diffAgentUpdate(baseline, baseline, agent)).toBeNull()
+  })
+
+  it('wraps update diffs as an update save intent', () => {
+    const agent = createAgent()
+    const baseline = buildInitialAgentFormState(agent)
+    const next = { ...baseline, name: 'Renamed' }
+
+    expect(diffAgentSaveIntent(next, baseline, agent)).toEqual({
+      kind: 'update',
+      payload: { name: 'Renamed' }
+    })
   })
 
   it('includes only changed top-level keys in the PATCH payload', () => {
@@ -174,19 +336,20 @@ describe('diffAgentUpdate', () => {
     })
   })
 
-  it('merges configuration-subkey patches on top of the existing configuration without sending max_turns', () => {
+  it('merges configuration-subkey patches on top of the existing configuration', () => {
     const agent = createAgent({
-      configuration: { avatar: '🤖', plugin_state: 'keep-me', max_turns: 10 }
+      configuration: { avatar: '🤖', plugin_state: 'keep-me' }
     })
     const baseline = buildInitialAgentFormState(agent)
-    const next = { ...baseline, avatar: '🚀' }
+    const next = { ...baseline, avatar: '🚀', maxTurns: 5 }
 
     const result = diffAgentUpdate(baseline, next, agent)
     // plugin_state must be preserved — the library form does not edit it, so
     // it MUST NOT be stripped from the PATCH payload.
     expect(result?.dto.configuration).toEqual({
       avatar: '🚀',
-      plugin_state: 'keep-me'
+      plugin_state: 'keep-me',
+      max_turns: 5
     })
   })
 
@@ -229,5 +392,32 @@ describe('diffAgentUpdate', () => {
     expect(result?.dto.configuration).toMatchObject({
       permission_mode: 'default'
     })
+  })
+
+  it('restores max_turns to the schema default when the form uses the 0 sentinel', () => {
+    const agent = createAgent({ configuration: { max_turns: 5 } })
+    const baseline = buildInitialAgentFormState(agent)
+    const next = { ...baseline, maxTurns: 0 }
+
+    const result = diffAgentUpdate(baseline, next, agent)
+    expect(result?.dto.configuration).toMatchObject({
+      max_turns: 100
+    })
+  })
+
+  it('treats disabled tools as an order-insensitive set', () => {
+    const agent = createAgent({ disabledTools: ['Bash', 'Read'] })
+    const baseline = buildInitialAgentFormState(agent)
+    const next = { ...baseline, disabledTools: ['Read', 'Bash'] }
+
+    expect(diffAgentUpdate(baseline, next, agent)).toBeNull()
+  })
+
+  it('emits deduplicated disabled tools when the set changes', () => {
+    const agent = createAgent({ disabledTools: ['Bash'] })
+    const baseline = buildInitialAgentFormState(agent)
+    const next = { ...baseline, disabledTools: ['Bash', 'Read', 'Read'] }
+
+    expect(diffAgentUpdate(baseline, next, agent)?.dto.disabledTools).toEqual(['Bash', 'Read'])
   })
 })

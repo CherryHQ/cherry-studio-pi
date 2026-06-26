@@ -637,6 +637,25 @@ describe('AiStreamManager', () => {
       expect(receiver.doneResults).toHaveLength(1)
     })
 
+    it('uses the anchor message id when execution completes without receiving chunks', async () => {
+      const listener = new FakeListener('l:a')
+      startSingle(mgr, {
+        topicId: 'a',
+        modelId: 'provider-a::model-a',
+        request: { ...req('a'), messageId: 'assistant-1' },
+        listeners: [listener]
+      })
+
+      await mgr.onExecutionDone('a', 'provider-a::model-a')
+
+      expect(listener.doneResults[0].finalMessage).toMatchObject({
+        id: 'assistant-1',
+        role: 'assistant',
+        parts: []
+      })
+      expect(mgr.inspect('a')!.executions[0].finalMessage?.id).toBe('assistant-1')
+    })
+
     it('flushes trace spans for completed chat topics', async () => {
       startSingle(mgr, {
         topicId: 'a',
@@ -749,6 +768,26 @@ describe('AiStreamManager', () => {
       const snap = mgr.inspect('a')!
       expect(snap.status).toBe('aborted')
       expect(snap.executions[0].abortSignal.aborted).toBe(true)
+    })
+
+    it('uses the anchor message id when execution pauses without receiving chunks', async () => {
+      const listener = new FakeListener('l:a')
+      startSingle(mgr, {
+        topicId: 'a',
+        modelId: 'provider-a::model-a',
+        request: { ...req('a'), messageId: 'assistant-1' },
+        listeners: [listener]
+      })
+
+      mgr.abort('a', 'user-stop')
+      await mgr.onExecutionPaused('a', 'provider-a::model-a')
+
+      expect(listener.pausedResults[0].finalMessage).toMatchObject({
+        id: 'assistant-1',
+        role: 'assistant',
+        parts: []
+      })
+      expect(mgr.inspect('a')!.executions[0].finalMessage?.id).toBe('assistant-1')
     })
 
     it('does not affect non-streaming topics', async () => {

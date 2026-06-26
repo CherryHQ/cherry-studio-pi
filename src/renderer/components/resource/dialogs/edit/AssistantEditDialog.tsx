@@ -271,7 +271,7 @@ function AssistantEditDialogContent({
       setDialogContentElement={setDialogContentElement}
       tabs={tabs}
       title={t('library.config.dialogs.edit.assistant_title')}>
-      <TabsContent value="basic" forceMount hidden={activeTab !== 'basic'} className="m-0">
+      <TabsContent value="basic" className="m-0">
         <AssistantBasicFields
           form={form}
           modelFilter={modelFilter}
@@ -283,7 +283,7 @@ function AssistantEditDialogContent({
           setEmojiPickerOpen={setEmojiPickerOpen}
         />
       </TabsContent>
-      <TabsContent value="prompt" forceMount hidden={activeTab !== 'prompt'} className="m-0">
+      <TabsContent value="prompt" className="m-0">
         <AssistantPromptField
           form={form}
           resource={resource}
@@ -300,7 +300,7 @@ function AssistantEditDialogContent({
           )}
         </TabsContent>
       ) : null}
-      <TabsContent value="advanced" forceMount hidden={activeTab !== 'advanced'} className="m-0">
+      <TabsContent value="advanced" className="m-0">
         <AssistantAdvancedFields form={form} portalContainer={dialogContentElement} />
       </TabsContent>
     </EditDialogShell>

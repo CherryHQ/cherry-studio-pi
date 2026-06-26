@@ -2084,6 +2084,7 @@
     "generate_random_seed": "Generate random seed",
     "get_embedding_dimension": "Get embedding dimension",
     "go_to_settings": "Go to settings",
+    "help": "Help",
     "html_preview": "HTML Preview",
     "i_know": "I know",
     "ignore": "Ignore",
@@ -3046,6 +3047,9 @@
             "label": "Basic",
             "title": "Basic"
           },
+          "mode": {
+            "desc": "Choose the agent runtime"
+          },
           "permission": {
             "desc": "Authorization scope for agent actions",
             "label": "Permission mode",
@@ -3156,6 +3160,17 @@
       "breadcrumb": "Library",
       "dialogs": {
         "create": {
+          "agent_mode": {
+            "enhanced": {
+              "description": "Uses Claude Agent SDK for more complex tasks; requires an Anthropic-compatible endpoint and may be slower.",
+              "title": "Enhanced mode"
+            },
+            "label": "Runtime mode",
+            "standard": {
+              "description": "Uses Pi Agent for most tasks; faster, lower token usage, and supports all chat-capable models.",
+              "title": "Standard mode"
+            }
+          },
           "agent_title": "New Agent",
           "assistant_title": "New Assistant",
           "avatar_aria": "Choose avatar",

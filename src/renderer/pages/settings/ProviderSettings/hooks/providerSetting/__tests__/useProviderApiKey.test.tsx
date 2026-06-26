@@ -92,7 +92,7 @@ describe('useProviderApiKey', () => {
     })
 
     await act(async () => {
-      vi.runAllTimers()
+      await result.current.commitInputApiKeyNow()
     })
 
     expect(updateApiKeysMock).toHaveBeenCalledTimes(1)
@@ -100,6 +100,18 @@ describe('useProviderApiKey', () => {
       { id: 'k1', key: 'sk-updated', isEnabled: true, label: 'Primary' },
       { id: 'k2', key: 'sk-two', isEnabled: false, label: 'Backup' }
     ])
+  })
+
+  it('keeps inline edits local until an explicit commit', () => {
+    const { result } = renderHook(() => useProviderApiKey('openai'))
+
+    act(() => {
+      result.current.setInputApiKey('sk-local-only')
+    })
+
+    expect(updateApiKeysMock).not.toHaveBeenCalled()
+    expect(result.current.inputApiKey).toBe('sk-local-only')
+    expect(result.current.hasPendingSync).toBe(true)
   })
 
   it('filters blank and duplicate inline keys before persisting', async () => {
@@ -114,7 +126,7 @@ describe('useProviderApiKey', () => {
     })
 
     await act(async () => {
-      vi.runAllTimers()
+      await result.current.commitInputApiKeyNow()
     })
 
     expect(updateApiKeysMock).toHaveBeenCalledTimes(1)
@@ -123,7 +135,29 @@ describe('useProviderApiKey', () => {
     ])
   })
 
-  it('reports autosave failures without clearing pending sync state', async () => {
+  it('does not clear persisted provider keys from a transient empty inline value', async () => {
+    apiKeysData = {
+      keys: [{ id: 'k1', key: 'sk-existing', isEnabled: true, label: 'Primary' }]
+    }
+
+    const { result } = renderHook(() => useProviderApiKey('openai'))
+
+    act(() => {
+      result.current.setInputApiKey('   ')
+    })
+
+    await act(async () => {
+      await expect(result.current.commitInputApiKeyNow()).rejects.toThrow(
+        'Refusing to clear provider API keys from inline autosave'
+      )
+    })
+
+    expect(updateApiKeysMock).not.toHaveBeenCalled()
+    expect(result.current.inputApiKey).toBe('   ')
+    expect(result.current.hasPendingSync).toBe(true)
+  })
+
+  it('reports commit failures without clearing pending sync state', async () => {
     updateApiKeysMock.mockRejectedValueOnce(new Error('network down'))
     const { result } = renderHook(() => useProviderApiKey('openai'))
 
@@ -132,11 +166,9 @@ describe('useProviderApiKey', () => {
     })
 
     await act(async () => {
-      vi.runAllTimers()
-      await Promise.resolve()
+      await expect(result.current.commitInputApiKeyNow()).rejects.toThrow('network down')
     })
 
-    expect(window.toast.error).toHaveBeenCalled()
     expect(result.current.inputApiKey).toBe('sk-failing')
     expect(result.current.hasPendingSync).toBe(true)
   })

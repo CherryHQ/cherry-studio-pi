@@ -2,7 +2,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput, Tooltip, WarnTooltip } fr
 import { useProvider } from '@renderer/hooks/useProvider'
 import type { ApiKeyConnectivity } from '@renderer/pages/settings/ProviderSettings/types/healthCheck'
 import { Activity, Eye, EyeOff, KeyRound, Loader2 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useAuthenticationApiKey } from '../hooks/providerSetting/useAuthenticationApiKey'
@@ -28,9 +28,15 @@ export default function ApiKey({
   const { t } = useTranslation()
   const { provider } = useProvider(providerId)
   const meta = useProviderMeta(providerId)
-  const { inputApiKey, setInputApiKey } = useAuthenticationApiKey()
+  const { inputApiKey, setInputApiKey, commitInputApiKeyNow } = useAuthenticationApiKey()
   const [showApiKey, setShowApiKey] = useState(false)
   const [keyListOpen, setKeyListOpen] = useState(false)
+
+  const commitApiKeyInput = useCallback(() => {
+    void Promise.resolve(commitInputApiKeyNow()).catch(() => {
+      window.toast.error(t('settings.provider.api_key.save_failed'))
+    })
+  }, [commitInputApiKeyNow, t])
 
   useEffect(() => {
     setShowApiKey(false)
@@ -68,6 +74,13 @@ export default function ApiKey({
                 value={inputApiKey}
                 placeholder={t('settings.provider.api_key.placeholder')}
                 onChange={(event) => setInputApiKey(event.target.value)}
+                onBlur={commitApiKeyInput}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    commitApiKeyInput()
+                  }
+                }}
                 disabled={provider.id === 'copilot'}
               />
               {provider.id !== 'copilot' && (

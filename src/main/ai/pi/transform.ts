@@ -284,7 +284,7 @@ export class PiStreamState {
     this.emittedTextByTurn += text
     return [
       { type: 'text-start', id, providerMetadata: { pi: { fallback: true } } } as AgentStreamPart,
-      { type: 'text-delta', id, text, providerMetadata: { pi: { fallback: true } } } as AgentStreamPart,
+      { type: 'text-delta', id, delta: text, providerMetadata: { pi: { fallback: true } } } as AgentStreamPart,
       {
         type: 'text-end',
         id,

@@ -16,7 +16,9 @@ import {
   Textarea
 } from '@cherrystudio/ui'
 import { ModelSelector } from '@renderer/components/Selector/model'
+import type { AgentType } from '@shared/data/types/agent'
 import type { Model, UniqueModelId } from '@shared/data/types/model'
+import { Check, Sparkles, Zap } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
@@ -30,6 +32,7 @@ export type ResourceCreateDialogValues = {
   name: string
   modelId: UniqueModelId
   description: string
+  agentType?: AgentType
 }
 
 type ResourceCreateDialogProps = {
@@ -38,10 +41,12 @@ type ResourceCreateDialogProps = {
   onOpenChange: (open: boolean) => void
   onSubmit: (values: ResourceCreateDialogValues) => Promise<void> | void
   modelFilter?: (model: Model) => boolean
+  agentModelFilters?: Partial<Record<AgentType, (model: Model) => boolean>>
   isSubmitting?: boolean
 }
 
 type ResourceCreateFormValues = {
+  agentType: AgentType
   avatar: string
   name: string
   selectedModel?: Model
@@ -54,6 +59,7 @@ function getDefaultAvatar(kind: ResourceCreateDialogKind) {
 
 function getDefaultValues(kind: ResourceCreateDialogKind): ResourceCreateFormValues {
   return {
+    agentType: 'pi',
     avatar: getDefaultAvatar(kind),
     name: '',
     selectedModel: undefined,
@@ -67,6 +73,7 @@ export function ResourceCreateDialog({
   onOpenChange,
   onSubmit,
   modelFilter,
+  agentModelFilters,
   isSubmitting = false
 }: ResourceCreateDialogProps) {
   const { t } = useTranslation()
@@ -76,6 +83,8 @@ export function ResourceCreateDialog({
   const submitting = isSubmitting || form.formState.isSubmitting
   const rootError = form.formState.errors.root?.message
   const defaultAvatar = getDefaultAvatar(kind)
+  const selectedAgentType = form.watch('agentType')
+  const effectiveModelFilter = kind === 'agent' ? (agentModelFilters?.[selectedAgentType] ?? modelFilter) : modelFilter
 
   useEffect(() => {
     if (!open) return
@@ -97,7 +106,8 @@ export function ResourceCreateDialog({
           avatar: values.avatar,
           name: values.name.trim(),
           modelId: values.selectedModel!.id,
-          description: values.description.trim()
+          description: values.description.trim(),
+          ...(kind === 'agent' ? { agentType: values.agentType } : {})
         })
       } catch {
         form.setError('root', { message: t('library.config.dialogs.create.submit_failed') })
@@ -122,6 +132,18 @@ export function ResourceCreateDialog({
 
         <Form {...form}>
           <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+            {kind === 'agent' ? (
+              <AgentModePicker
+                value={selectedAgentType}
+                disabled={submitting}
+                onChange={(type) => {
+                  if (type === selectedAgentType) return
+                  form.setValue('agentType', type, { shouldDirty: true })
+                  form.setValue('selectedModel', undefined, { shouldDirty: true, shouldValidate: false })
+                }}
+              />
+            ) : null}
+
             <div className="grid grid-cols-[auto_1fr] items-start gap-3">
               <FormField
                 control={form.control}
@@ -183,7 +205,7 @@ export function ResourceCreateDialog({
                           multiple={false}
                           selectionType="model"
                           value={field.value}
-                          filter={modelFilter}
+                          filter={effectiveModelFilter}
                           portalContainer={dialogContentElement}
                           onSelect={field.onChange}
                           trigger={
@@ -242,5 +264,74 @@ export function ResourceCreateDialog({
         </Form>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function AgentModePicker({
+  value,
+  disabled,
+  onChange
+}: {
+  value: AgentType
+  disabled: boolean
+  onChange: (value: AgentType) => void
+}) {
+  const { t } = useTranslation()
+  const options: Array<{
+    value: AgentType
+    icon: typeof Zap
+    title: string
+    description: string
+  }> = [
+    {
+      value: 'pi',
+      icon: Zap,
+      title: t('library.config.dialogs.create.agent_mode.standard.title'),
+      description: t('library.config.dialogs.create.agent_mode.standard.description')
+    },
+    {
+      value: 'claude-code',
+      icon: Sparkles,
+      title: t('library.config.dialogs.create.agent_mode.enhanced.title'),
+      description: t('library.config.dialogs.create.agent_mode.enhanced.description')
+    }
+  ]
+
+  return (
+    <div className="grid gap-2">
+      <div className="font-medium text-sm">{t('library.config.dialogs.create.agent_mode.label')}</div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {options.map((option) => {
+          const Icon = option.icon
+          const selected = value === option.value
+
+          return (
+            <button
+              key={option.value}
+              type="button"
+              disabled={disabled}
+              aria-pressed={selected}
+              onClick={() => onChange(option.value)}
+              className={`flex min-h-[116px] min-w-0 flex-col gap-3 rounded-md border p-3 text-left transition-colors ${
+                selected
+                  ? 'border-primary/45 bg-primary/5 text-foreground ring-1 ring-primary/20'
+                  : 'border-border/50 bg-background text-foreground hover:bg-accent/35'
+              } disabled:cursor-not-allowed disabled:opacity-60`}>
+              <span className="flex min-w-0 items-center gap-2">
+                <span
+                  className={`flex size-8 shrink-0 items-center justify-center rounded-md ${
+                    selected ? 'bg-primary/10 text-primary' : 'bg-accent text-muted-foreground'
+                  }`}>
+                  <Icon size={16} strokeWidth={1.8} />
+                </span>
+                <span className="min-w-0 flex-1 truncate font-medium text-sm">{option.title}</span>
+                {selected ? <Check size={15} className="shrink-0 text-primary" strokeWidth={2} /> : null}
+              </span>
+              <span className="text-muted-foreground text-xs leading-5">{option.description}</span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
   )
 }

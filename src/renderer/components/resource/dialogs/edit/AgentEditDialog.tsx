@@ -1,5 +1,13 @@
 import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
   EditableNumber,
+  Form,
   FormControl,
   FormField,
   FormItem,
@@ -16,16 +24,28 @@ import {
 } from '@cherrystudio/ui'
 import { loggerService } from '@logger'
 import PromptEditorField from '@renderer/components/PromptEditorField'
+import { normalizePermissionMode } from '@renderer/hooks/agents/permissionMode'
 import { useInstalledSkills } from '@renderer/hooks/useSkills'
-import { useAgentMutationsById } from '@renderer/pages/library/adapters/agentAdapter'
+import { useAgentMutations, useAgentMutationsById } from '@renderer/pages/library/adapters/agentAdapter'
 import type { AgentDetail } from '@renderer/pages/library/types'
 import {
   CLAUDE_TOOL_CATEGORIES,
   type ClaudeToolCategory,
   claudeUserFacingTools
 } from '@shared/ai/claudecode/toolRegistry'
+import type { AgentType } from '@shared/data/types/agent'
 import type { Model, UniqueModelId } from '@shared/data/types/model'
-import { Sparkles, Wrench } from 'lucide-react'
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  FileText,
+  Settings,
+  SlidersHorizontal,
+  Sparkles,
+  Wrench,
+  Zap
+} from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useForm, type UseFormReturn } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
@@ -57,6 +77,7 @@ export type AgentEditDialogProps = EditDialogBaseProps<AgentDetail> & {
 }
 
 type AgentEditFormValues = {
+  agentType: AgentType
   avatar: string
   name: string
   description: string
@@ -74,6 +95,7 @@ type AgentEditFormValues = {
 }
 
 type ToolTab = 'tools.builtin' | 'tools.mcp' | 'tools.skills'
+type CreateWizardStep = 'mode' | 'basic' | 'prompt' | 'tools'
 
 const logger = loggerService.withContext('AgentEditDialog')
 const PERMISSION_MODES = ['default', 'plan', 'acceptEdits', 'bypassPermissions'] as const
@@ -84,6 +106,7 @@ const PERMISSION_MODE_LABEL_KEYS: Record<(typeof PERMISSION_MODES)[number], stri
   plan: 'library.config.agent.field.permission_mode.option.plan'
 }
 const DEFAULT_TOOL_TAB: ToolTab = 'tools.builtin'
+const CREATE_WIZARD_STEPS: CreateWizardStep[] = ['mode', 'basic', 'prompt', 'tools']
 
 const CATEGORY_LABEL_KEYS: Record<ClaudeToolCategory, string> = {
   file: 'library.config.agent.section.tools.category.file',
@@ -113,6 +136,28 @@ function getLeafTabIds(tabs: EditDialogTab[]) {
 function defaultValuesForAgent(resource: AgentDetail): AgentEditFormValues {
   const form = buildInitialAgentFormState(resource)
   return {
+    agentType: form.type,
+    avatar: form.avatar || '🤖',
+    name: form.name,
+    description: form.description,
+    modelId: form.model || null,
+    planModelId: form.planModel,
+    smallModelId: form.smallModel,
+    instructions: form.instructions,
+    mcps: [...form.mcps],
+    disabledTools: [...form.disabledTools],
+    permissionMode: form.permissionMode,
+    envVarsText: form.envVarsText,
+    soulEnabled: form.soulEnabled,
+    heartbeatEnabled: form.heartbeatEnabled,
+    heartbeatInterval: form.heartbeatInterval
+  }
+}
+
+function defaultValuesForAgentCreate(): AgentEditFormValues {
+  const form = buildInitialAgentFormState(null)
+  return {
+    agentType: form.type,
     avatar: form.avatar || '🤖',
     name: form.name,
     description: form.description,
@@ -141,6 +186,7 @@ function modelLabelsForAgent(resource: AgentDetail): ModelLabels {
 function buildAgentFormState(baseline: AgentFormState, values: AgentEditFormValues): AgentFormState {
   return {
     ...baseline,
+    type: values.agentType,
     avatar: values.avatar,
     name: values.name,
     description: values.description,
@@ -159,6 +205,7 @@ function buildAgentFormState(baseline: AgentFormState, values: AgentEditFormValu
 }
 
 function syncAgentFormState(form: UseFormReturn<AgentEditFormValues>, next: AgentFormState) {
+  form.setValue('agentType', next.type, { shouldDirty: true })
   form.setValue('modelId', next.model || null, { shouldDirty: true })
   form.setValue('planModelId', next.planModel, { shouldDirty: true })
   form.setValue('smallModelId', next.smallModel, { shouldDirty: true })
@@ -178,6 +225,14 @@ function createAgentPatcher(form: UseFormReturn<AgentEditFormValues>, resource: 
   }
 }
 
+function createAgentDraftPatcher(form: UseFormReturn<AgentEditFormValues>) {
+  return (patch: Partial<AgentFormState>) => {
+    const baseline = buildInitialAgentFormState(null)
+    const current = buildAgentFormState(baseline, form.getValues())
+    syncAgentFormState(form, applyAgentFormPatch(current, patch))
+  }
+}
+
 export function AgentEditDialog({ resource, open, onOpenChange, onSaved, modelFilter }: AgentEditDialogProps) {
   if (!resource) return null
 
@@ -189,6 +244,429 @@ export function AgentEditDialog({ resource, open, onOpenChange, onSaved, modelFi
       onSaved={onSaved}
       modelFilter={modelFilter}
     />
+  )
+}
+
+export type AgentCreateWizardDialogProps = {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onCreated: (resource: AgentDetail) => Promise<void> | void
+  agentModelFilters?: Partial<Record<AgentType, (model: Model) => boolean>>
+}
+
+export function AgentCreateWizardDialog({
+  open,
+  onOpenChange,
+  onCreated,
+  agentModelFilters
+}: AgentCreateWizardDialogProps) {
+  const { t } = useTranslation()
+  const [activeStep, setActiveStep] = useState<CreateWizardStep>('mode')
+  const [activeToolTab, setActiveToolTab] = useState<ToolTab>(DEFAULT_TOOL_TAB)
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false)
+  const [dialogContentElement, setDialogContentElement] = useState<HTMLDivElement | null>(null)
+  const [modelLabels, setModelLabels] = useState<ModelLabels>({ modelId: null, planModelId: null, smallModelId: null })
+  const defaultValues = useMemo(() => defaultValuesForAgentCreate(), [])
+  const form = useForm<AgentEditFormValues>({ defaultValues })
+  const agentType = form.watch('agentType')
+  const watchedAvatar = form.watch('avatar')
+  const watchedName = form.watch('name')
+  const watchedDescription = form.watch('description')
+  const watchedModelId = form.watch('modelId')
+  const watchedInstructions = form.watch('instructions')
+  const watchedMcps = form.watch('mcps')
+  const watchedDisabledTools = form.watch('disabledTools')
+  const watchedPermissionMode = form.watch('permissionMode')
+  const watchedSoulEnabled = form.watch('soulEnabled')
+  const { createAgent } = useAgentMutations()
+  const patchAgentForm = useMemo(() => createAgentDraftPatcher(form), [form])
+  const activeStepIndex = Math.max(0, CREATE_WIZARD_STEPS.indexOf(activeStep))
+  const isFirstStep = activeStepIndex === 0
+  const isLastStep = activeStepIndex === CREATE_WIZARD_STEPS.length - 1
+  const modelFilter = agentModelFilters?.[agentType]
+  const isSubmitting = form.formState.isSubmitting
+  const rootError = form.formState.errors.root?.message
+  const fakeAgent = useMemo(
+    (): AgentDetail => ({
+      id: '',
+      type: agentType,
+      name: watchedName,
+      model: watchedModelId,
+      modelName: null,
+      description: watchedDescription,
+      instructions: watchedInstructions,
+      mcps: watchedMcps,
+      disabledTools: watchedDisabledTools,
+      configuration: {
+        avatar: watchedAvatar,
+        permission_mode: normalizePermissionMode(watchedPermissionMode),
+        soul_enabled: watchedSoulEnabled
+      },
+      createdAt: '',
+      orderKey: '',
+      updatedAt: ''
+    }),
+    [
+      agentType,
+      watchedAvatar,
+      watchedDescription,
+      watchedDisabledTools,
+      watchedInstructions,
+      watchedMcps,
+      watchedModelId,
+      watchedName,
+      watchedPermissionMode,
+      watchedSoulEnabled
+    ]
+  )
+
+  useEffect(() => {
+    if (!open) return
+    form.reset(defaultValues)
+    form.clearErrors()
+    setActiveStep('mode')
+    setActiveToolTab(DEFAULT_TOOL_TAB)
+    setEmojiPickerOpen(false)
+    setModelLabels({ modelId: null, planModelId: null, smallModelId: null })
+  }, [defaultValues, form, open])
+
+  const goToStep = (index: number) => {
+    const nextStep = CREATE_WIZARD_STEPS[index]
+    if (nextStep) setActiveStep(nextStep)
+  }
+
+  const validateBasics = () => {
+    const name = form.getValues('name').trim()
+    const modelId = form.getValues('modelId')
+    if (!name) {
+      form.setError('name', { message: t('library.config.dialogs.create.name_required') })
+    }
+    if (!modelId) {
+      form.setError('modelId', { message: t('library.config.dialogs.create.model_required') })
+    }
+    return Boolean(name && modelId)
+  }
+
+  const goNext = () => {
+    form.clearErrors('root')
+    if (activeStep === 'basic' && !validateBasics()) return
+    goToStep(activeStepIndex + 1)
+  }
+
+  const handleClose = (nextOpen: boolean) => {
+    if (isSubmitting) return
+    onOpenChange(nextOpen)
+  }
+
+  const handleCreate = form.handleSubmit(async () => {
+    form.clearErrors('root')
+    if (!validateBasics()) {
+      setActiveStep('basic')
+      return
+    }
+
+    const baseline = buildInitialAgentFormState(null)
+    const draft = buildAgentFormState(baseline, form.getValues())
+    const intent = diffAgentSaveIntent(draft, baseline, null)
+    if (!intent || intent.kind !== 'create') {
+      form.setError('root', { message: t('library.config.dialogs.create.submit_failed') })
+      return
+    }
+
+    let created: AgentDetail
+    try {
+      created = await createAgent(intent.payload)
+    } catch (error) {
+      logger.error('Failed to create agent from wizard', error as Error)
+      form.setError('root', { message: t('library.config.dialogs.create.submit_failed') })
+      return
+    }
+
+    onOpenChange(false)
+    await onCreated(created)
+  })
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent
+        ref={setDialogContentElement}
+        closeOnOverlayClick={!isSubmitting}
+        className="flex h-[min(760px,calc(100vh-3rem))] min-h-[560px] flex-col gap-0 overflow-hidden p-0 sm:max-w-[900px]"
+        onPointerDownOutside={(event) => isSubmitting && event.preventDefault()}>
+        <Form {...form}>
+          <DialogHeader className="shrink-0 border-border/40 border-b px-5 py-4 text-left">
+            <DialogTitle className="text-base text-foreground">
+              {watchedName.trim() || t('library.config.agent.create_title')}
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground/70 text-xs">
+              {t(createWizardStepDescriptionKey(activeStep))}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="shrink-0 border-border/40 border-b px-5 py-3">
+            <div className="grid grid-cols-4 gap-2">
+              {CREATE_WIZARD_STEPS.map((step, index) => {
+                const Icon = createWizardStepIcon(step)
+                const active = activeStep === step
+                const completed = activeStepIndex > index
+                return (
+                  <button
+                    key={step}
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={() => goToStep(index)}
+                    className={`flex min-h-[54px] flex-col items-start justify-center rounded-xs border px-3 text-left transition-colors ${
+                      active
+                        ? 'border-primary/40 bg-primary/10 text-foreground'
+                        : completed
+                          ? 'border-border/40 bg-accent/25 text-foreground'
+                          : 'border-border/30 bg-transparent text-muted-foreground/70 hover:bg-accent/20'
+                    }`}>
+                    <span className="mb-1 flex items-center gap-1.5 text-xs">
+                      {completed ? <Check size={12} /> : <Icon size={12} />}
+                      {t(createWizardStepLabelKey(step))}
+                    </span>
+                    <span className="line-clamp-1 text-[11px] text-muted-foreground/70">
+                      {t(createWizardStepDescriptionKey(step))}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+            {activeStep === 'mode' ? (
+              <AgentRuntimeModeFields
+                disabled={isSubmitting}
+                value={agentType}
+                onChange={(type) => patchAgentForm({ type })}
+              />
+            ) : null}
+            {activeStep === 'basic' ? (
+              <AgentBasicFields
+                form={form}
+                modelFilter={modelFilter}
+                portalContainer={dialogContentElement}
+                modelLabels={modelLabels}
+                setModelLabels={setModelLabels}
+                patchAgentForm={patchAgentForm}
+                emojiPickerOpen={emojiPickerOpen}
+                setEmojiPickerOpen={setEmojiPickerOpen}
+                variant="create"
+              />
+            ) : null}
+            {activeStep === 'prompt' ? <AgentPromptField form={form} portalContainer={dialogContentElement} /> : null}
+            {activeStep === 'tools' ? (
+              <div className="grid gap-5">
+                <CreateToolTabPicker value={activeToolTab} onChange={setActiveToolTab} />
+                <AgentToolsFields
+                  agent={fakeAgent}
+                  form={form}
+                  activeToolTab={activeToolTab}
+                  portalContainer={dialogContentElement}
+                />
+                <CreateAdvancedSettings
+                  form={form}
+                  portalContainer={dialogContentElement}
+                  patchAgentForm={patchAgentForm}
+                />
+              </div>
+            ) : null}
+          </div>
+
+          <DialogFooter className="shrink-0 border-border/40 border-t px-5 py-4">
+            <div className="min-w-0 flex-1 text-left">
+              {rootError ? <p className="truncate text-destructive text-xs">{rootError}</p> : null}
+            </div>
+            <Button type="button" variant="ghost" disabled={isSubmitting} onClick={() => onOpenChange(false)}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => goToStep(activeStepIndex - 1)}
+              disabled={isFirstStep || isSubmitting}>
+              <ChevronLeft size={14} />
+              {t('common.previous')}
+            </Button>
+            {isLastStep ? (
+              <Button type="button" loading={isSubmitting} onClick={() => void handleCreate()}>
+                <Check size={14} />
+                {t('library.config.dialogs.create.submit')}
+              </Button>
+            ) : (
+              <Button type="button" disabled={isSubmitting} onClick={goNext}>
+                {t('common.next')}
+                <ChevronRight size={14} />
+              </Button>
+            )}
+          </DialogFooter>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function createWizardStepLabelKey(step: CreateWizardStep): string {
+  switch (step) {
+    case 'mode':
+      return 'library.config.dialogs.create.agent_mode.label'
+    case 'basic':
+      return 'library.config.agent.section.basic.label'
+    case 'prompt':
+      return 'library.config.agent.section.prompt.label'
+    case 'tools':
+      return 'library.config.agent.section.tools.label'
+  }
+}
+
+function createWizardStepDescriptionKey(step: CreateWizardStep): string {
+  switch (step) {
+    case 'mode':
+      return 'library.config.agent.section.mode.desc'
+    case 'basic':
+      return 'library.config.agent.section.basic.desc'
+    case 'prompt':
+      return 'library.config.agent.section.prompt.desc'
+    case 'tools':
+      return 'library.config.agent.section.tools.desc'
+  }
+}
+
+function createWizardStepIcon(step: CreateWizardStep) {
+  switch (step) {
+    case 'mode':
+      return Sparkles
+    case 'basic':
+      return Settings
+    case 'prompt':
+      return FileText
+    case 'tools':
+      return Wrench
+  }
+}
+
+function AgentRuntimeModeFields({
+  value,
+  disabled,
+  onChange
+}: {
+  value: AgentType
+  disabled: boolean
+  onChange: (value: AgentType) => void
+}) {
+  const { t } = useTranslation()
+  const modes: Array<{
+    type: AgentType
+    icon: typeof Zap
+    title: string
+    description: string
+  }> = [
+    {
+      type: 'pi',
+      icon: Zap,
+      title: t('library.config.dialogs.create.agent_mode.standard.title'),
+      description: t('library.config.dialogs.create.agent_mode.standard.description')
+    },
+    {
+      type: 'claude-code',
+      icon: Sparkles,
+      title: t('library.config.dialogs.create.agent_mode.enhanced.title'),
+      description: t('library.config.dialogs.create.agent_mode.enhanced.description')
+    }
+  ]
+
+  return (
+    <div className="grid gap-5">
+      <div>
+        <h3 className="mb-1 text-base text-foreground">{t('library.config.dialogs.create.agent_mode.label')}</h3>
+        <p className="text-muted-foreground/80 text-xs">{t('library.config.agent.section.mode.desc')}</p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {modes.map((mode) => {
+          const Icon = mode.icon
+          const active = value === mode.type
+          return (
+            <button
+              key={mode.type}
+              type="button"
+              disabled={disabled}
+              aria-pressed={active}
+              onClick={() => onChange(mode.type)}
+              className={`min-h-[150px] rounded-md border p-5 text-left transition-colors ${
+                active
+                  ? 'border-primary/45 bg-primary/10 text-foreground'
+                  : 'border-border/40 bg-background hover:bg-accent/25'
+              }`}>
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <span
+                  className={`rounded-md p-2 ${active ? 'bg-primary/15 text-primary' : 'bg-accent text-muted-foreground'}`}>
+                  <Icon size={18} />
+                </span>
+                {active ? <Check size={18} /> : null}
+              </div>
+              <div className="font-medium text-sm">{mode.title}</div>
+              <p className="mt-2 text-muted-foreground/80 text-xs leading-5">{mode.description}</p>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function CreateToolTabPicker({ value, onChange }: { value: ToolTab; onChange: (value: ToolTab) => void }) {
+  const { t } = useTranslation()
+  const tabs: Array<{ id: ToolTab; label: string }> = [
+    { id: 'tools.builtin', label: t('library.config.agent.section.tools.tab.tools') },
+    { id: 'tools.mcp', label: t('library.config.agent.section.tools.tab.mcp') },
+    { id: 'tools.skills', label: t('library.config.agent.section.tools.tab.skills') }
+  ]
+
+  return (
+    <div className="flex w-fit rounded-md border border-border/40 bg-accent/20 p-1">
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          onClick={() => onChange(tab.id)}
+          className={`h-8 rounded-sm px-3 text-sm transition-colors ${
+            value === tab.id ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+          }`}>
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function CreateAdvancedSettings({
+  form,
+  portalContainer,
+  patchAgentForm
+}: {
+  form: UseFormReturn<AgentEditFormValues>
+  portalContainer: HTMLElement | null
+  patchAgentForm: (patch: Partial<AgentFormState>) => void
+}) {
+  const { t } = useTranslation()
+  const soulEnabled = form.watch('soulEnabled')
+
+  return (
+    <details className="rounded-md border border-border/40 bg-accent/10">
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 font-medium text-foreground text-sm [&::-webkit-details-marker]:hidden">
+        <SlidersHorizontal size={14} />
+        {t('common.advanced_settings')}
+      </summary>
+      <div className="grid gap-4 border-border/30 border-t px-3 py-4">
+        <SoulModeField form={form} patchAgentForm={patchAgentForm} />
+        {!soulEnabled ? (
+          <PermissionModeField form={form} portalContainer={portalContainer} patchAgentForm={patchAgentForm} />
+        ) : null}
+        <AgentAdvancedFields form={form} />
+      </div>
+    </details>
   )
 }
 
@@ -288,7 +766,7 @@ function AgentEditDialogContent({
       setDialogContentElement={setDialogContentElement}
       tabs={tabs}
       title={t('library.config.dialogs.edit.agent_title')}>
-      <TabsContent value="basic" forceMount hidden={activeTab !== 'basic'} className="m-0">
+      <TabsContent value="basic" className="m-0">
         <AgentBasicFields
           form={form}
           modelFilter={modelFilter}
@@ -300,7 +778,7 @@ function AgentEditDialogContent({
           setEmojiPickerOpen={setEmojiPickerOpen}
         />
       </TabsContent>
-      <TabsContent value="prompt" forceMount hidden={activeTab !== 'prompt'} className="m-0">
+      <TabsContent value="prompt" className="m-0">
         <AgentPromptField form={form} portalContainer={dialogContentElement} />
       </TabsContent>
       {isToolTab(activeTab) ? (
@@ -313,7 +791,7 @@ function AgentEditDialogContent({
           />
         </TabsContent>
       ) : null}
-      <TabsContent value="advanced" forceMount hidden={activeTab !== 'advanced'} className="m-0">
+      <TabsContent value="advanced" className="m-0">
         <AgentAdvancedFields form={form} />
       </TabsContent>
     </EditDialogShell>
@@ -328,7 +806,8 @@ function AgentBasicFields({
   setModelLabels,
   patchAgentForm,
   emojiPickerOpen,
-  setEmojiPickerOpen
+  setEmojiPickerOpen,
+  variant = 'edit'
 }: {
   form: UseFormReturn<AgentEditFormValues>
   modelFilter?: (model: Model) => boolean
@@ -338,10 +817,12 @@ function AgentBasicFields({
   patchAgentForm: (patch: Partial<AgentFormState>) => void
   emojiPickerOpen: boolean
   setEmojiPickerOpen: (open: boolean) => void
+  variant?: 'edit' | 'create'
 }) {
   const { t } = useTranslation()
   const heartbeatEnabled = form.watch('heartbeatEnabled')
   const soulEnabled = form.watch('soulEnabled')
+  const isCreate = variant === 'create'
 
   return (
     <div className="grid gap-4">
@@ -372,28 +853,32 @@ function AgentBasicFields({
           setModelLabels={setModelLabels}
           onModelChange={(modelId) => patchAgentForm({ model: modelId ?? '' })}
         />
-        <CompactModelField
-          form={form}
-          name="planModelId"
-          label={t('library.config.agent.field.plan_model.label')}
-          allowClear
-          filter={modelFilter}
-          portalContainer={portalContainer}
-          modelLabels={modelLabels}
-          setModelLabels={setModelLabels}
-          onModelChange={(modelId) => patchAgentForm({ planModel: modelId ?? '' })}
-        />
-        <CompactModelField
-          form={form}
-          name="smallModelId"
-          label={t('library.config.agent.field.small_model.label')}
-          allowClear
-          filter={modelFilter}
-          portalContainer={portalContainer}
-          modelLabels={modelLabels}
-          setModelLabels={setModelLabels}
-          onModelChange={(modelId) => patchAgentForm({ smallModel: modelId ?? '' })}
-        />
+        {!isCreate ? (
+          <>
+            <CompactModelField
+              form={form}
+              name="planModelId"
+              label={t('library.config.agent.field.plan_model.label')}
+              allowClear
+              filter={modelFilter}
+              portalContainer={portalContainer}
+              modelLabels={modelLabels}
+              setModelLabels={setModelLabels}
+              onModelChange={(modelId) => patchAgentForm({ planModel: modelId ?? '' })}
+            />
+            <CompactModelField
+              form={form}
+              name="smallModelId"
+              label={t('library.config.agent.field.small_model.label')}
+              allowClear
+              filter={modelFilter}
+              portalContainer={portalContainer}
+              modelLabels={modelLabels}
+              setModelLabels={setModelLabels}
+              onModelChange={(modelId) => patchAgentForm({ smallModel: modelId ?? '' })}
+            />
+          </>
+        ) : null}
       </div>
       <TextInputField
         form={form}
@@ -401,15 +886,19 @@ function AgentBasicFields({
         label={t('library.config.agent.field.description.label')}
         placeholder={t('library.config.agent.field.description.placeholder')}
       />
-      <SoulModeField form={form} patchAgentForm={patchAgentForm} />
-      {!soulEnabled && (
-        <PermissionModeField form={form} portalContainer={portalContainer} patchAgentForm={patchAgentForm} />
-      )}
-      <HeartbeatSettingsField
-        form={form}
-        enabled={heartbeatEnabled}
-        onEnabledChange={(checked) => patchAgentForm({ heartbeatEnabled: checked })}
-      />
+      {!isCreate ? (
+        <>
+          <SoulModeField form={form} patchAgentForm={patchAgentForm} />
+          {!soulEnabled && (
+            <PermissionModeField form={form} portalContainer={portalContainer} patchAgentForm={patchAgentForm} />
+          )}
+          <HeartbeatSettingsField
+            form={form}
+            enabled={heartbeatEnabled}
+            onEnabledChange={(checked) => patchAgentForm({ heartbeatEnabled: checked })}
+          />
+        </>
+      ) : null}
     </div>
   )
 }
