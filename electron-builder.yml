@@ -151,24 +151,32 @@ artifactBuildCompleted: scripts/artifact-build-completed.js
 releaseInfo:
   releaseNotes: |
     <!--LANG:en-->
-    Cherry Studio Pi 1.9.67 - Cross-Platform File Display Fixes
+    Cherry Studio Pi 1.9.70 - Upstream UI Refresh
+
+    ✨ New Features
+    - [Chat] Added the latest upstream global search, conversation resource list, message flow view, and refreshed chat layout
+    - [Agent] Added the latest upstream agent session list and workspace grouping experience
 
     🐛 Bug Fixes
-    - [Files] Fixed Windows file names showing as full paths in file pickers, tool results, and agent resource suggestions
-    - [Chat] Fixed citation titles from Windows paths so attached local files are easier to recognize
-    - [Files] Fixed folder-style paths with trailing separators so they display the final folder name correctly
+    - [Startup] Fixed migration handling for older inconsistent message roots so the app can start more reliably
+    - [Models] Improved model and provider list behavior, including clearer provider error display
 
-    🔒 Security
-    - [Links] Improved external-link handling to block unsafe credentialed URLs while keeping normal web links available
+    💄 Improvements
+    - [UI] Refreshed the main interface, sidebars, settings, menus, and shared controls with the latest Cherry Studio upstream UI
+    - [Knowledge] Updated knowledge base listing and chunk settings to match the refreshed data-source UI
 
     <!--LANG:zh-CN-->
-    Cherry Studio Pi 1.9.67 - 跨平台文件显示修复
+    Cherry Studio Pi 1.9.70 - 上游 UI 体验对齐
+
+    ✨ 新功能
+    - [对话] 引入最新上游全局搜索、对话资源列表、消息流程视图和新版对话布局
+    - [Agent] 引入最新上游 Agent 会话列表和工作区分组体验
 
     🐛 问题修复
-    - [文件] 修复 Windows 文件名在文件选择器、工具结果和 Agent 资源建议中显示为完整路径的问题
-    - [对话] 修复 Windows 路径来源的引用标题显示，让本地附件更容易识别
-    - [文件] 修复带结尾分隔符的文件夹路径显示，确保正确展示最后一级文件夹名称
+    - [启动] 修复旧数据中消息根节点不一致时可能影响启动迁移的问题
+    - [模型] 优化模型和服务商列表表现，并让服务商错误提示更清晰
 
-    🔒 安全
-    - [链接] 优化外部链接打开逻辑，拦截带账号信息的不安全 URL，同时保留正常网页链接打开能力
+    💄 改进
+    - [UI] 主界面、侧边栏、设置、菜单和通用控件全面对齐最新 Cherry Studio 上游 UI
+    - [知识库] 知识库列表和分块设置适配新版数据源界面
     <!--LANG:END-->
