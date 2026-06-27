@@ -1,7 +1,7 @@
 import { loggerService } from '@logger'
 import type { SelectorShellMountStrategy, SelectorShellProps } from '@renderer/components/Selector/shell/SelectorShell'
 import { useQuery } from '@renderer/data/hooks/useDataApi'
-import { useAgentModelFilter } from '@renderer/hooks/agents/useAgentModelFilter'
+import { useAgentModelFilter } from '@renderer/hooks/agent/useAgentModelFilter'
 import { usePins } from '@renderer/hooks/usePins'
 import type { AgentDetail } from '@renderer/pages/library/types'
 import { getAgentAvatarFromConfiguration } from '@renderer/utils/agent'

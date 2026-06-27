@@ -3,7 +3,7 @@ import {
   DEFAULT_HEARTBEAT_INTERVAL,
   DEFAULT_MAX_TURNS,
   normalizePermissionMode
-} from '@renderer/hooks/agents/permissionMode'
+} from '@renderer/hooks/agent/permissionMode'
 import type { AgentDetail } from '@renderer/pages/library/types'
 import type { Tool } from '@shared/ai/tool'
 import type { CreateAgentDto, UpdateAgentDto } from '@shared/data/api/schemas/agents'

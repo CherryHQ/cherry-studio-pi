@@ -24,7 +24,7 @@ import {
 } from '@cherrystudio/ui'
 import { loggerService } from '@logger'
 import PromptEditorField from '@renderer/components/PromptEditorField'
-import { normalizePermissionMode } from '@renderer/hooks/agents/permissionMode'
+import { normalizePermissionMode } from '@renderer/hooks/agent/permissionMode'
 import { useInstalledSkills } from '@renderer/hooks/useSkills'
 import { useAgentMutations, useAgentMutationsById } from '@renderer/pages/library/adapters/agentAdapter'
 import type { AgentDetail } from '@renderer/pages/library/types'

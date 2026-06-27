@@ -10,7 +10,7 @@ import {
   Spinner
 } from '@cherrystudio/ui'
 import Selector from '@renderer/components/Selector'
-import { useTheme } from '@renderer/context/ThemeProvider'
+import { useTheme } from '@renderer/hooks/useTheme'
 import {
   type DataSyncRuntimeState,
   type DataSyncStatus,
