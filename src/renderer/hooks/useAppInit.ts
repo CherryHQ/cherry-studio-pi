@@ -5,6 +5,7 @@ import db from '@renderer/databases'
 import { useAppUpdateHandler } from '@renderer/hooks/useAppUpdate'
 import { useStorageMonitorNotification } from '@renderer/hooks/useStorageMonitorNotification'
 import i18n, { setDayjsLocale } from '@renderer/i18n'
+import { startDataSyncExternalSyncListener, stopDataSyncExternalSyncListener } from '@renderer/services/DataSyncService'
 import { defaultLanguage } from '@shared/utils/languages'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect } from 'react'
@@ -48,6 +49,14 @@ export function useAppInit() {
   useAppUpdateHandler()
   useFullScreenNotice()
   useStorageMonitorNotification()
+
+  useEffect(() => {
+    startDataSyncExternalSyncListener()
+
+    return () => {
+      stopDataSyncExternalSyncListener()
+    }
+  }, [])
 
   useEffect(() => {
     savedAvatar?.value && cacheService.set('app.user.avatar', savedAvatar.value)

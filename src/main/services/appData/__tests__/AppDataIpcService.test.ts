@@ -35,6 +35,14 @@ const mocks = vi.hoisted(() => ({
     deleteCache: vi.fn(),
     listWorkbenchShortcuts: vi.fn(),
     upsertWorkbenchShortcut: vi.fn()
+  },
+  storageV2Settings: {
+    getSetting: vi.fn(),
+    setSetting: vi.fn()
+  },
+  secretVault: {
+    getSecret: vi.fn(),
+    setSecret: vi.fn()
   }
 }))
 
@@ -76,6 +84,14 @@ vi.mock('@main/services/storageV2/AppDataKvMirrorService', () => ({
 
 vi.mock('@main/services/storageV2/AppDataRuntimeRecoveryService', () => ({
   storageV2AppDataRuntimeRecoveryService: mocks.recovery
+}))
+
+vi.mock('@main/services/storageV2/StorageService', () => ({
+  storageV2Service: mocks.storageV2Settings
+}))
+
+vi.mock('@main/services/storageV2/SecretVaultService', () => ({
+  storageV2SecretVaultService: mocks.secretVault
 }))
 
 vi.mock('../AppDataSyncService', () => ({
@@ -135,6 +151,12 @@ describe('AppDataIpcService', () => {
     mocks.storageV2.upsertWorkbenchShortcut.mockResolvedValue(undefined)
     mocks.storageV2.getRecordEntry.mockResolvedValue({ found: false, value: null, deletedAt: null })
     mocks.storageV2.listRecords.mockResolvedValue([])
+    mocks.storageV2Settings.getSetting.mockResolvedValue(undefined)
+    mocks.storageV2Settings.setSetting.mockResolvedValue(undefined)
+    mocks.secretVault.getSecret.mockResolvedValue(null)
+    mocks.secretVault.setSecret.mockResolvedValue(
+      'storage-v2://secret/settings/dataSyncWebdavPass/dataSyncWebdavPassword'
+    )
     mocks.recovery.projectIfAppRecordMissing.mockResolvedValue(false)
     mocks.recovery.projectIfLegacyAppRecordListEmpty.mockResolvedValue(false)
     mocks.recovery.projectIfLegacyWorkbenchShortcutListEmpty.mockResolvedValue(false)
@@ -624,6 +646,78 @@ describe('AppDataIpcService', () => {
         message: '远端数据已同步到本机，但恢复到当前界面失败：hydrate failed'
       }),
       { preserveLastSummary: true }
+    )
+  })
+
+  it('reads WebDAV data sync config from Storage v2 and resolves the password secret', async () => {
+    const settings = new Map<string, unknown>([
+      ['settings.dataSyncWebdavHost', 'https://dav.example.test'],
+      ['settings.dataSyncWebdavUser', 'webdav-user'],
+      [
+        'settings.dataSyncWebdavPass',
+        { secretRef: 'storage-v2://secret/settings/dataSyncWebdavPass/dataSyncWebdavPassword' }
+      ],
+      ['settings.dataSyncWebdavPath', '/Team/Sync'],
+      ['settings.dataSyncAutoSync', true],
+      ['settings.dataSyncSyncInterval', 15]
+    ])
+    mocks.storageV2Settings.getSetting.mockImplementation(async (key: string) => settings.get(key))
+    mocks.secretVault.getSecret.mockResolvedValueOnce('webdav-pass')
+
+    await expect(getHandler(IpcChannel.DataSync_GetConfig)(null)).resolves.toEqual({
+      webdavHost: 'https://dav.example.test',
+      webdavUser: 'webdav-user',
+      webdavPass: 'webdav-pass',
+      webdavPath: '/Team/Sync',
+      autoSync: true,
+      syncInterval: 15
+    })
+    expect(mocks.secretVault.getSecret).toHaveBeenCalledWith(
+      'storage-v2://secret/settings/dataSyncWebdavPass/dataSyncWebdavPassword'
+    )
+  })
+
+  it('stores WebDAV data sync passwords through the Storage v2 secret vault', async () => {
+    mocks.storageV2Settings.getSetting.mockResolvedValue(undefined)
+
+    await expect(
+      getHandler(IpcChannel.DataSync_SetConfig)(null, {
+        webdavHost: 'dav.example.test',
+        webdavUser: ' webdav-user ',
+        webdavPass: 'webdav-pass',
+        webdavPath: 'Team/Sync',
+        autoSync: true,
+        syncInterval: 15
+      })
+    ).resolves.toEqual({
+      webdavHost: 'https://dav.example.test',
+      webdavUser: 'webdav-user',
+      webdavPass: 'webdav-pass',
+      webdavPath: '/Team/Sync',
+      autoSync: true,
+      syncInterval: 15
+    })
+
+    expect(mocks.secretVault.setSecret).toHaveBeenCalledWith(
+      'settings',
+      'dataSyncWebdavPass',
+      'dataSyncWebdavPassword',
+      'webdav-pass'
+    )
+    expect(mocks.storageV2Settings.setSetting).toHaveBeenCalledWith(
+      'settings.dataSyncWebdavPass',
+      { secretRef: 'storage-v2://secret/settings/dataSyncWebdavPass/dataSyncWebdavPassword' },
+      'settings'
+    )
+    expect(mocks.storageV2Settings.setSetting).toHaveBeenCalledWith(
+      'settings.dataSyncWebdavHost',
+      'https://dav.example.test',
+      'settings'
+    )
+    expect(mocks.storageV2Settings.setSetting).toHaveBeenCalledWith(
+      'settings.dataSyncWebdavPath',
+      '/Team/Sync',
+      'settings'
     )
   })
 })

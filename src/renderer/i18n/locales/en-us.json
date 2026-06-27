@@ -5481,9 +5481,84 @@
       "data": {
         "title": "Data Directory"
       },
+      "data_sync": {
+        "auto_sync": "Auto Sync",
+        "current_device": "Current Device",
+        "diagnose": "Diagnose",
+        "diagnosis": {
+          "checked_at": "Checked at: {{time}}",
+          "device": "Device: {{deviceId}}",
+          "title": "WebDAV Diagnosis",
+          "write_path": "Write path: {{path}}",
+          "write_success": "WebDAV connection and write permission are available."
+        },
+        "effective_path": "Effective Sync Path",
+        "help": "Sync local settings, provider keys, assistants, agents, conversations, knowledge bases, notes, and runtime metadata across devices through WebDAV.",
+        "interval": {
+          "day_one": "Daily",
+          "hour_one": "Hourly",
+          "hour_other": "Every {{count}} hours",
+          "minute_one": "Every minute",
+          "minute_other": "Every {{count}} minutes",
+          "off": "Off"
+        },
+        "last_result": "Latest Result",
+        "method": "Sync Method",
+        "method_value": "WebDAV Multi-device Sync",
+        "password": "Password",
+        "password_placeholder": "WebDAV password",
+        "refresh_status": "Refresh Status",
+        "remote_browser": {
+          "empty": "No folders found",
+          "error_title": "Failed to load remote directory",
+          "refresh": "Refresh",
+          "select_current": "Select Current Directory",
+          "title": "Browse WebDAV Directory"
+        },
+        "remote_path": "Sync Directory",
+        "remote_path_browse": "Browse",
+        "remote_path_help": "Choose a dedicated WebDAV directory. Every device that should sync together must use the same directory.",
+        "restore_confirm_content": "Restore the latest remote safety snapshot to this device? Current local data may be overwritten.",
+        "restore_confirm_title": "Restore Latest Snapshot",
+        "restore_latest": "Restore Latest",
+        "snapshot": {
+          "join_safety": "Local safety snapshot: {{file}} ({{size}})",
+          "open_local": "Show Local Snapshot",
+          "uploaded": "Remote safety snapshot: {{file}} ({{size}})"
+        },
+        "summary": {
+          "conflicts": "Conflicts: {{count}}",
+          "deleted": "Deleted: {{count}}",
+          "downloaded": "Downloaded: {{count}}",
+          "error": "Error: {{message}}",
+          "remote_path": "Remote path: {{path}}",
+          "resolved_conflicts": "Resolved conflicts: {{count}}",
+          "uploaded": "Uploaded: {{count}}"
+        },
+        "sync": "Sync",
+        "sync_now": "Manual Sync",
+        "syncing": "Syncing",
+        "title": "Data Sync",
+        "toast": {
+          "diagnose_failed": "Diagnosis failed: {{message}}",
+          "diagnose_success": "Diagnosis passed",
+          "open_snapshot_failed": "Failed to open local safety snapshot: {{message}}",
+          "remote_path_selected": "Selected WebDAV directory: {{path}}",
+          "restore_failed": "Restore failed: {{message}}",
+          "restore_success": "Restore completed",
+          "sync_failed": "Data sync failed: {{message}}",
+          "sync_running": "Data sync is still running.",
+          "sync_success": "Data sync completed.",
+          "webdav_required": "Please enter the WebDAV URL, username, and password first."
+        },
+        "uninitialized": "Not initialized",
+        "username": "Username",
+        "username_placeholder": "WebDAV username",
+        "webdav_host": "WebDAV URL"
+      },
       "divider": {
         "basic": "Basic Data",
-        "cloud_storage": "Cloud Backup",
+        "cloud_storage": "Backup & Sync",
         "export_settings": "Export",
         "import_settings": "Import",
         "third_party": "Third-party Connections"

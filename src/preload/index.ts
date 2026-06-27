@@ -253,6 +253,8 @@ const api = {
     restoreLatestSnapshot: (webdavConfig: WebDavConfig) =>
       ipcRenderer.invoke(IpcChannel.DataSync_RestoreLatestSnapshot, webdavConfig),
     getStatus: () => ipcRenderer.invoke(IpcChannel.DataSync_GetStatus),
+    getConfig: () => ipcRenderer.invoke(IpcChannel.DataSync_GetConfig),
+    setConfig: (config: unknown) => ipcRenderer.invoke(IpcChannel.DataSync_SetConfig, config),
     listRemoteDirectories: (webdavConfig: WebDavConfig, remotePath?: string) =>
       ipcRenderer.invoke(IpcChannel.DataSync_ListRemoteDirectories, webdavConfig, remotePath),
     checkWriteAccess: (webdavConfig: WebDavConfig) =>

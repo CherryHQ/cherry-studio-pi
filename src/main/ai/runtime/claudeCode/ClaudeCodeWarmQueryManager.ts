@@ -7,7 +7,7 @@ import { BaseService, Injectable, Phase, ServicePhase } from '@main/core/lifecyc
 import { buildClaudeCodeWarmQueryRequestForAgentSession } from './agentSessionWarmup'
 
 const logger = loggerService.withContext('ClaudeCodeWarmQueryManager')
-const DEFAULT_IDLE_TTL_MS = 5 * 60 * 1000
+export const CLAUDE_CODE_WARM_QUERY_IDLE_TTL_MS = 30 * 1000
 
 type WarmQueryEntry = {
   signature: string
@@ -186,7 +186,7 @@ export class ClaudeCodeWarmQueryManager extends BaseService {
       if (this.entries.get(key) !== entry) return
       this.entries.delete(key)
       this.closeEntry(entry)
-    }, DEFAULT_IDLE_TTL_MS)
+    }, CLAUDE_CODE_WARM_QUERY_IDLE_TTL_MS)
     entry.idleTimer.unref?.()
   }
 

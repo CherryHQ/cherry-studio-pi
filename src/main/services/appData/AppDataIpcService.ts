@@ -1,9 +1,12 @@
 import { loggerService } from '@logger'
 import { storageV2AppDataKvMirrorService } from '@main/services/storageV2/AppDataKvMirrorService'
 import { storageV2AppDataRuntimeRecoveryService } from '@main/services/storageV2/AppDataRuntimeRecoveryService'
+import { storageV2SecretVaultService } from '@main/services/storageV2/SecretVaultService'
+import { storageV2Service } from '@main/services/storageV2/StorageService'
 import { describeWebDavUserFacingError } from '@main/services/WebDavRetry'
 import { IpcChannel } from '@shared/IpcChannel'
 import type { WebDavConfig } from '@shared/types/backup'
+import { normalizeWebDavConfig, normalizeWebDavPath } from '@shared/webdavConfig'
 import { ipcMain } from 'electron'
 
 import { createWorkbenchShortcutRecord, getAppDataDatabase } from './AppDataDatabase'
@@ -16,6 +19,173 @@ import {
 import { appDataSyncService } from './AppDataSyncService'
 
 const logger = loggerService.withContext('AppDataIpcService')
+const DEFAULT_DATA_SYNC_PATH = '/cherry-studio-pi'
+
+type DataSyncConfig = {
+  webdavHost: string
+  webdavUser: string
+  webdavPass: string
+  webdavPath: string
+  autoSync: boolean
+  syncInterval: number
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+function ownValue(record: Record<string, unknown>, key: string) {
+  return Object.prototype.hasOwnProperty.call(record, key) ? record[key] : undefined
+}
+
+function normalizeStoredString(value: unknown, fallback = '') {
+  return typeof value === 'string' ? value : fallback
+}
+
+function normalizeStoredBoolean(value: unknown, fallback = false) {
+  return typeof value === 'boolean' ? value : fallback
+}
+
+function normalizeStoredNumber(value: unknown, fallback = 0) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback
+}
+
+function normalizeOptionalStringInput(
+  value: unknown,
+  fallback: string,
+  label: string,
+  options: { trim?: boolean } = {}
+) {
+  if (value === undefined) return fallback
+  if (value === null) return ''
+  if (typeof value !== 'string') {
+    throw new Error(`${label} 必须是字符串。`)
+  }
+  return options.trim === false ? value : value.trim()
+}
+
+function normalizeOptionalBooleanInput(value: unknown, fallback: boolean, label: string) {
+  if (value === undefined) return fallback
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+    if (!normalized) return fallback
+    if (['true', '1', 'yes', 'on'].includes(normalized)) return true
+    if (['false', '0', 'no', 'off'].includes(normalized)) return false
+  }
+  throw new Error(`${label} 必须是布尔值。`)
+}
+
+function normalizeOptionalSyncIntervalInput(value: unknown, fallback: number) {
+  if (value === undefined || value === null || value === '') return fallback
+  const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN
+  if (!Number.isFinite(parsed)) {
+    throw new Error('同步间隔必须是有限数字。')
+  }
+  return Math.max(0, Math.trunc(parsed))
+}
+
+async function resolveStoredSecret(value: unknown) {
+  if (typeof value === 'string') return value
+  if (!isRecord(value)) return ''
+
+  const secretRef = value.secretRef
+  if (typeof secretRef !== 'string' || !secretRef) return ''
+
+  return (await storageV2SecretVaultService.getSecret(secretRef)) ?? ''
+}
+
+async function readDataSyncConfig(): Promise<DataSyncConfig> {
+  const [webdavHost, webdavUser, webdavPass, webdavPath, autoSync, syncInterval] = await Promise.all([
+    storageV2Service.getSetting('settings.dataSyncWebdavHost'),
+    storageV2Service.getSetting('settings.dataSyncWebdavUser'),
+    storageV2Service.getSetting('settings.dataSyncWebdavPass'),
+    storageV2Service.getSetting('settings.dataSyncWebdavPath'),
+    storageV2Service.getSetting('settings.dataSyncAutoSync'),
+    storageV2Service.getSetting('settings.dataSyncSyncInterval')
+  ])
+
+  return {
+    webdavHost: normalizeStoredString(webdavHost),
+    webdavUser: normalizeStoredString(webdavUser),
+    webdavPass: await resolveStoredSecret(webdavPass),
+    webdavPath: normalizeWebDavPath(normalizeStoredString(webdavPath, DEFAULT_DATA_SYNC_PATH), DEFAULT_DATA_SYNC_PATH),
+    autoSync: normalizeStoredBoolean(autoSync),
+    syncInterval: normalizeStoredNumber(syncInterval)
+  }
+}
+
+async function writeDataSyncConfig(input: unknown): Promise<DataSyncConfig> {
+  if (!isRecord(input)) {
+    throw new Error('数据同步配置必须是对象。')
+  }
+
+  const current = await readDataSyncConfig()
+  const candidate: DataSyncConfig = {
+    webdavHost: normalizeOptionalStringInput(ownValue(input, 'webdavHost'), current.webdavHost, 'WebDAV URL'),
+    webdavUser: normalizeOptionalStringInput(ownValue(input, 'webdavUser'), current.webdavUser, 'WebDAV 用户名'),
+    webdavPass: normalizeOptionalStringInput(ownValue(input, 'webdavPass'), current.webdavPass, 'WebDAV 密码', {
+      trim: false
+    }),
+    webdavPath: normalizeOptionalStringInput(
+      ownValue(input, 'webdavPath'),
+      current.webdavPath || DEFAULT_DATA_SYNC_PATH,
+      'WebDAV 同步目录'
+    ),
+    autoSync: normalizeOptionalBooleanInput(ownValue(input, 'autoSync'), current.autoSync, '自动同步'),
+    syncInterval: normalizeOptionalSyncIntervalInput(ownValue(input, 'syncInterval'), current.syncInterval)
+  }
+
+  const normalizedWebDavConfig = candidate.webdavHost.trim()
+    ? normalizeWebDavConfig(
+        {
+          webdavHost: candidate.webdavHost,
+          webdavUser: candidate.webdavUser,
+          webdavPass: candidate.webdavPass,
+          webdavPath: candidate.webdavPath
+        },
+        { defaultPath: DEFAULT_DATA_SYNC_PATH, requireCredentials: false }
+      )
+    : {
+        webdavHost: '',
+        webdavUser: candidate.webdavUser.trim(),
+        webdavPass: candidate.webdavPass,
+        webdavPath: normalizeWebDavPath(candidate.webdavPath, DEFAULT_DATA_SYNC_PATH)
+      }
+
+  const passwordSettingValue = normalizedWebDavConfig.webdavPass
+    ? {
+        secretRef: await storageV2SecretVaultService.setSecret(
+          'settings',
+          'dataSyncWebdavPass',
+          'dataSyncWebdavPassword',
+          normalizedWebDavConfig.webdavPass
+        )
+      }
+    : ''
+
+  await Promise.all([
+    storageV2Service.setSetting('settings.dataSyncWebdavHost', normalizedWebDavConfig.webdavHost, 'settings'),
+    storageV2Service.setSetting('settings.dataSyncWebdavUser', normalizedWebDavConfig.webdavUser, 'settings'),
+    storageV2Service.setSetting('settings.dataSyncWebdavPass', passwordSettingValue, 'settings'),
+    storageV2Service.setSetting(
+      'settings.dataSyncWebdavPath',
+      normalizedWebDavConfig.webdavPath || DEFAULT_DATA_SYNC_PATH,
+      'settings'
+    ),
+    storageV2Service.setSetting('settings.dataSyncAutoSync', candidate.autoSync, 'settings'),
+    storageV2Service.setSetting('settings.dataSyncSyncInterval', candidate.syncInterval, 'settings')
+  ])
+
+  return {
+    webdavHost: normalizedWebDavConfig.webdavHost,
+    webdavUser: normalizedWebDavConfig.webdavUser,
+    webdavPass: normalizedWebDavConfig.webdavPass,
+    webdavPath: normalizedWebDavConfig.webdavPath || DEFAULT_DATA_SYNC_PATH,
+    autoSync: candidate.autoSync,
+    syncInterval: candidate.syncInterval
+  }
+}
 
 function getDataSyncUserErrorMessage(error: unknown, action: string) {
   const message = describeWebDavUserFacingError(error, action)
@@ -187,6 +357,8 @@ export function registerAppDataIpcHandlers() {
     }
   })
   ipcMain.handle(IpcChannel.DataSync_GetStatus, async () => appDataSyncService.getStatus())
+  ipcMain.handle(IpcChannel.DataSync_GetConfig, async () => readDataSyncConfig())
+  ipcMain.handle(IpcChannel.DataSync_SetConfig, async (_, input: unknown) => writeDataSyncConfig(input))
   ipcMain.handle(IpcChannel.DataSync_ListRemoteDirectories, async (_, config: WebDavConfig, remotePath?: string) => {
     try {
       return await appDataSyncService.listRemoteDirectories(config, remotePath)

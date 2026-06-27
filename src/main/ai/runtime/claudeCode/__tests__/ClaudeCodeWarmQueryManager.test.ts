@@ -26,7 +26,8 @@ vi.mock('@logger', () => ({
   }
 }))
 
-const { ClaudeCodeWarmQueryManager, createClaudeCodeWarmQuerySignature } = await import('../ClaudeCodeWarmQueryManager')
+const { CLAUDE_CODE_WARM_QUERY_IDLE_TTL_MS, ClaudeCodeWarmQueryManager, createClaudeCodeWarmQuerySignature } =
+  await import('../ClaudeCodeWarmQueryManager')
 
 function warmQuery() {
   return {
@@ -116,7 +117,7 @@ describe('ClaudeCodeWarmQueryManager', () => {
 
     manager.prewarm({ key: 'session-1', options: { model: 'sonnet' } as any })
     await Promise.resolve()
-    vi.advanceTimersByTime(5 * 60 * 1000)
+    vi.advanceTimersByTime(CLAUDE_CODE_WARM_QUERY_IDLE_TTL_MS)
     await Promise.resolve()
 
     expect(warm.close).toHaveBeenCalledOnce()

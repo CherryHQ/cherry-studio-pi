@@ -17,8 +17,12 @@ const logger = loggerService.withContext('devtools')
  * block or delay window creation. No-op outside development.
  */
 export async function installDevtoolsExtensions(): Promise<void> {
-  if (!isDev) return
+  if (!isDev || !shouldInstallDevtoolsExtensions()) return
   await Promise.all([installReactDevtools(), installDataApiDevtools()])
+}
+
+function shouldInstallDevtoolsExtensions(): boolean {
+  return /^(1|true)$/i.test(process.env.CS_DEVTOOLS ?? '')
 }
 
 async function installReactDevtools() {

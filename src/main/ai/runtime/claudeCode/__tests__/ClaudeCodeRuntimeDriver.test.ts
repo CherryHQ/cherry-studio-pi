@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   buildRequest: vi.fn(),
   applicationGet: vi.fn(),
   consumeWarmQuery: vi.fn(),
+  closeAgentSessionWarm: vi.fn(),
   prepareTrace: vi.fn(),
   createClaudeQuery: vi.fn(),
   adapterInstances: [] as any[]
@@ -121,7 +122,9 @@ describe('ClaudeCodeRuntimeDriver', () => {
     vi.clearAllMocks()
     mocks.adapterInstances.length = 0
     mocks.applicationGet.mockImplementation((name: string) => {
-      if (name === 'ClaudeCodeWarmQueryManager') return { consume: mocks.consumeWarmQuery }
+      if (name === 'ClaudeCodeWarmQueryManager') {
+        return { consume: mocks.consumeWarmQuery, closeAgentSessionWarm: mocks.closeAgentSessionWarm }
+      }
       if (name === 'ClaudeCodeTraceBridgeService') return { prepareTrace: mocks.prepareTrace }
       throw new Error(`Unexpected application.get(${name})`)
     })
@@ -134,6 +137,12 @@ describe('ClaudeCodeRuntimeDriver', () => {
       sdkModelId: 'sonnet-sdk',
       initializeTimeoutMs: 100
     })
+  })
+
+  it('closes any warm query on session idle instead of prewarming another SDK process', () => {
+    new ClaudeCodeRuntimeDriver().onSessionIdle('session-1')
+
+    expect(mocks.closeAgentSessionWarm).toHaveBeenCalledWith('session-1')
   })
 
   it('connects with an opaque resume token and sends user input into the SDK queue', async () => {

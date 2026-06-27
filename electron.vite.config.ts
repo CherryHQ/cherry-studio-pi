@@ -16,6 +16,8 @@ const visualizerPlugin = (type: 'renderer' | 'main') => {
 
 const isDev = process.env.NODE_ENV === 'development'
 const isProd = process.env.NODE_ENV === 'production'
+const enableDevSourcemap = isDev && /^(1|true)$/i.test(process.env.CS_DEV_SOURCEMAP ?? '')
+const enableDevCodeInspector = isDev && /^(1|true)$/i.test(process.env.CS_DEV_CODE_INSPECTOR ?? '')
 
 // Bundle/externalize split for the main process: everything in `dependencies` is
 // marked `external` below (kept in node_modules of the packaged app), and everything
@@ -71,7 +73,7 @@ export default defineConfig({
           warn(warning)
         }
       },
-      sourcemap: isDev
+      sourcemap: enableDevSourcemap
     },
     esbuild: isProd ? { legalComments: 'none' } : {},
     optimizeDeps: {
@@ -91,7 +93,7 @@ export default defineConfig({
       }
     },
     build: {
-      sourcemap: isDev,
+      sourcemap: enableDevSourcemap,
       rollupOptions: {
         // Unlike renderer which auto-discovers entries from HTML files,
         // preload requires explicit entry point configuration for multiple scripts
@@ -119,7 +121,7 @@ export default defineConfig({
       react({
         tsDecorators: true
       }),
-      ...(isDev ? [CodeInspectorPlugin({ bundler: 'vite' })] : []), // 只在开发环境下启用 CodeInspectorPlugin
+      ...(enableDevCodeInspector ? [CodeInspectorPlugin({ bundler: 'vite' })] : []),
       ...visualizerPlugin('renderer')
     ],
     resolve: {

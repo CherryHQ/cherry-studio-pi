@@ -53,11 +53,21 @@ describe('installDevtoolsExtensions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     platformMock.isDev = true
+    delete process.env.CS_DEVTOOLS
     installExtensionMock.mockResolvedValue('React Developer Tools')
     loadExtensionMock.mockResolvedValue({ name: 'DataApi DevTools' })
   })
 
-  it('installs React and DataApi devtools in development', async () => {
+  it('does not install devtools by default in development', async () => {
+    await installDevtoolsExtensions()
+
+    expect(installExtensionMock).not.toHaveBeenCalled()
+    expect(loadExtensionMock).not.toHaveBeenCalled()
+  })
+
+  it('installs React and DataApi devtools when explicitly enabled in development', async () => {
+    process.env.CS_DEVTOOLS = '1'
+
     await installDevtoolsExtensions()
 
     expect(installExtensionMock).toHaveBeenCalledWith('react-devtools')
@@ -69,6 +79,7 @@ describe('installDevtoolsExtensions', () => {
   it('logs install failures without throwing', async () => {
     const reactError = new Error('react failed')
     const dataApiError = new Error('data api failed')
+    process.env.CS_DEVTOOLS = '1'
     installExtensionMock.mockRejectedValue(reactError)
     loadExtensionMock.mockRejectedValue(dataApiError)
 

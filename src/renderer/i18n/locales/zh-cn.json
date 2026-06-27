@@ -5481,9 +5481,84 @@
       "data": {
         "title": "数据目录"
       },
+      "data_sync": {
+        "auto_sync": "自动同步",
+        "current_device": "当前设备",
+        "diagnose": "诊断",
+        "diagnosis": {
+          "checked_at": "检查时间：{{time}}",
+          "device": "设备：{{deviceId}}",
+          "title": "WebDAV 诊断",
+          "write_path": "写入路径：{{path}}",
+          "write_success": "WebDAV 连接和写入权限正常。"
+        },
+        "effective_path": "实际同步路径",
+        "help": "通过 WebDAV 在多台设备之间同步本地设置、服务商密钥、助手、智能体、对话、知识库、笔记和运行时元数据。",
+        "interval": {
+          "day_one": "每天",
+          "hour_one": "每小时",
+          "hour_other": "每 {{count}} 小时",
+          "minute_one": "每分钟",
+          "minute_other": "每 {{count}} 分钟",
+          "off": "关闭"
+        },
+        "last_result": "最近结果",
+        "method": "同步方式",
+        "method_value": "WebDAV 多端同步",
+        "password": "密码",
+        "password_placeholder": "WebDAV 密码",
+        "refresh_status": "刷新状态",
+        "remote_browser": {
+          "empty": "没有找到文件夹",
+          "error_title": "无法加载远程目录",
+          "refresh": "刷新",
+          "select_current": "选择当前目录",
+          "title": "浏览 WebDAV 目录"
+        },
+        "remote_path": "同步目录",
+        "remote_path_browse": "浏览",
+        "remote_path_help": "请选择一个专用 WebDAV 目录。需要同步的每台设备都应使用同一个目录。",
+        "restore_confirm_content": "要将远端最新安全快照恢复到这台设备吗？当前本地数据可能会被覆盖。",
+        "restore_confirm_title": "恢复最新快照",
+        "restore_latest": "恢复最新",
+        "snapshot": {
+          "join_safety": "本地安全快照：{{file}}（{{size}}）",
+          "open_local": "显示本地快照",
+          "uploaded": "远端安全快照：{{file}}（{{size}}）"
+        },
+        "summary": {
+          "conflicts": "冲突：{{count}}",
+          "deleted": "删除：{{count}}",
+          "downloaded": "下载：{{count}}",
+          "error": "错误：{{message}}",
+          "remote_path": "远端路径：{{path}}",
+          "resolved_conflicts": "已处理冲突：{{count}}",
+          "uploaded": "上传：{{count}}"
+        },
+        "sync": "同步",
+        "sync_now": "手动同步",
+        "syncing": "同步中",
+        "title": "数据同步",
+        "toast": {
+          "diagnose_failed": "诊断失败：{{message}}",
+          "diagnose_success": "诊断通过",
+          "open_snapshot_failed": "打开本地安全快照失败：{{message}}",
+          "remote_path_selected": "已选择 WebDAV 目录：{{path}}",
+          "restore_failed": "恢复失败：{{message}}",
+          "restore_success": "恢复完成",
+          "sync_failed": "同步数据失败：{{message}}",
+          "sync_running": "数据同步仍在进行中。",
+          "sync_success": "数据同步完成。",
+          "webdav_required": "请先填写 WebDAV 地址、账号和密码。"
+        },
+        "uninitialized": "未初始化",
+        "username": "账号",
+        "username_placeholder": "WebDAV 用户名",
+        "webdav_host": "WebDAV 地址"
+      },
       "divider": {
         "basic": "基础数据设置",
-        "cloud_storage": "云备份设置",
+        "cloud_storage": "备份与同步",
         "export_settings": "导出设置",
         "import_settings": "导入设置",
         "third_party": "第三方连接"

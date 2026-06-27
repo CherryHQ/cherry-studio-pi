@@ -2,7 +2,7 @@ import { BaseService } from '@main/core/lifecycle/BaseService'
 import { mockMainLoggerService } from '@test-mocks/MainLoggerService'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { AGENT_SESSION_IDLE_TIMEOUT_MS } from '../constants'
+import { AGENT_SESSION_IDLE_TIMEOUT_MS, AGENT_SESSION_RUNTIME_IDLE_TTL_MS } from '../constants'
 
 const mocks = vi.hoisted(() => ({
   saveMessage: vi.fn(),
@@ -230,7 +230,7 @@ describe('AgentSessionRuntimeService', () => {
         expect(getEntry(service)).not.toBe(staleEntry)
 
         await (service as any).startNextTurn(staleEntry)
-        vi.advanceTimersByTime(5 * 60 * 1000)
+        vi.advanceTimersByTime(AGENT_SESSION_RUNTIME_IDLE_TTL_MS)
 
         expect(service.inspect('session-1')).toMatchObject({
           assistantMessageId: 'assistant-replacement',
@@ -326,7 +326,7 @@ describe('AgentSessionRuntimeService', () => {
       getEntry(service).lastResumeToken = 'resume-1'
 
       void terminalListener(handle).onDone({ status: 'success', isTopicDone: true })
-      vi.advanceTimersByTime(5 * 60 * 1000)
+      vi.advanceTimersByTime(AGENT_SESSION_RUNTIME_IDLE_TTL_MS)
 
       expect(onSessionIdle).toHaveBeenCalledWith('session-1')
       expect(service.inspect('session-1')).toBeUndefined()
@@ -351,7 +351,7 @@ describe('AgentSessionRuntimeService', () => {
       const handle = service.beginTurn(baseTurnInput)
 
       void terminalListener(handle).onDone({ status: 'success', isTopicDone: true })
-      vi.advanceTimersByTime(5 * 60 * 1000)
+      vi.advanceTimersByTime(AGENT_SESSION_RUNTIME_IDLE_TTL_MS)
 
       expect(onSessionIdle).not.toHaveBeenCalled()
       expect(service.inspect('session-1')).toBeUndefined()

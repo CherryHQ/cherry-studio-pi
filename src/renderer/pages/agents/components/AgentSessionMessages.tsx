@@ -1,21 +1,17 @@
-import { loggerService } from '@logger'
 import MessageList from '@renderer/components/chat/messages/MessageList'
 import { MessageListProvider } from '@renderer/components/chat/messages/MessageListProvider'
 import { AskUserQuestionOptimisticInputProvider } from '@renderer/components/chat/messages/tools/agent/AskUserQuestionOptimisticContext'
 import type { MessageListActions } from '@renderer/components/chat/messages/types'
 import { usePreference } from '@renderer/data/hooks/usePreference'
 import { useSession } from '@renderer/hooks/agents/useSession'
-import { ipcApi } from '@renderer/ipc'
 import type { GetAgentResponse } from '@renderer/types/agent'
 import { type Topic, TopicType, type TopicType as TopicTypeEnum } from '@renderer/types/topic'
 import { getAgentAvatarFromConfiguration } from '@renderer/utils/agent'
 import { buildAgentSessionTopicId } from '@renderer/utils/agentSession'
 import type { CherryMessagePart, CherryUIMessage, ModelSnapshot } from '@shared/data/types/message'
-import { memo, useEffect, useMemo } from 'react'
+import { memo, useMemo } from 'react'
 
 import { useAgentMessageListProviderValue } from '../messages/agentMessageListAdapter'
-
-const logger = loggerService.withContext('AgentSessionMessages')
 
 type Props = {
   agentId?: string
@@ -99,17 +95,6 @@ const AgentSessionMessages = ({
     messageNavigation,
     workspacePath: session?.workspace?.path
   })
-
-  useEffect(() => {
-    void ipcApi.request('ai.prewarm_agent_session', { sessionId }).catch((error) => {
-      logger.warn('Failed to prewarm agent session', error as Error)
-    })
-    return () => {
-      void ipcApi.request('ai.close_agent_session_warm', { sessionId }).catch((error) => {
-        logger.warn('Failed to close agent session warm query', error as Error)
-      })
-    }
-  }, [sessionId])
 
   return (
     <AskUserQuestionOptimisticInputProvider value={optimisticAskUserQuestionInputsByToolCallId}>

@@ -497,8 +497,6 @@ export class ClaudeCodeRuntimeDriver implements AgentSessionRuntimeDriver {
   }
 
   onSessionIdle(sessionId: string): void {
-    // `prewarmAgentSession` already no-ops in trace mode (it closes any warm
-    // queries and returns), so no driver-side trace guard is needed here.
-    void application.get('ClaudeCodeWarmQueryManager').prewarmAgentSession(sessionId)
+    application.get('ClaudeCodeWarmQueryManager').closeAgentSessionWarm(sessionId)
   }
 }

@@ -35,12 +35,11 @@ import { type DispatchDecision, toolApprovalRegistry } from '../runtime/claudeCo
 import { PersistenceListener } from '../streamManager/listeners/PersistenceListener'
 import { TraceFlushListener } from '../streamManager/listeners/TraceFlushListener'
 import type { StreamErrorResult, StreamListener, StreamPausedResult } from '../streamManager/types'
-import { AGENT_SESSION_IDLE_TIMEOUT_MS } from './constants'
+import { AGENT_SESSION_IDLE_TIMEOUT_MS, AGENT_SESSION_RUNTIME_IDLE_TTL_MS } from './constants'
 import { AgentSessionMessageBackend } from './persistence/AgentSessionMessageBackend'
 import { extractAgentSessionId, isAgentSessionTopic } from './topic'
 
 const logger = loggerService.withContext('AgentSessionRuntimeService')
-const DEFAULT_IDLE_TTL_MS = 5 * 60 * 1000
 
 export type AgentSessionRuntimeStatus = 'active' | 'idle'
 export type AgentSessionRuntimeTerminalStatus = 'success' | 'paused' | 'error'
@@ -403,8 +402,9 @@ export class AgentSessionRuntimeService extends BaseService {
     entry.lastTerminalStatus = status
     if (entry.currentTurn) entry.currentTurn.terminalStatus = status
 
-    // Connection stays warm across turns (no per-turn close) — only `closeSession`/idle TTL tears it
-    // down. A queued steer drains into the same warm subprocess via `scheduleNextTurn`.
+    // Keep the runtime warm only for a short follow-up window. Claude Agent SDK connections are
+    // heavy native subprocesses, so long idle retention makes the whole app look memory-hungry.
+    // Queued steers still drain into the same subprocess via `scheduleNextTurn`.
     if (entry.pendingTurns.length > 0) {
       this.scheduleNextTurn(entry)
     } else {
@@ -1057,7 +1057,7 @@ export class AgentSessionRuntimeService extends BaseService {
       if (lastResumeToken) {
         runtimeDriverRegistry.getAgentSessionDriver(agentType)?.onSessionIdle?.(sessionId)
       }
-    }, DEFAULT_IDLE_TTL_MS)
+    }, AGENT_SESSION_RUNTIME_IDLE_TTL_MS)
     entry.idleTimer.unref?.()
   }
 

@@ -273,6 +273,8 @@ export enum IpcChannel {
   DataSync_SyncNow = 'data-sync:sync-now',
   DataSync_RestoreLatestSnapshot = 'data-sync:restore-latest-snapshot',
   DataSync_GetStatus = 'data-sync:get-status',
+  DataSync_GetConfig = 'data-sync:get-config',
+  DataSync_SetConfig = 'data-sync:set-config',
   DataSync_ListRemoteDirectories = 'data-sync:list-remote-directories',
   DataSync_CheckWriteAccess = 'data-sync:check-write-access',
   DataSync_RecordFailure = 'data-sync:record-failure',
