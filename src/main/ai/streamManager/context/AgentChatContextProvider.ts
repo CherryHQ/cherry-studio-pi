@@ -4,11 +4,11 @@
  * only (no selector fan-out), passes `userMessage` for the inject path.
  */
 
+import { application } from '@application'
 import { agentService } from '@data/services/AgentService'
 import { agentSessionMessageService } from '@data/services/AgentSessionMessageService'
 import { agentSessionService } from '@data/services/AgentSessionService'
 import { resolveAgentRuntimeModel } from '@main/ai/agentSession/modelResolution'
-import { application } from '@main/core/application'
 import { topicNamingService } from '@main/services/TopicNamingService'
 import type { AgentSessionMessageEntity } from '@shared/data/api/schemas/agentSessions'
 import type { CherryUIMessage } from '@shared/data/types/message'
@@ -61,7 +61,7 @@ export class AgentChatContextProvider implements ChatContextProvider {
     }
 
     const agentId = session.agentId
-    const agent = agentService.getAgent(agentId)
+    const agent = await Promise.resolve(agentService.getAgent(agentId))
     if (!agent) throw new Error(`Agent not found for session ${sessionId}: ${agentId}`)
     const model = await resolveAgentRuntimeModel(agent)
 

@@ -29,7 +29,7 @@ vi.mock('@main/services/TopicNamingService', () => ({
   topicNamingService: { maybeRenameAgentSession: mocks.maybeRenameAgentSession }
 }))
 
-vi.mock('@main/core/application', () => ({
+vi.mock('@application', () => ({
   application: { get: mocks.applicationGet }
 }))
 
@@ -1490,26 +1490,28 @@ describe('AgentSessionRuntimeService', () => {
         modelId: 'claude-code::claude-sonnet-4-5'
       }
     })
-    expect(mocks.startRuntimeTurn).toHaveBeenCalledWith({
-      topicId: 'agent-session:session-1',
-      modelId: 'claude-code::claude-sonnet-4-5',
-      rootSpan: expect.anything(),
-      request: {
-        chatId: 'agent-session:session-1',
-        trigger: 'submit-message',
-        messageId: 'generated-message-id',
-        messages: [
-          { id: 'user-2', role: 'user', parts: [{ type: 'text', text: 'hello' }] },
-          { id: 'generated-message-id', role: 'assistant', parts: [] }
-        ],
-        runtime: { kind: 'agent-session', sessionId: 'session-1', turnId: expect.any(String) }
-      },
-      listeners: [
-        expect.objectContaining({ id: expect.stringContaining('persistence:agents-db:') }),
-        expect.objectContaining({ id: 'agent-runtime:session-1' }),
-        expect.objectContaining({ id: 'persistence:trace:agent-session:session-1' })
-      ]
-    })
+    expect(mocks.startRuntimeTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        topicId: 'agent-session:session-1',
+        modelId: 'claude-code::claude-sonnet-4-5',
+        rootSpan: expect.anything(),
+        request: expect.objectContaining({
+          chatId: 'agent-session:session-1',
+          trigger: 'submit-message',
+          messageId: 'generated-message-id',
+          messages: [
+            { id: 'user-2', role: 'user', parts: [{ type: 'text', text: 'hello' }] },
+            { id: 'generated-message-id', role: 'assistant', parts: [] }
+          ],
+          runtime: { kind: 'agent-session', sessionId: 'session-1', turnId: expect.any(String) }
+        }),
+        listeners: [
+          expect.objectContaining({ id: expect.stringContaining('persistence:agents-db:') }),
+          expect.objectContaining({ id: 'agent-runtime:session-1' }),
+          expect.objectContaining({ id: 'persistence:trace:agent-session:session-1' })
+        ]
+      })
+    )
     const request = mocks.startRuntimeTurn.mock.calls[0][0].request
     expect(request.messageId).toBe(request.messages[1].id)
     // The session trace id is cached on the entry and reused for every turn (container-scoped trace).

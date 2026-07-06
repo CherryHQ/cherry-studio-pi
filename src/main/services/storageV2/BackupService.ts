@@ -2,8 +2,8 @@ import { createDecipheriv, createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 
+import { application } from '@application'
 import { createClient } from '@libsql/client'
-import { application } from '@main/core/application'
 import { getErrorMessage as getMainErrorMessage } from '@main/utils/errorMessage'
 import { app } from 'electron'
 

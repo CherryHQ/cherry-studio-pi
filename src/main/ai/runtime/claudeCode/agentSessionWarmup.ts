@@ -1,10 +1,10 @@
+import { application } from '@application'
 import { agentService } from '@data/services/AgentService'
 import { agentSessionMessageService } from '@data/services/AgentSessionMessageService'
 import { agentSessionService } from '@data/services/AgentSessionService'
 import { modelService } from '@data/services/ModelService'
 import { providerService } from '@data/services/ProviderService'
 import { getAgentRuntimeApiModelId, resolveAgentRuntimeModel } from '@main/ai/agentSession/modelResolution'
-import { application } from '@main/core/application'
 import type { AgentEntity } from '@shared/data/api/schemas/agents'
 import { isManagedCherryAiDefaultModel } from '@shared/data/presets/cherryai'
 import type { Model, UniqueModelId } from '@shared/data/types/model'
@@ -52,7 +52,7 @@ export async function buildClaudeCodeQueryRequestForAgentSession(
   const session = agentSessionService.getById(sessionId)
   if (!session?.agentId) return undefined
 
-  const agent = agentService.getAgent(session.agentId)
+  const agent = await Promise.resolve(agentService.getAgent(session.agentId))
   if (!agent?.model) return undefined
 
   const model = await resolveAgentRuntimeModel(agent)

@@ -1,7 +1,11 @@
+import { vi } from 'vitest'
+
+vi.unmock('@application')
+
 import { Application } from '@main/core/application/Application'
 import { JobManager } from '@main/core/job/JobManager'
 import { BaseService } from '@main/core/lifecycle/BaseService'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 describe('JobManager timer lifecycle', () => {
   beforeEach(() => {

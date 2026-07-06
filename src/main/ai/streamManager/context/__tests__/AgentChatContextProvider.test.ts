@@ -53,7 +53,7 @@ vi.mock('@main/services/TopicNamingService', () => ({
   }
 }))
 
-vi.mock('@main/core/application', () => ({
+vi.mock('@application', () => ({
   application: { get: mocks.applicationGet }
 }))
 
