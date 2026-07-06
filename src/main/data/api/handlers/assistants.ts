@@ -11,15 +11,16 @@
 import { assistantDataService } from '@data/services/AssistantService'
 import { loggerService } from '@logger'
 import { storageV2Service } from '@main/services/storageV2/StorageService'
-import type { HandlersFor } from '@shared/data/api/apiTypes'
 import { OrderBatchRequestSchema, OrderRequestSchema } from '@shared/data/api/schemas/_endpointHelpers'
 import type { AssistantSchemas } from '@shared/data/api/schemas/assistants'
 import {
   ASSISTANTS_MAX_LIMIT,
   CreateAssistantSchema,
+  DeleteAssistantQuerySchema,
   ListAssistantsQuerySchema,
   UpdateAssistantSchema
 } from '@shared/data/api/schemas/assistants'
+import type { HandlersFor } from '@shared/data/api/types'
 import type { Assistant } from '@shared/data/types/assistant'
 
 const logger = loggerService.withContext('DataApi:AssistantHandlers')
@@ -105,8 +106,9 @@ export const assistantHandlers: HandlersFor<AssistantSchemas> = {
       return assistant
     },
 
-    DELETE: async ({ params }) => {
-      await assistantDataService.delete(params.id)
+    DELETE: async ({ params, query }) => {
+      const parsed = DeleteAssistantQuerySchema.parse(query ?? {})
+      await assistantDataService.delete(params.id, { deleteTopics: parsed.deleteTopics === true })
       await deleteAssistantFromStorageV2(params.id)
       await mirrorAssistantsToStorageV2('delete')
       return undefined

@@ -1,5 +1,5 @@
 const { Arch } = require('electron-builder')
-const { execFileSync } = require('child_process')
+const { execSync } = require('child_process')
 const fs = require('fs')
 const path = require('path')
 const { parse, stringify } = require('yaml')
@@ -31,13 +31,6 @@ const packages = [
   '@img/sharp-linuxmusl-x64',
   '@img/sharp-win32-arm64',
   '@img/sharp-win32-x64',
-  '@libsql/darwin-arm64',
-  '@libsql/darwin-x64',
-  '@libsql/linux-arm64-gnu',
-  '@libsql/linux-x64-gnu',
-  '@libsql/linux-arm64-musl',
-  '@libsql/linux-x64-musl',
-  '@libsql/win32-x64-msvc',
   '@napi-rs/system-ocr-darwin-arm64',
   '@napi-rs/system-ocr-darwin-x64',
   '@napi-rs/system-ocr-win32-arm64-msvc',
@@ -50,19 +43,15 @@ const packages = [
   '@napi-rs/canvas-darwin-arm64',
   '@napi-rs/canvas-win32-x64-msvc',
   '@napi-rs/canvas-win32-arm64-msvc',
-  '@strongtz/win32-arm64-msvc',
-  '@vscode/ripgrep-darwin-arm64',
-  '@vscode/ripgrep-darwin-x64',
-  '@vscode/ripgrep-linux-arm',
-  '@vscode/ripgrep-linux-arm64',
-  '@vscode/ripgrep-linux-ia32',
-  '@vscode/ripgrep-linux-ppc64',
-  '@vscode/ripgrep-linux-riscv64',
-  '@vscode/ripgrep-linux-s390x',
-  '@vscode/ripgrep-linux-x64',
-  '@vscode/ripgrep-win32-arm64',
-  '@vscode/ripgrep-win32-ia32',
-  '@vscode/ripgrep-win32-x64'
+  // sqlite-vec prebuilt extensions (vec0.dylib/.so/.dll), from the @aiany/sqlite-vec fork
+  // which adds a windows-arm64 build (upstream ships none). Note the package names use
+  // `windows`, not `win32` — see platformTokens below for why the keep-filter must match both.
+  '@aiany/sqlite-vec-darwin-arm64',
+  '@aiany/sqlite-vec-darwin-x64',
+  '@aiany/sqlite-vec-linux-arm64',
+  '@aiany/sqlite-vec-linux-x64',
+  '@aiany/sqlite-vec-windows-arm64',
+  '@aiany/sqlite-vec-windows-x64'
 ]
 
 const platformToArch = {
@@ -72,36 +61,15 @@ const platformToArch = {
   linuxmusl: 'linuxmusl'
 }
 
-function buildDownloadRtkArgs(platform, arch) {
-  return [path.join(__dirname, 'download-rtk-binaries.js'), platform, arch]
-}
-
-function buildPnpmInstallInvocation(platform = process.platform, env = process.env) {
-  if (platform === 'win32') {
-    return {
-      command: env.ComSpec || 'cmd.exe',
-      args: ['/d', '/s', '/c', 'pnpm install']
-    }
-  }
-
-  return {
-    command: 'pnpm',
-    args: ['install']
-  }
-}
-
 exports.default = async function (context) {
   const arch = context.arch === Arch.arm64 ? 'arm64' : 'x64'
   const platformName = context.packager.platform.name
   const platform = platformToArch[platformName]
 
-  // Download rtk binary for the target platform
-  try {
-    console.log(`Downloading rtk binary for ${platform}-${arch}...`)
-    execFileSync(process.execPath, buildDownloadRtkArgs(platform, arch), { stdio: 'inherit' })
-  } catch (error) {
-    console.warn(`Warning: rtk binary download failed (non-fatal): ${error.message}`)
-  }
+  console.log(`Downloading bundled binaries for ${platform}-${arch}...`)
+  execSync(`node "${path.join(__dirname, 'download-binaries.js')}" ${platform} ${arch}`, { stdio: 'inherit' })
+  // Fail the build rather than ship a half-empty resources/binaries/<platform>.
+  require('./download-binaries').verifyBundledBinaries(platform, arch)
 
   const downloadPackages = async () => {
     // Skip if target platform and architecture match current system
@@ -131,8 +99,7 @@ exports.default = async function (context) {
     fs.writeFileSync(workspaceConfigPath, modifiedWorkspaceConfig)
 
     try {
-      const { command, args } = buildPnpmInstallInvocation()
-      execFileSync(command, args, { stdio: 'inherit' })
+      execSync(`pnpm install`, { stdio: 'inherit' })
     } finally {
       // Restore original pnpm-workspace.yaml
       fs.writeFileSync(workspaceConfigPath, originalWorkspaceConfig)
@@ -153,17 +120,26 @@ exports.default = async function (context) {
     context.packager.config.files[0].filter = filters
   }
 
-  const arm64KeepPackages = packages.filter((p) => p.includes('arm64') && p.includes(platform))
+  // Most native packages encode Electron's platform key (win32) in their name, but some
+  // (e.g. sqlite-vec) use the npm `windows` convention. Match either so a win32 build keeps
+  // sqlite-vec-windows-x64 instead of wrongly excluding it.
+  const platformTokens = platform === 'win32' ? ['win32', 'windows'] : [platform]
+  const matchesPlatform = (p) => platformTokens.some((t) => p.includes(t))
+
+  const arm64KeepPackages = packages.filter((p) => p.includes('arm64') && matchesPlatform(p))
   const arm64ExcludePackages = packages
     .filter((p) => !arm64KeepPackages.includes(p))
     .map((p) => '!node_modules/' + p + '/**')
 
-  const x64KeepPackages = packages.filter((p) => p.includes('x64') && p.includes(platform))
+  const x64KeepPackages = packages.filter((p) => p.includes('x64') && matchesPlatform(p))
   const x64ExcludePackages = packages
     .filter((p) => !x64KeepPackages.includes(p))
     .map((p) => '!node_modules/' + p + '/**')
 
   const currentPlatformKey = `${platform}-${arch}`
+  // win32-arm64 is in this list so `build:win` (--x64 --arm64) can package it. The
+  // @aiany/sqlite-vec fork provides a windows-arm64 vec0.dll, so knowledge-base vector
+  // search works on that target too.
   const allBinaryPlatforms = ['darwin-arm64', 'darwin-x64', 'linux-x64', 'linux-arm64', 'win32-x64', 'win32-arm64']
   const excludeBundledBinaryFilters = allBinaryPlatforms
     .filter((p) => p !== currentPlatformKey)
@@ -174,9 +150,4 @@ exports.default = async function (context) {
   } else {
     await excludePackages([...x64ExcludePackages, ...excludeBundledBinaryFilters])
   }
-}
-
-exports._internal = {
-  buildDownloadRtkArgs,
-  buildPnpmInstallInvocation
 }

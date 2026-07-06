@@ -1,8 +1,7 @@
-import { execFileSync, spawn } from 'node:child_process'
+import { execSync, spawn } from 'node:child_process'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import { Socket } from 'node:net'
-import os from 'node:os'
 import path from 'node:path'
 
 import { application } from '@application'
@@ -13,20 +12,18 @@ import { BaseService, DependsOn, Injectable, Phase, ServicePhase } from '@main/c
 import { isWin } from '@main/core/platform'
 import { WindowType } from '@main/core/window/types'
 import type { Model, Provider, ProviderType, VertexProvider } from '@main/data/migration/v2/legacyTypes'
-import { isUserInChina } from '@main/utils/ipService'
-import { summarizeTextForLog } from '@main/utils/logging'
-import { crossPlatformSpawn, findExecutableInEnv, getBinaryPath, runInstallScript } from '@main/utils/process'
-import getShellEnv, { refreshShellEnv } from '@main/utils/shell-env'
+import { getBinaryPath } from '@main/utils/binaryResolver'
+import { findExecutableInEnv } from '@main/utils/commandResolver'
+import { crossPlatformSpawn } from '@main/utils/processRunner'
+import { getShellEnv, refreshShellEnv } from '@main/utils/shellEnv'
 import type { EndpointType, Model as DataModel } from '@shared/data/types/model'
 import { ENDPOINT_TYPE, parseUniqueModelId, UniqueModelIdSchema } from '@shared/data/types/model'
 import type { Provider as DataProvider } from '@shared/data/types/provider'
 import { IpcChannel } from '@shared/IpcChannel'
 import type { OperationResult } from '@shared/types/codeTools'
-import { formatApiHost, hasAPIVersion, withoutTrailingSlash } from '@shared/utils/api'
+import { formatApiHost, hasApiVersion, withoutTrailingSlash } from '@shared/utils/api'
 import { isNonChatModel } from '@shared/utils/model'
 
-import { storageV2SecretVaultService } from './storageV2/SecretVaultService'
-import { storageV2SettingsRepository } from './storageV2/StorageV2Repositories'
 import { vertexAiService } from './VertexAiService'
 
 const logger = loggerService.withContext('OpenClawService')
@@ -65,144 +62,94 @@ export function parseUpdateStatus(statusOutput: string): string | null {
   return null
 }
 
-export function parseWindowsNetstatListeningPids(output: string, port: number): string[] {
-  const pids = new Set<string>()
-
-  for (const line of output.split(/\r?\n/)) {
-    const match = line.trim().match(/^TCP\s+\S+:(\d+)\s+\S+\s+LISTENING\s+(\d+)$/i)
-    if (match?.[1] === String(port)) {
-      pids.add(match[2])
-    }
-  }
-
-  return [...pids]
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    const timer = setTimeout(resolve, ms)
-    timer.unref?.()
-  })
-}
-
-const OPENCLAW_CONFIG_DIR = path.join(os.homedir(), '.openclaw')
-const OPENCLAW_CONFIG_PATH = path.join(OPENCLAW_CONFIG_DIR, 'openclaw.json')
-const OPENCLAW_CONFIG_BAK_PATH = path.join(OPENCLAW_CONFIG_DIR, 'openclaw.json.bak')
-const OPENCLAW_LEGACY_CONFIG_PATH = path.join(OPENCLAW_CONFIG_DIR, 'openclaw.cherry.json')
+const openclawConfigDir = () => application.getPath('external.openclaw.config')
+const openclawConfigPath = () => path.join(openclawConfigDir(), 'openclaw.json')
+const openclawConfigBakPath = () => path.join(openclawConfigDir(), 'openclaw.json.bak')
+const openclawLegacyConfigPath = () => path.join(openclawConfigDir(), 'openclaw.cherry.json')
 const SYMLINK_PATH = '/usr/local/bin/openclaw'
 const DEFAULT_GATEWAY_PORT = 18790
-const STORAGE_V2_OPENCLAW_SCOPE = 'openclaw'
-const STORAGE_V2_OPENCLAW_OWNER = 'default'
-const STORAGE_V2_OPENCLAW_CONFIG_KIND = 'config'
-const STORAGE_V2_OPENCLAW_CONFIG_SETTING_KEY = 'openclaw.config'
 
 export type OpenClawSymlinkState = 'missing' | 'managed' | 'unmanaged'
 
-type OpenClawConfigStorageV2Setting = {
-  configSecretRef?: string
-  updatedAt?: string
+function normalizeWindowsPathEntry(value: string): string {
+  return path
+    .normalize(value.trim())
+    .replace(/[\\/]+$/g, '')
+    .toLowerCase()
 }
 
-function queryWindowsUserPath(): string {
-  const regQuery = execFileSync('reg', ['query', 'HKCU\\Environment', '/v', 'Path'], { encoding: 'utf-8' })
-  return regQuery.match(/Path\s+REG_\w+\s+(.*)/)?.[1]?.trim() || ''
+export function hasWindowsUserPathEntry(currentPath: string, managedBinDir: string): boolean {
+  const target = normalizeWindowsPathEntry(managedBinDir)
+  return currentPath
+    .split(';')
+    .map((entry) => normalizeWindowsPathEntry(entry))
+    .some((entry) => entry === target)
 }
 
-function setWindowsUserPath(value: string): void {
-  execFileSync('reg', ['add', 'HKCU\\Environment', '/v', 'Path', '/t', 'REG_EXPAND_SZ', '/d', value, '/f'], {
-    stdio: 'ignore'
-  })
-}
-
-function refreshWindowsPathEnvironment(): void {
-  execFileSync('setx', ['OPENCLAW_PATH_REFRESH', ''], { stdio: 'ignore' })
-}
-
-function normalizeWindowsPathEntryForCompare(value: string): string {
-  const unquoted = value.trim().replace(/^"|"$/g, '')
-  if (!unquoted) return ''
-
-  const normalized = path.win32.normalize(unquoted)
-  const root = path.win32.parse(normalized).root
-  const withoutTrailingSeparator = normalized === root ? normalized : normalized.replace(/[\\/]+$/g, '')
-  return withoutTrailingSeparator.toLowerCase()
-}
-
-export function hasWindowsUserPathEntry(currentPath: string, entry: string): boolean {
-  const target = normalizeWindowsPathEntryForCompare(entry)
-  if (!target) return false
-
-  return currentPath.split(';').some((part) => normalizeWindowsPathEntryForCompare(part) === target)
-}
-
-export function removeWindowsUserPathEntry(currentPath: string, entry: string): { nextPath: string; changed: boolean } {
-  const target = normalizeWindowsPathEntryForCompare(entry)
-  if (!target) {
-    return { nextPath: currentPath, changed: false }
-  }
-
+export function removeWindowsUserPathEntry(
+  currentPath: string,
+  managedBinDir: string
+): { nextPath: string; changed: boolean } {
+  const target = normalizeWindowsPathEntry(managedBinDir)
+  const kept: string[] = []
   let changed = false
-  const nextParts = currentPath.split(';').filter((part) => {
-    const matches = normalizeWindowsPathEntryForCompare(part) === target
-    if (matches) changed = true
-    return !matches
-  })
 
-  return {
-    nextPath: nextParts.join(';'),
-    changed
+  for (const entry of currentPath.split(';')) {
+    const trimmed = entry.trim()
+    if (!trimmed) continue
+    if (normalizeWindowsPathEntry(trimmed) === target) {
+      changed = true
+      continue
+    }
+    kept.push(trimmed)
   }
+
+  return { nextPath: kept.join(';'), changed }
 }
 
 export function isManagedOpenClawSymlinkTarget(
   linkPath: string,
-  expectedBinaryPath: string,
-  rawTarget: string
+  managedBinaryPath: string,
+  symlinkTarget: string
 ): boolean {
-  const resolvedTarget = path.resolve(path.dirname(linkPath), rawTarget)
-  return path.resolve(resolvedTarget) === path.resolve(expectedBinaryPath)
+  const resolvedTarget = path.resolve(path.dirname(linkPath), symlinkTarget)
+  return path.resolve(resolvedTarget) === path.resolve(managedBinaryPath)
 }
 
-export function getOpenClawSymlinkState(linkPath: string, expectedBinaryPath: string): OpenClawSymlinkState {
+export function getOpenClawSymlinkState(linkPath: string, managedBinaryPath: string): OpenClawSymlinkState {
   let stat: fs.Stats
   try {
     stat = fs.lstatSync(linkPath)
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return 'missing'
-    }
-    throw error
-  }
-
-  if (!stat.isSymbolicLink()) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 'missing'
     return 'unmanaged'
   }
 
+  if (!stat.isSymbolicLink()) return 'unmanaged'
+
   try {
-    return isManagedOpenClawSymlinkTarget(linkPath, expectedBinaryPath, fs.readlinkSync(linkPath))
-      ? 'managed'
-      : 'unmanaged'
+    const target = fs.readlinkSync(linkPath)
+    return isManagedOpenClawSymlinkTarget(linkPath, managedBinaryPath, target) ? 'managed' : 'unmanaged'
   } catch {
     return 'unmanaged'
   }
 }
 
-function removeManagedOpenClawSymlink(linkPath: string, expectedBinaryPath: string): boolean {
-  if (getOpenClawSymlinkState(linkPath, expectedBinaryPath) !== 'managed') {
-    return false
+export function parseWindowsNetstatListeningPids(output: string, port: number): string[] {
+  const pids = new Set<string>()
+  const suffix = `:${port}`
+
+  for (const line of output.split(/\r?\n/)) {
+    const columns = line.trim().split(/\s+/)
+    if (columns.length < 5) continue
+    const [proto, localAddress, , state, pid] = columns
+    if (proto !== 'TCP') continue
+    if (state !== 'LISTENING') continue
+    if (!localAddress.endsWith(suffix)) continue
+    if (/^\d+$/.test(pid)) pids.add(pid)
   }
 
-  fs.unlinkSync(linkPath)
-  return true
-}
-
-function getWindowsListeningPids(port: number): string[] {
-  const output = execFileSync('netstat', ['-ano'], { encoding: 'utf-8' })
-  return parseWindowsNetstatListeningPids(output, port)
-}
-
-function killWindowsProcess(pid: string): void {
-  execFileSync('taskkill', ['/PID', pid, '/F'], { stdio: 'ignore' })
+  return [...pids]
 }
 
 export type GatewayStatus = 'stopped' | 'starting' | 'running' | 'error'
@@ -210,13 +157,6 @@ export type GatewayStatus = 'stopped' | 'starting' | 'running' | 'error'
 export interface HealthInfo {
   status: 'healthy' | 'unhealthy'
   gatewayPort: number
-}
-
-export interface ChannelInfo {
-  id: string
-  name: string
-  type: string
-  status: 'connected' | 'disconnected' | 'error'
 }
 
 export interface OpenClawConfig {
@@ -332,10 +272,8 @@ export class OpenClawService extends BaseService {
     this.ipcHandle(IpcChannel.OpenClaw_StartGateway, (_e, port?: number) => this.startGateway(port))
     this.ipcHandle(IpcChannel.OpenClaw_StopGateway, () => this.stopGateway())
     this.ipcHandle(IpcChannel.OpenClaw_GetStatus, () => this.getStatus())
-    this.ipcHandle(IpcChannel.OpenClaw_CheckHealth, () => this.checkHealth())
     this.ipcHandle(IpcChannel.OpenClaw_GetDashboardUrl, () => this.getDashboardUrl())
     this.ipcHandle(IpcChannel.OpenClaw_SyncConfig, (_e, uniqueModelId) => this.syncConfig(uniqueModelId))
-    this.ipcHandle(IpcChannel.OpenClaw_GetChannels, () => this.getChannelStatus())
     this.ipcHandle(IpcChannel.OpenClaw_CheckUpdate, () => this.checkUpdate())
     this.ipcHandle(IpcChannel.OpenClaw_PerformUpdate, () => this.performUpdate())
   }
@@ -387,29 +325,25 @@ export class OpenClawService extends BaseService {
     if (isWin) {
       const binDir = await getBinaryPath()
       try {
-        const currentPath = queryWindowsUserPath()
+        const regQuery = execSync('reg query "HKCU\\Environment" /v Path', { encoding: 'utf-8' })
+        const currentPath = regQuery.match(/Path\s+REG_\w+\s+(.*)/)?.[1]?.trim() || ''
         if (!hasWindowsUserPathEntry(currentPath, binDir)) {
           const newPath = currentPath ? `${currentPath};${binDir}` : binDir
-          setWindowsUserPath(newPath)
+          execSync(`reg add "HKCU\\Environment" /v Path /t REG_EXPAND_SZ /d "${newPath}" /f`)
           // Broadcast WM_SETTINGCHANGE so new shells pick up the change
-          refreshWindowsPathEnvironment()
+          execSync('setx OPENCLAW_PATH_REFRESH ""')
           logger.info(`Added ${binDir} to user PATH`)
         }
       } catch {
         // User PATH key may not exist yet
-        setWindowsUserPath(binDir)
+        execSync(`reg add "HKCU\\Environment" /v Path /t REG_EXPAND_SZ /d "${binDir}" /f`)
         logger.info(`Created user PATH with ${binDir}`)
       }
     } else {
       try {
-        const symlinkState = getOpenClawSymlinkState(SYMLINK_PATH, binaryPath)
-        if (symlinkState === 'unmanaged') {
-          logger.warn(`Skipped creating symlink because ${SYMLINK_PATH} is not managed by Cherry Studio Pi`)
-          return
-        }
-
-        if (removeManagedOpenClawSymlink(SYMLINK_PATH, binaryPath)) {
-          logger.info(`Removed existing managed symlink: ${SYMLINK_PATH}`)
+        // Remove existing symlink or file at target path
+        if (fs.existsSync(SYMLINK_PATH)) {
+          fs.unlinkSync(SYMLINK_PATH)
         }
         fs.symlinkSync(binaryPath, SYMLINK_PATH)
         logger.info(`Created symlink: ${SYMLINK_PATH} -> ${binaryPath}`)
@@ -426,15 +360,15 @@ export class OpenClawService extends BaseService {
     if (isWin) {
       const binDir = await getBinaryPath()
       try {
-        const currentPath = queryWindowsUserPath()
-        const { nextPath, changed } = removeWindowsUserPathEntry(currentPath, binDir)
-        if (!changed) {
-          logger.info(`Skipped removing ${binDir} from user PATH because it was not present`)
-          return
+        const regQuery = execSync('reg query "HKCU\\Environment" /v Path', { encoding: 'utf-8' })
+        const currentPath = regQuery.match(/Path\s+REG_\w+\s+(.*)/)?.[1]?.trim() || ''
+        const { nextPath: newPath, changed } = removeWindowsUserPathEntry(currentPath, binDir)
+        if (!changed) return
+        if (newPath) {
+          execSync(`reg add "HKCU\\Environment" /v Path /t REG_EXPAND_SZ /d "${newPath}" /f`)
+        } else {
+          execSync('reg delete "HKCU\\Environment" /v Path /f')
         }
-
-        setWindowsUserPath(nextPath)
-        refreshWindowsPathEnvironment()
         logger.info(`Removed ${binDir} from user PATH`)
       } catch {
         logger.debug('No user PATH to clean up')
@@ -442,13 +376,8 @@ export class OpenClawService extends BaseService {
     } else {
       try {
         const binaryPath = await getBinaryPath('openclaw')
-        const symlinkState = getOpenClawSymlinkState(SYMLINK_PATH, binaryPath)
-        if (symlinkState === 'unmanaged') {
-          logger.warn(`Skipped removing unmanaged OpenClaw path: ${SYMLINK_PATH}`)
-          return
-        }
-
-        if (removeManagedOpenClawSymlink(SYMLINK_PATH, binaryPath)) {
+        if (getOpenClawSymlinkState(SYMLINK_PATH, binaryPath) === 'managed') {
+          fs.unlinkSync(SYMLINK_PATH)
           logger.info(`Removed symlink: ${SYMLINK_PATH}`)
         }
       } catch (err) {
@@ -458,8 +387,7 @@ export class OpenClawService extends BaseService {
   }
 
   /**
-   * Install OpenClaw by downloading the binary from releases.
-   * Uses gitcode.com mirror for China users, GitHub releases for others.
+   * Install OpenClaw via BinaryManager (mise npm:openclaw backend).
    */
   public async install(): Promise<OperationResult> {
     if (this.installPromise) {
@@ -476,23 +404,11 @@ export class OpenClawService extends BaseService {
 
   private async installInternal(): Promise<OperationResult> {
     try {
-      this.sendInstallProgress('Checking download source...')
-      const useMirror = await isUserInChina()
-      const extraEnv: Record<string, string> = {}
-      if (useMirror) {
-        extraEnv.OPENCLAW_USE_MIRROR = '1'
-        logger.info('Using gitcode mirror for OpenClaw download')
-        this.sendInstallProgress('Using mirror source for download...')
-      }
-
-      this.sendInstallProgress('Downloading and installing OpenClaw...')
-      await runInstallScript('install-openclaw.js', extraEnv)
-
+      this.sendInstallProgress('Installing OpenClaw...')
+      await application.get('BinaryManager').installTool({ name: 'openclaw', tool: 'npm:openclaw' })
       await this.linkBinary()
-
       this.sendInstallProgress('OpenClaw installed successfully!')
-      logger.info('OpenClaw binary installed via install script')
-
+      logger.info('OpenClaw installed via BinaryManager')
       return { success: true }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
@@ -503,7 +419,7 @@ export class OpenClawService extends BaseService {
   }
 
   /**
-   * Uninstall OpenClaw by removing the binary from ~/.cherrystudio/bin/.
+   * Uninstall OpenClaw via BinaryManager.
    */
   public async uninstall(): Promise<OperationResult> {
     // Stop the gateway before removing binary
@@ -512,33 +428,9 @@ export class OpenClawService extends BaseService {
     }
 
     try {
-      const binaryName = isWin ? 'openclaw.exe' : 'openclaw'
-      const binDir = await getBinaryPath()
-      const binaryPath = path.join(binDir, binaryName)
-
-      this.sendInstallProgress('Removing OpenClaw binary...')
-
+      this.sendInstallProgress('Removing OpenClaw...')
       await this.unlinkBinary()
-
-      if (fs.existsSync(binaryPath)) {
-        fs.unlinkSync(binaryPath)
-        logger.info(`Removed OpenClaw binary: ${binaryPath}`)
-      }
-
-      // Remove package.json (shipped with OpenClaw binary package)
-      const packageJsonPath = path.join(binDir, 'package.json')
-      if (fs.existsSync(packageJsonPath)) {
-        fs.unlinkSync(packageJsonPath)
-        logger.info(`Removed OpenClaw package.json: ${packageJsonPath}`)
-      }
-
-      // Also remove sidecar lib directory if present
-      const libDir = path.join(binDir, 'lib')
-      if (fs.existsSync(libDir)) {
-        fs.rmSync(libDir, { recursive: true, force: true })
-        logger.info('Removed sidecar lib directory')
-      }
-
+      await application.get('BinaryManager').removeTool('openclaw')
       this.sendInstallProgress('OpenClaw uninstalled successfully!')
       return { success: true }
     } catch (error) {
@@ -668,7 +560,7 @@ export class OpenClawService extends BaseService {
     let lastError = ''
 
     while (Date.now() - startTime < maxWaitMs) {
-      await sleep(pollIntervalMs)
+      await new Promise((r) => setTimeout(r, pollIntervalMs))
       pollCount++
 
       // Check if the process crashed early
@@ -730,18 +622,18 @@ export class OpenClawService extends BaseService {
     const currentPid = process.pid
     try {
       if (isWin) {
-        for (const pid of getWindowsListeningPids(this.gatewayPort)) {
+        const output = execSync(`netstat -ano | findstr ":${this.gatewayPort}"`, { encoding: 'utf-8' })
+        for (const pid of parseWindowsNetstatListeningPids(output, this.gatewayPort)) {
           if (Number(pid) === currentPid) continue
-
           try {
-            killWindowsProcess(pid)
+            execSync(`taskkill /PID ${pid} /F`, { stdio: 'ignore' })
             logger.info(`Killed process ${pid} on port ${this.gatewayPort}`)
           } catch {
             // ignore
           }
         }
       } else {
-        execFileSync('pkill', ['-9', 'openclaw'], { stdio: 'ignore' })
+        execSync('pkill -9 openclaw', { stdio: 'ignore' })
         logger.info('Killed all openclaw processes')
       }
     } catch {
@@ -762,7 +654,7 @@ export class OpenClawService extends BaseService {
       }
       if (i < maxRetries - 1) {
         logger.debug(`Gateway still running after stop, retrying check (${i + 1}/${maxRetries})...`)
-        await sleep(intervalMs)
+        await new Promise((r) => setTimeout(r, intervalMs))
       }
     }
     return true
@@ -779,14 +671,6 @@ export class OpenClawService extends BaseService {
 
       let stdout = ''
       let stderr = ''
-      let settled = false
-
-      const settle = (result: { code: number | null; stdout: string; stderr: string }) => {
-        if (settled) return
-        settled = true
-        clearTimeout(timeout)
-        resolve(result)
-      }
 
       proc.stdout?.on('data', (data) => {
         stdout += data.toString()
@@ -796,25 +680,21 @@ export class OpenClawService extends BaseService {
       })
 
       const timeout = setTimeout(() => {
-        logger.warn('Gateway command timed out', { args: summarizeTextForLog(args.join(' ')) })
+        logger.warn(`Gateway command timed out: ${args.join(' ')}`)
         proc.kill('SIGKILL')
-        settle({ code: null, stdout, stderr })
+        resolve({ code: null, stdout, stderr })
       }, timeoutMs)
-      timeout.unref?.()
 
       proc.on('exit', (code) => {
-        logger.info('Gateway command finished', {
-          args: summarizeTextForLog(args.join(' ')),
-          code,
-          stdout: summarizeTextForLog(stdout.trim()),
-          stderr: summarizeTextForLog(stderr.trim())
-        })
-        settle({ code, stdout, stderr })
+        clearTimeout(timeout)
+        logger.info(`Gateway command [${args.join(' ')}]:`, { code, stdout: stdout.trim(), stderr: stderr.trim() })
+        resolve({ code, stdout, stderr })
       })
 
       proc.on('error', (err) => {
-        logger.error('Gateway command error', err, { args: summarizeTextForLog(args.join(' ')) })
-        settle({ code: null, stdout, stderr: err.message })
+        clearTimeout(timeout)
+        logger.error(`Gateway command error [${args.join(' ')}]:`, err)
+        resolve({ code: null, stdout, stderr: err.message })
       })
     })
   }
@@ -936,8 +816,8 @@ export class OpenClawService extends BaseService {
    */
   private loadAuthTokenFromConfig(): void {
     try {
-      if (fs.existsSync(OPENCLAW_CONFIG_PATH)) {
-        const content = fs.readFileSync(OPENCLAW_CONFIG_PATH, 'utf-8')
+      if (fs.existsSync(openclawConfigPath())) {
+        const content = fs.readFileSync(openclawConfigPath(), 'utf-8')
         const config = JSON.parse(content) as OpenClawConfig
         const token = config.gateway?.auth?.token
         if (token) {
@@ -955,54 +835,6 @@ export class OpenClawService extends BaseService {
    */
   private generateAuthToken(): string {
     return crypto.randomBytes(24).toString('base64url')
-  }
-
-  private getStorageV2ConfigSecretRef(setting: unknown): string | null {
-    if (!setting || typeof setting !== 'object' || Array.isArray(setting)) {
-      return null
-    }
-
-    const secretRef = (setting as OpenClawConfigStorageV2Setting).configSecretRef
-    return typeof secretRef === 'string' && secretRef ? secretRef : null
-  }
-
-  private async readConfigSnapshotFromStorageV2(): Promise<OpenClawConfig | null> {
-    const setting = await storageV2SettingsRepository.get(STORAGE_V2_OPENCLAW_CONFIG_SETTING_KEY)
-    const secretRef = this.getStorageV2ConfigSecretRef(setting)
-    if (!secretRef) {
-      return null
-    }
-
-    const content = await storageV2SecretVaultService.getSecret(secretRef)
-    if (!content) {
-      return null
-    }
-
-    try {
-      const config = JSON.parse(content)
-      return config && typeof config === 'object' && !Array.isArray(config) ? (config as OpenClawConfig) : null
-    } catch (error) {
-      logger.warn('Failed to parse OpenClaw config snapshot from Storage v2', error as Error)
-      return null
-    }
-  }
-
-  private async saveConfigSnapshotToStorageV2(config: OpenClawConfig): Promise<void> {
-    const secretRef = await storageV2SecretVaultService.setSecret(
-      STORAGE_V2_OPENCLAW_SCOPE,
-      STORAGE_V2_OPENCLAW_OWNER,
-      STORAGE_V2_OPENCLAW_CONFIG_KIND,
-      JSON.stringify(config, null, 2)
-    )
-
-    await storageV2SettingsRepository.set(
-      STORAGE_V2_OPENCLAW_CONFIG_SETTING_KEY,
-      {
-        configSecretRef: secretRef,
-        updatedAt: new Date().toISOString()
-      } satisfies OpenClawConfigStorageV2Setting,
-      STORAGE_V2_OPENCLAW_SCOPE
-    )
   }
 
   /**
@@ -1143,31 +975,29 @@ export class OpenClawService extends BaseService {
   public async syncProviderConfig(provider: Provider, primaryModel: Model): Promise<OperationResult> {
     try {
       // Ensure config directory exists
-      if (!fs.existsSync(OPENCLAW_CONFIG_DIR)) {
-        fs.mkdirSync(OPENCLAW_CONFIG_DIR, { recursive: true })
+      if (!fs.existsSync(openclawConfigDir())) {
+        fs.mkdirSync(openclawConfigDir(), { recursive: true })
       }
 
       // Migrate legacy openclaw.cherry.json → openclaw.json
-      if (fs.existsSync(OPENCLAW_LEGACY_CONFIG_PATH)) {
-        if (fs.existsSync(OPENCLAW_CONFIG_PATH)) {
-          fs.renameSync(OPENCLAW_CONFIG_PATH, OPENCLAW_CONFIG_BAK_PATH)
+      if (fs.existsSync(openclawLegacyConfigPath())) {
+        if (fs.existsSync(openclawConfigPath())) {
+          fs.renameSync(openclawConfigPath(), openclawConfigBakPath())
           logger.info('Migrated openclaw.json → openclaw.json.bak')
         }
-        fs.renameSync(OPENCLAW_LEGACY_CONFIG_PATH, OPENCLAW_CONFIG_PATH)
+        fs.renameSync(openclawLegacyConfigPath(), openclawConfigPath())
         logger.info('Migrated openclaw.cherry.json → openclaw.json')
       }
 
       // Read existing config
       let config: OpenClawConfig = {}
-      if (fs.existsSync(OPENCLAW_CONFIG_PATH)) {
+      if (fs.existsSync(openclawConfigPath())) {
         try {
-          const content = fs.readFileSync(OPENCLAW_CONFIG_PATH, 'utf-8')
+          const content = fs.readFileSync(openclawConfigPath(), 'utf-8')
           config = JSON.parse(content)
         } catch {
           logger.warn('Failed to parse existing OpenClaw config, creating new one')
         }
-      } else {
-        config = (await this.readConfigSnapshotFromStorageV2()) ?? {}
       }
 
       // Build provider key
@@ -1232,7 +1062,7 @@ export class OpenClawService extends BaseService {
       config.gateway.mode = 'local'
       config.gateway.port = this.gatewayPort
       // Auto-generate auth token if not already set, and store it for API calls
-      const token = this.gatewayAuthToken || config.gateway.auth?.token || this.generateAuthToken()
+      const token = this.gatewayAuthToken || this.generateAuthToken()
       config.gateway.auth = { token }
       this.gatewayAuthToken = token
 
@@ -1246,14 +1076,8 @@ export class OpenClawService extends BaseService {
         primary: `${providerKey}/${primaryModel.id}`
       }
 
-      await this.saveConfigSnapshotToStorageV2(config)
-
       // Write config file
-      fs.writeFileSync(OPENCLAW_CONFIG_PATH, JSON.stringify(config, null, 2), {
-        encoding: 'utf-8',
-        mode: 0o600
-      })
-      fs.chmodSync(OPENCLAW_CONFIG_PATH, 0o600)
+      fs.writeFileSync(openclawConfigPath(), JSON.stringify(config, null, 2), 'utf-8')
 
       logger.info(`Synced provider ${provider.id} to OpenClaw config`)
       return { success: true }
@@ -1313,7 +1137,7 @@ export class OpenClawService extends BaseService {
   }
 
   /**
-   * Perform OpenClaw update by running `openclaw update`.
+   * Perform OpenClaw update through BinaryManager so mise remains the owner.
    */
   public async performUpdate(): Promise<OperationResult> {
     try {
@@ -1327,23 +1151,11 @@ export class OpenClawService extends BaseService {
         await this.stopGateway()
       }
 
-      this.sendInstallProgress('Running openclaw update...')
-      const shellEnv = await getShellEnv()
-      const { code, stdout, stderr } = await this.execOpenClawCommandWithResult(
-        openclawPath,
-        ['update'],
-        shellEnv,
-        60000
-      )
+      this.sendInstallProgress('Updating OpenClaw via BinaryManager...')
+      await application.get('BinaryManager').installTool({ name: 'openclaw', tool: 'npm:openclaw' })
+      void refreshShellEnv()
 
-      if (code !== 0) {
-        const errMsg = stderr.trim() || `Update failed with code ${code}`
-        logger.error('OpenClaw update failed:', { error: errMsg })
-        this.sendInstallProgress(errMsg, 'error')
-        return { success: false, message: errMsg }
-      }
-
-      logger.info('OpenClaw updated successfully', { output: summarizeTextForLog(stdout.trim()) })
+      logger.info('OpenClaw updated successfully')
       this.sendInstallProgress('OpenClaw updated successfully!')
       return { success: true }
     } catch (error) {
@@ -1352,25 +1164,6 @@ export class OpenClawService extends BaseService {
       this.sendInstallProgress(errorMessage, 'error')
       return { success: false, message: errorMessage }
     }
-  }
-
-  /**
-   * Get connected channel status
-   */
-  public async getChannelStatus(): Promise<ChannelInfo[]> {
-    try {
-      const response = await fetch(`http://127.0.0.1:${this.gatewayPort}/api/channels`, {
-        signal: AbortSignal.timeout(5000)
-      })
-      if (response.ok) {
-        const data = await response.json()
-        return data.channels || []
-      }
-    } catch (error) {
-      logger.debug('Failed to get channel status:', error as Error)
-    }
-
-    return []
   }
 
   /**
@@ -1487,7 +1280,7 @@ export class OpenClawService extends BaseService {
     }
 
     // Skip if URL already has version (e.g., /v1, /v2, /v3)
-    if (hasAPIVersion(url)) {
+    if (hasApiVersion(url)) {
       return url
     }
 

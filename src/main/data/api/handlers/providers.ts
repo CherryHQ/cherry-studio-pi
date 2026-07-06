@@ -9,7 +9,6 @@
 import { providerService } from '@data/services/ProviderService'
 import { loggerService } from '@logger'
 import { storageV2Service } from '@main/services/storageV2/StorageService'
-import type { HandlersFor } from '@shared/data/api/apiTypes'
 import { OrderBatchRequestSchema, OrderRequestSchema } from '@shared/data/api/schemas/_endpointHelpers'
 import {
   AddProviderApiKeySchema,
@@ -21,6 +20,7 @@ import {
   UpdateApiKeySchema,
   UpdateProviderSchema
 } from '@shared/data/api/schemas/providers'
+import type { HandlersFor } from '@shared/data/api/types'
 import type { ApiKeyEntry, AuthConfig } from '@shared/data/types/provider'
 
 const logger = loggerService.withContext('DataApi:ProviderHandlers')

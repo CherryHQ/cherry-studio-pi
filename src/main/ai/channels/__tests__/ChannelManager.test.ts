@@ -45,7 +45,7 @@ vi.mock('@main/services/MainWindowService', () => ({
 
 vi.mock('@data/services/AgentChannelService', () => ({
   agentChannelService: {
-    listChannels: vi.fn().mockResolvedValue([]),
+    listChannels: vi.fn().mockReturnValue([]),
     getChannel: vi.fn(),
     updateChannel: vi.fn(),
     addActiveChatId: vi.fn().mockResolvedValue(null)
@@ -124,13 +124,13 @@ describe('ChannelManager', () => {
     }) as any
 
   it('start() with no channels does not error', async () => {
-    vi.mocked(channelService.listChannels).mockResolvedValueOnce([])
+    vi.mocked(channelService.listChannels).mockReturnValueOnce([])
     await expect(channelManager.start()).resolves.not.toThrow()
     expect(createdAdapters).toHaveLength(0)
   })
 
   it('start() connects adapters for active channels', async () => {
-    vi.mocked(channelService.listChannels).mockResolvedValueOnce([makeChannelRow()])
+    vi.mocked(channelService.listChannels).mockReturnValueOnce([makeChannelRow()])
 
     await channelManager.start()
 
@@ -170,7 +170,7 @@ describe('ChannelManager', () => {
   })
 
   it('stop() disconnects all adapters', async () => {
-    vi.mocked(channelService.listChannels).mockResolvedValueOnce([
+    vi.mocked(channelService.listChannels).mockReturnValueOnce([
       makeChannelRow({ id: 'ch-1', config: { bot_token: 'tok' } }),
       makeChannelRow({ id: 'ch-2', config: { bot_token: 'tok2' } })
     ])
@@ -213,7 +213,7 @@ describe('ChannelManager', () => {
   })
 
   it('disconnectAgent disconnects all adapters for agent and clears session tracker', async () => {
-    vi.mocked(channelService.listChannels).mockResolvedValueOnce([
+    vi.mocked(channelService.listChannels).mockReturnValueOnce([
       makeChannelRow({ id: 'ch-1', config: { bot_token: 'tok1' } }),
       makeChannelRow({ id: 'ch-2', config: { bot_token: 'tok2' } })
     ])
@@ -230,7 +230,7 @@ describe('ChannelManager', () => {
   })
 
   it('disconnectAgent for unknown agent is a no-op', async () => {
-    vi.mocked(channelService.listChannels).mockResolvedValueOnce([makeChannelRow()])
+    vi.mocked(channelService.listChannels).mockReturnValueOnce([makeChannelRow()])
 
     await channelManager.start()
     expect(createdAdapters).toHaveLength(1)
@@ -241,7 +241,7 @@ describe('ChannelManager', () => {
   })
 
   it('disconnectChannel only disconnects the target channel without reconnecting', async () => {
-    vi.mocked(channelService.listChannels).mockResolvedValueOnce([
+    vi.mocked(channelService.listChannels).mockReturnValueOnce([
       makeChannelRow({ id: 'ch-1', config: { bot_token: 'tok1' } }),
       makeChannelRow({ id: 'ch-2', config: { bot_token: 'tok2' } })
     ])
@@ -258,7 +258,7 @@ describe('ChannelManager', () => {
   })
 
   it('syncChannel only disconnects the target channel, leaving others untouched', async () => {
-    vi.mocked(channelService.listChannels).mockResolvedValueOnce([
+    vi.mocked(channelService.listChannels).mockReturnValueOnce([
       makeChannelRow({ id: 'ch-1', config: { bot_token: 'tok1' } }),
       makeChannelRow({ id: 'ch-2', config: { bot_token: 'tok2' } })
     ])
@@ -267,7 +267,7 @@ describe('ChannelManager', () => {
     expect(createdAdapters).toHaveLength(2)
 
     // Toggle ch-1 inactive — syncChannel should only disconnect ch-1
-    vi.mocked(channelService.getChannel).mockResolvedValueOnce(makeChannelRow({ id: 'ch-1', isActive: false }))
+    vi.mocked(channelService.getChannel).mockReturnValueOnce(makeChannelRow({ id: 'ch-1', isActive: false }))
 
     await channelManager.syncChannel('ch-1')
 
@@ -279,7 +279,7 @@ describe('ChannelManager', () => {
   })
 
   it('syncChannel reconnects the channel when toggled active', async () => {
-    vi.mocked(channelService.listChannels).mockResolvedValueOnce([
+    vi.mocked(channelService.listChannels).mockReturnValueOnce([
       makeChannelRow({ id: 'ch-1', config: { bot_token: 'tok1' } }),
       makeChannelRow({ id: 'ch-2', config: { bot_token: 'tok2' } })
     ])
@@ -288,7 +288,7 @@ describe('ChannelManager', () => {
     expect(createdAdapters).toHaveLength(2)
 
     // Toggle ch-1 with updated config — syncChannel reconnects only ch-1
-    vi.mocked(channelService.getChannel).mockResolvedValueOnce(
+    vi.mocked(channelService.getChannel).mockReturnValueOnce(
       makeChannelRow({ id: 'ch-1', isActive: true, config: { bot_token: 'new-tok' } })
     )
 
@@ -364,7 +364,7 @@ describe('ChannelManager', () => {
   })
 
   it('inactive channels are skipped', async () => {
-    vi.mocked(channelService.listChannels).mockResolvedValueOnce([makeChannelRow({ isActive: false })])
+    vi.mocked(channelService.listChannels).mockReturnValueOnce([makeChannelRow({ isActive: false })])
 
     await channelManager.start()
     expect(createdAdapters).toHaveLength(0)

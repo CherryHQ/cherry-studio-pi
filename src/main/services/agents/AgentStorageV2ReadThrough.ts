@@ -2,10 +2,10 @@ import { agentService } from '@data/services/AgentService'
 import { agentSessionMessageService } from '@data/services/AgentSessionMessageService'
 import { agentSessionService } from '@data/services/AgentSessionService'
 import { agentTaskService } from '@data/services/AgentTaskService'
-import { DataApiError, ErrorCode } from '@shared/data/api'
-import type { ListOptions } from '@shared/data/api/apiTypes'
+import { DataApiError, ErrorCode } from '@shared/data/api/errors'
 import type { CreateAgentDto, UpdateAgentDto } from '@shared/data/api/schemas/agents'
 import type { AgentSessionMessageEntity } from '@shared/data/api/schemas/agentSessions'
+import type { ListOptions } from '@shared/data/api/types'
 import type {
   AgentPersistedMessage,
   CreateAgentRequest,

@@ -13,13 +13,13 @@
 
 import { knowledgeBaseService } from '@data/services/KnowledgeBaseService'
 import { knowledgeItemService } from '@data/services/KnowledgeItemService'
-import type { HandlersFor } from '@shared/data/api/apiTypes'
 import type { KnowledgeSchemas } from '@shared/data/api/schemas/knowledges'
 import {
   ListKnowledgeBasesQuerySchema,
   ListKnowledgeItemsQuerySchema,
   UpdateKnowledgeBaseSchema
 } from '@shared/data/api/schemas/knowledges'
+import type { HandlersFor } from '@shared/data/api/types'
 
 export const knowledgeHandlers: HandlersFor<KnowledgeSchemas> = {
   '/knowledge-bases': {
@@ -39,6 +39,7 @@ export const knowledgeHandlers: HandlersFor<KnowledgeSchemas> = {
     },
     DELETE: async ({ params }) => {
       await knowledgeBaseService.delete(params.id)
+      return undefined
     }
   },
 

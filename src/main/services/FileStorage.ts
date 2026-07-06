@@ -1,33 +1,23 @@
 import { application } from '@application'
 import { loggerService } from '@logger'
+import { isWin } from '@main/core/platform'
+import { t } from '@main/i18n'
 import {
   checkName,
-  getFilesDir,
   getFileType as getFileTypeByExt,
   getName,
-  getNotesDir,
-  readTextFileWithAutoEncoding,
-  scanDir
-} from '@main/utils/file'
-import { createAtomicWriteStream } from '@main/utils/file/fs'
-import { isPathInside, isPathInsideOrEqual } from '@main/utils/file/path'
-import { t } from '@main/utils/language'
-import { summarizeTextForLog, summarizeUrlForLog } from '@main/utils/logging'
-import { sanitizeRemoteUrl } from '@main/utils/remoteUrlSafety'
-import { getRipgrepBinaryPath, runRipgrep } from '@main/utils/ripgrep'
-import type { FileMetadata } from '@shared/data/types/file/legacyFileMetadata'
-import type { FilePath, FileType } from '@shared/types/file'
+  readTextFileWithAutoEncoding
+} from '@main/utils/legacyFile'
+import type { FileMetadata } from '@shared/data/types/legacyFile'
+import type { FileType } from '@shared/types/file'
 import { FILE_TYPE } from '@shared/types/file'
-import type { NotesTreeNode } from '@shared/types/note'
 import { KB, MB } from '@shared/utils/constants'
 import { parseDataUrl } from '@shared/utils/dataUrl'
-import { documentExts, imageExts, sanitizeFilename } from '@shared/utils/file'
+import { documentExts, imageExts } from '@shared/utils/file'
 import chardet from 'chardet'
-import type { FSWatcher } from 'chokidar'
-import chokidar from 'chokidar'
 import * as crypto from 'crypto'
 import type { OpenDialogOptions, OpenDialogReturnValue, SaveDialogOptions, SaveDialogReturnValue } from 'electron'
-import { BrowserWindow, dialog, net, shell } from 'electron'
+import { dialog, net, shell } from 'electron'
 import * as fs from 'fs'
 import { writeFileSync } from 'fs'
 import { readFile } from 'fs/promises'
@@ -38,214 +28,7 @@ import { PDFDocument } from 'pdf-lib'
 import { v4 as uuidv4 } from 'uuid'
 import WordExtractor from 'word-extractor'
 
-import { openPathInShell, openPathInShellAndLog } from '../utils/openPath'
-import {
-  CUSTOM_MIN_APPS_FILE_NAME,
-  hydrateCustomMiniAppsFileFromStorageV2,
-  mirrorCustomMiniAppsContentToStorageV2,
-  writeLegacyCustomMiniAppsFile
-} from './minapps/CustomMiniAppsStorageV2'
-import { storageV2FileRepository } from './storageV2/StorageV2Repositories'
-
 const logger = loggerService.withContext('FileStorage')
-const REMOTE_FILE_DOWNLOAD_MAX_BYTES = 100 * MB
-const REMOTE_FILE_DOWNLOAD_TIMEOUT_MS = 120_000
-
-function decodeBase64Payload(payload: string, context: string): Buffer {
-  const normalized = payload.trim()
-  const match = /^([A-Za-z0-9+/]+)(={0,2})$/.exec(normalized)
-
-  if (!match) {
-    throw new Error(`${context}: payload is not valid base64`)
-  }
-
-  const [, unpaddedPayload, padding] = match
-
-  if ((padding && normalized.length % 4 !== 0) || (!padding && unpaddedPayload.length % 4 === 1)) {
-    throw new Error(`${context}: payload has invalid base64 padding`)
-  }
-
-  const paddedPayload = unpaddedPayload.padEnd(Math.ceil(unpaddedPayload.length / 4) * 4, '=')
-  const buffer = Buffer.from(paddedPayload, 'base64')
-
-  if (buffer.toString('base64').replace(/=+$/, '') !== unpaddedPayload) {
-    throw new Error(`${context}: payload failed base64 round-trip validation`)
-  }
-
-  return buffer
-}
-
-function decodeBase64ImageInput(value: string, context: string): { buffer: Buffer; mediaType?: string } {
-  const parseResult = parseDataUrl(value)
-
-  if (parseResult && !parseResult.isBase64) {
-    throw new Error(`${context}: data URL is not base64 encoded`)
-  }
-
-  const payload = parseResult?.data ?? value
-  return {
-    buffer: decodeBase64Payload(payload, context),
-    mediaType: parseResult?.mediaType
-  }
-}
-
-function sanitizeTempFileName(fileName: string): string {
-  const rawName = String(fileName ?? '')
-    .split('\u0000')
-    .join('')
-    .trim()
-  const baseName = path.win32.basename(path.posix.basename(rawName))
-  if (!baseName || baseName === '.' || baseName === '..') {
-    return 'file'
-  }
-  const sanitized = sanitizeFilename(baseName, '_').trim()
-
-  if (!sanitized || sanitized === '.' || sanitized === '..') {
-    return 'file'
-  }
-
-  return sanitized.slice(0, 180)
-}
-
-function getCrossPlatformBaseName(filePath: string): string {
-  return path.win32.basename(path.posix.basename(filePath))
-}
-
-function resolveStorageFilePath(storageDir: string, fileName: string): string {
-  const rawName = String(fileName ?? '')
-  const baseName = getCrossPlatformBaseName(rawName)
-
-  if (!baseName || baseName !== rawName || baseName === '.' || baseName === '..') {
-    throw new Error(`Unsafe stored file name: ${fileName}`)
-  }
-
-  const resolvedPath = path.resolve(storageDir, baseName)
-  const resolvedRoot = path.resolve(storageDir)
-  if (resolvedPath !== resolvedRoot && !resolvedPath.startsWith(resolvedRoot + path.sep)) {
-    throw new Error(`Unsafe stored file path: ${fileName}`)
-  }
-
-  return resolvedPath
-}
-
-function parseContentLength(value: string | null): number | undefined {
-  if (!value) {
-    return undefined
-  }
-
-  const parsed = Number.parseInt(value, 10)
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined
-}
-
-async function getConfiguredNotesRoot(): Promise<string> {
-  const configuredPath = await Promise.resolve()
-    .then(() => application.get('PreferenceService').get('feature.notes.path'))
-    .catch(() => '')
-
-  return path.resolve(
-    typeof configuredPath === 'string' && configuredPath.trim() ? configuredPath.trim() : getNotesDir()
-  )
-}
-
-async function assertExternalDeletionInsideNotesRoot(
-  targetPath: string,
-  expectedKind: 'file' | 'directory'
-): Promise<void> {
-  if (!targetPath || typeof targetPath !== 'string') {
-    throw new Error('External delete path is required')
-  }
-
-  const notesRoot = await getConfiguredNotesRoot()
-  const resolvedTarget = path.resolve(targetPath)
-
-  if (resolvedTarget === notesRoot || !isPathInside(resolvedTarget, notesRoot)) {
-    throw new Error('External delete path must be inside the configured notes directory')
-  }
-
-  const stats = await fs.promises.lstat(resolvedTarget).catch((error: NodeJS.ErrnoException) => {
-    if (error.code === 'ENOENT') return null
-    throw error
-  })
-  if (!stats) return
-
-  if (expectedKind === 'file' && stats.isDirectory()) {
-    throw new Error('External file delete path points to a directory')
-  }
-
-  if (expectedKind === 'directory' && !stats.isDirectory()) {
-    throw new Error('External directory delete path points to a file')
-  }
-}
-
-/**
- * Execute ripgrep with captured output
- */
-async function executeRipgrep(args: string[]): Promise<{ exitCode: number; output: string }> {
-  const result = await runRipgrep(['--no-config', '--ignore-case', ...args])
-
-  if (!result.ok) {
-    throw new Error(result.output || 'Ripgrep binary not available')
-  }
-
-  if (result.timedOut) {
-    throw new Error(`Ripgrep timed out: ${result.output || ''}`)
-  }
-
-  if (result.truncated) {
-    logger.warn('Ripgrep output truncated while listing files', { args: args.slice(0, 6) })
-  }
-
-  return {
-    exitCode: result.exitCode ?? 0,
-    output: result.output || result.stderr || result.stdout
-  }
-}
-
-interface FileWatcherConfig {
-  watchExtensions?: string[]
-  ignoredPatterns?: (string | RegExp)[]
-  debounceMs?: number
-  maxDepth?: number
-  usePolling?: boolean
-  retryOnError?: boolean
-  retryDelayMs?: number
-  stabilityThreshold?: number
-  eventChannel?: string
-}
-
-const DEFAULT_WATCHER_CONFIG: Required<FileWatcherConfig> = {
-  watchExtensions: ['.md', '.markdown', '.txt'],
-  ignoredPatterns: [/(^|[/\\])\../, '**/node_modules/**', '**/.git/**', '**/*.tmp', '**/*.temp', '**/.DS_Store'],
-  debounceMs: 1000,
-  maxDepth: 10,
-  usePolling: false,
-  retryOnError: true,
-  retryDelayMs: 5000,
-  stabilityThreshold: 500,
-  eventChannel: 'file-change'
-}
-
-interface DirectoryListOptions {
-  recursive?: boolean
-  maxDepth?: number
-  includeHidden?: boolean
-  includeFiles?: boolean
-  includeDirectories?: boolean
-  maxEntries?: number
-  searchPattern?: string
-  fuzzy?: boolean
-}
-
-const DEFAULT_DIRECTORY_LIST_OPTIONS: Required<DirectoryListOptions> = {
-  recursive: true,
-  maxDepth: 10,
-  includeHidden: false,
-  includeFiles: true,
-  includeDirectories: true,
-  maxEntries: 20,
-  searchPattern: '.',
-  fuzzy: true
-}
 
 function resolveHomeRelativeFilePath(filePath: string): string {
   if (!filePath.startsWith('~/') && !filePath.startsWith('~\\')) return filePath
@@ -253,56 +36,38 @@ function resolveHomeRelativeFilePath(filePath: string): string {
 }
 
 class FileStorage {
-  private watcher?: FSWatcher
-  private watcherSender?: Electron.WebContents
-  private currentWatchPath?: string
-  private debounceTimer?: NodeJS.Timeout
-  private watcherRetryTimer?: NodeJS.Timeout
-  private watcherConfig: Required<FileWatcherConfig> = DEFAULT_WATCHER_CONFIG
-  private isPaused = false
-  private ensuredDirectories = new Set<string>()
-
-  // TODO(v2): Lazy getters defer path lookup until application bootstrap
-  // initializes the path registry. Do not convert these back to field
-  // initializers while FileStorage is still exported as a top-level singleton.
+  // TODO(v2): Lazy getter is a workaround, not a fix.
+  //
+  // The real problem is that `FileStorage` is exported as a top-level
+  // singleton at the bottom of this file
+  // (`export const fileStorage = new FileStorage()`). That singleton is
+  // instantiated during the static import graph of `src/main/main.ts`
+  // (via both `ipc.ts` and the `ApiGatewayService → ApiGateway → routes
+  // → KnowledgeService` chain), BEFORE `application.bootstrap()` runs
+  // and builds the path registry. The previous shape used field
+  // initializers (`private storageDir = application.getPath(...)`),
+  // which threw "PATHS not initialized" at module-load time.
+  //
+  // Lazy getters defer the path lookup until first *access*, by which
+  // point bootstrap has finished — but the class itself is still being
+  // constructed too early. We've merely moved the path lookup out of
+  // construction; we have NOT solved the architectural issue.
+  //
+  // The proper v2 fix is to migrate `FileStorage` into the lifecycle
+  // system: extend `BaseService`, add `@Injectable`, register in
+  // `serviceRegistry.ts`, and have callers resolve it via
+  // `application.get('FileStorage')` instead of importing the singleton.
+  // Once that's done, the DI container will instantiate it inside
+  // `application.bootstrap()` after the path registry is built, and
+  // these getters can become plain field initializers (or move into
+  // `onInit`). Until then, keep them as getters — do NOT "simplify"
+  // them back to fields.
   private get storageDir(): string {
-    return this.ensureDirectory(application.getPath('feature.files.data'), 'storage')
-  }
-
-  private get notesDir(): string {
-    return this.ensureDirectory(application.getPath('feature.notes.data'), 'notes')
+    return application.getPath('feature.files.data')
   }
 
   private get tempDir(): string {
-    return this.ensureDirectory(application.getPath('app.temp'), 'temp')
-  }
-
-  private ensureDirectory(dirPath: string, label: string): string {
-    if (!this.ensuredDirectories.has(dirPath) || !fs.existsSync(dirPath)) {
-      try {
-        fs.mkdirSync(dirPath, { recursive: true })
-        this.ensuredDirectories.add(dirPath)
-      } catch (error) {
-        logger.error(`Failed to initialize ${label} directory:`, error as Error)
-        throw error
-      }
-    }
-
-    return dirPath
-  }
-
-  private initStorageDir = (): void => {
-    try {
-      if (!fs.existsSync(this.storageDir)) {
-        fs.mkdirSync(this.storageDir, { recursive: true })
-      }
-      if (!fs.existsSync(this.notesDir)) {
-        fs.mkdirSync(this.notesDir, { recursive: true })
-      }
-    } catch (error) {
-      logger.error('Failed to initialize storage directories:', error as Error)
-      throw error
-    }
+    return application.getPath('app.temp')
   }
 
   // @TraceProperty({ spanName: 'getFileHash', tag: 'FileStorage' })
@@ -318,21 +83,19 @@ class FileStorage {
 
   private findDuplicateFile = async (filePath: string): Promise<FileMetadata | null> => {
     const stats = fs.statSync(filePath)
-    logger.debug('Checking duplicate file', { size: stats.size, filePath: summarizeTextForLog(filePath) })
+    logger.debug(`stats: ${stats}, filePath: ${filePath}`)
     const fileSize = stats.size
-    let originalHashPromise: Promise<string> | undefined
 
     const files = await fs.promises.readdir(this.storageDir)
     for (const file of files) {
       const storedFilePath = path.join(this.storageDir, file)
       const storedStats = fs.statSync(storedFilePath)
-      if (!storedStats.isFile()) {
-        continue
-      }
 
       if (storedStats.size === fileSize) {
-        originalHashPromise ??= this.getFileHash(filePath)
-        const [originalHash, storedHash] = await Promise.all([originalHashPromise, this.getFileHash(storedFilePath)])
+        const [originalHash, storedHash] = await Promise.all([
+          this.getFileHash(filePath),
+          this.getFileHash(storedFilePath)
+        ])
 
         if (originalHash === storedHash) {
           const ext = path.extname(file)
@@ -342,7 +105,7 @@ class FileStorage {
           return {
             id,
             origin_name: file,
-            name: file,
+            name: file + ext,
             path: storedFilePath,
             created_at: storedStats.birthtime.toISOString(),
             size: storedStats.size,
@@ -426,23 +189,11 @@ class FileStorage {
     }
   }
 
-  private async importStorageV2FileBlob(file: FileMetadata, sourcePath: string = file.path): Promise<void> {
-    const result = await storageV2FileRepository.importFile({
-      ...file,
-      storageV2SourcePath: sourcePath
-    })
-
-    if (!result.imported) {
-      throw new Error(result.skippedReason ?? `Failed to import file ${file.id} into Storage v2`)
-    }
-  }
-
   public uploadFile = async (_: Electron.IpcMainInvokeEvent, file: FileMetadata): Promise<FileMetadata> => {
     const filePath = file.path
     const duplicateFile = await this.findDuplicateFile(filePath)
 
     if (duplicateFile) {
-      await this.importStorageV2FileBlob(duplicateFile)
       return duplicateFile
     }
 
@@ -450,51 +201,34 @@ class FileStorage {
     const origin_name = path.basename(file.path)
     const ext = path.extname(origin_name).toLowerCase()
     const destPath = path.join(this.storageDir, uuid + ext)
-    const stagingDir = path.join(this.tempDir, 'file-uploads')
-    const stagingPath = path.join(stagingDir, uuid + ext)
 
-    logger.info('[FileStorage] Uploading file', { filePath: summarizeTextForLog(filePath) })
+    logger.info(`[FileStorage] Uploading file: ${filePath}`)
 
-    await fs.promises.mkdir(stagingDir, { recursive: true })
-
-    try {
-      // 根据文件类型选择处理方式
-      if (imageExts.includes(ext)) {
-        await this.compressImage(filePath, stagingPath)
-      } else {
-        await fs.promises.copyFile(filePath, stagingPath)
-      }
-
-      const stats = await fs.promises.stat(stagingPath)
-      const fileType = await this.getFileType(stagingPath)
-
-      const fileMetadata: FileMetadata = {
-        id: uuid,
-        origin_name,
-        name: uuid + ext,
-        path: destPath,
-        created_at: stats.birthtime.toISOString(),
-        size: stats.size,
-        ext: ext,
-        type: fileType,
-        count: 1
-      }
-
-      await this.importStorageV2FileBlob(fileMetadata, stagingPath)
-      await fs.promises.copyFile(stagingPath, destPath)
-
-      logger.debug('File uploaded', {
-        id: fileMetadata.id,
-        ext: fileMetadata.ext,
-        type: fileMetadata.type,
-        size: fileMetadata.size,
-        hasPath: Boolean(fileMetadata.path)
-      })
-
-      return fileMetadata
-    } finally {
-      await fs.promises.rm(stagingPath, { force: true })
+    // 根据文件类型选择处理方式
+    if (imageExts.includes(ext)) {
+      await this.compressImage(filePath, destPath)
+    } else {
+      await fs.promises.copyFile(filePath, destPath)
     }
+
+    const stats = await fs.promises.stat(destPath)
+    const fileType = await this.getFileType(destPath)
+
+    const fileMetadata: FileMetadata = {
+      id: uuid,
+      origin_name,
+      name: uuid + ext,
+      path: destPath,
+      created_at: stats.birthtime.toISOString(),
+      size: stats.size,
+      ext: ext,
+      type: fileType,
+      count: 1
+    }
+
+    logger.debug(`File uploaded: ${fileMetadata}`)
+
+    return fileMetadata
   }
 
   public getFile = async (_: Electron.IpcMainInvokeEvent, filePath: string): Promise<FileMetadata | null> => {
@@ -520,30 +254,27 @@ class FileStorage {
 
   // @TraceProperty({ spanName: 'deleteFile', tag: 'FileStorage' })
   public deleteFile = async (_: Electron.IpcMainInvokeEvent, id: string): Promise<void> => {
-    const filePath = resolveStorageFilePath(this.storageDir, id)
-    if (!fs.existsSync(filePath)) {
+    if (!fs.existsSync(path.join(this.storageDir, id))) {
       return
     }
-    await fs.promises.unlink(filePath)
+    await fs.promises.unlink(path.join(this.storageDir, id))
   }
 
   public deleteDir = async (_: Electron.IpcMainInvokeEvent, id: string): Promise<void> => {
-    const filePath = resolveStorageFilePath(this.storageDir, id)
-    if (!fs.existsSync(filePath)) {
+    if (!fs.existsSync(path.join(this.storageDir, id))) {
       return
     }
-    await fs.promises.rm(filePath, { recursive: true })
+    await fs.promises.rm(path.join(this.storageDir, id), { recursive: true })
   }
 
   public deleteExternalFile = async (_: Electron.IpcMainInvokeEvent, filePath: string): Promise<void> => {
     try {
-      await assertExternalDeletionInsideNotesRoot(filePath, 'file')
       if (!fs.existsSync(filePath)) {
         return
       }
 
-      await fs.promises.rm(filePath, { force: true })
-      logger.debug('External file deleted successfully', { filePath: summarizeTextForLog(filePath) })
+      await shell.trashItem(filePath)
+      logger.debug(`External file moved to trash successfully: ${filePath}`)
     } catch (error) {
       logger.error('Failed to delete external file:', error as Error)
       throw error
@@ -552,13 +283,12 @@ class FileStorage {
 
   public deleteExternalDir = async (_: Electron.IpcMainInvokeEvent, dirPath: string): Promise<void> => {
     try {
-      await assertExternalDeletionInsideNotesRoot(dirPath, 'directory')
       if (!fs.existsSync(dirPath)) {
         return
       }
 
-      await fs.promises.rm(dirPath, { recursive: true, force: true })
-      logger.debug('External directory deleted successfully', { dirPath: summarizeTextForLog(dirPath) })
+      await shell.trashItem(dirPath)
+      logger.debug(`External directory moved to trash successfully: ${dirPath}`)
     } catch (error) {
       logger.error('Failed to delete external directory:', error as Error)
       throw error
@@ -579,10 +309,7 @@ class FileStorage {
 
       // 移动文件
       await fs.promises.rename(filePath, newPath)
-      logger.debug('File moved successfully', {
-        filePath: summarizeTextForLog(filePath),
-        newPath: summarizeTextForLog(newPath)
-      })
+      logger.debug(`File moved successfully: ${filePath} to ${newPath}`)
     } catch (error) {
       logger.error('Move file failed:', error as Error)
       throw error
@@ -603,10 +330,7 @@ class FileStorage {
 
       // 移动目录
       await fs.promises.rename(dirPath, newDirPath)
-      logger.debug('Directory moved successfully', {
-        dirPath: summarizeTextForLog(dirPath),
-        newDirPath: summarizeTextForLog(newDirPath)
-      })
+      logger.debug(`Directory moved successfully: ${dirPath} to ${newDirPath}`)
     } catch (error) {
       logger.error('Move directory failed:', error as Error)
       throw error
@@ -629,10 +353,7 @@ class FileStorage {
 
       // 重命名文件
       await fs.promises.rename(filePath, newFilePath)
-      logger.debug('File renamed successfully', {
-        filePath: summarizeTextForLog(filePath),
-        newFilePath: summarizeTextForLog(newFilePath)
-      })
+      logger.debug(`File renamed successfully: ${filePath} to ${newFilePath}`)
     } catch (error) {
       logger.error('Rename file failed:', error as Error)
       throw error
@@ -741,44 +462,8 @@ class FileStorage {
     id: string,
     detectEncoding: boolean = false
   ): Promise<string> => {
-    const filePath = resolveStorageFilePath(this.storageDir, id)
-    if (id === CUSTOM_MIN_APPS_FILE_NAME) {
-      return this.readCustomMiniAppsFile(filePath)
-    }
+    const filePath = path.join(this.storageDir, id)
     return this.readFileCore(filePath, detectEncoding)
-  }
-
-  private async readCustomMiniAppsFile(filePath: string): Promise<string> {
-    if (!fs.existsSync(filePath)) {
-      const restored = await hydrateCustomMiniAppsFileFromStorageV2(filePath).catch((error) => {
-        logger.warn('Failed to hydrate custom mini apps from Storage v2', {
-          error: error instanceof Error ? error.message : String(error)
-        })
-        return null
-      })
-      if (restored !== null) return restored
-
-      const emptyContent = '[]'
-      await writeLegacyCustomMiniAppsFile(filePath, emptyContent).catch((error) => {
-        logger.warn('Failed to initialize custom mini apps legacy file', {
-          error: error instanceof Error ? error.message : String(error)
-        })
-      })
-      await mirrorCustomMiniAppsContentToStorageV2(emptyContent).catch((error) => {
-        logger.warn('Failed to initialize custom mini apps in Storage v2', {
-          error: error instanceof Error ? error.message : String(error)
-        })
-      })
-      return emptyContent
-    }
-
-    const content = await this.readFileCore(filePath)
-    await mirrorCustomMiniAppsContentToStorageV2(content).catch((error) => {
-      logger.warn('Failed to mirror legacy custom mini apps to Storage v2', {
-        error: error instanceof Error ? error.message : String(error)
-      })
-    })
-    return content
   }
 
   /**
@@ -814,15 +499,8 @@ class FileStorage {
   }
 
   public createTempFile = async (_: Electron.IpcMainInvokeEvent, fileName: string): Promise<string> => {
-    const safeName = sanitizeTempFileName(fileName)
-    const tempPath = path.resolve(this.tempDir, `temp_file_${uuidv4()}_${safeName}`)
-    const tempRoot = path.resolve(this.tempDir)
-
-    if (tempPath !== tempRoot && !tempPath.startsWith(tempRoot + path.sep)) {
-      throw new Error('Unsafe temporary file path')
-    }
-
-    return tempPath
+    // `fileName` is renderer-supplied; basename it so a value like `../../evil` can't escape tempDir.
+    return path.join(this.tempDir, `temp_file_${uuidv4()}_${path.basename(fileName)}`)
   }
 
   public writeFile = async (
@@ -882,8 +560,11 @@ class FileStorage {
         throw new Error('Base64 data is required')
       }
 
-      const { buffer, mediaType } = decodeBase64ImageInput(base64Data, 'saveBase64Image')
-      const ext = mediaType ? this.getExtensionFromMimeType(mediaType) : '.png'
+      const parseResult = parseDataUrl(base64Data)
+      const base64String = parseResult?.data ?? base64Data
+      const ext = parseResult?.mediaType ? this.getExtensionFromMimeType(parseResult.mediaType) : '.png'
+
+      const buffer = Buffer.from(base64String, 'base64')
       const uuid = uuidv4()
       const destPath = path.join(this.storageDir, uuid + ext)
 
@@ -907,7 +588,7 @@ class FileStorage {
         path: destPath,
         created_at: new Date().toISOString(),
         size: buffer.length,
-        ext: ext,
+        ext: ext.slice(1),
         type: getFileTypeByExt(ext),
         count: 1
       }
@@ -957,7 +638,7 @@ class FileStorage {
         path: destPath,
         created_at: new Date().toISOString(),
         size: stats.size,
-        ext: ext,
+        ext: ext.slice(1),
         type: getFileTypeByExt(ext),
         count: 1
       }
@@ -968,28 +649,29 @@ class FileStorage {
   }
 
   private async compressImageBuffer(imageBuffer: Buffer, destPath: string, ext: string): Promise<void> {
-    const tempPath = path.join(this.tempDir, `temp_${uuidv4()}${ext}`)
     try {
       // 创建临时文件
+      const tempPath = path.join(this.tempDir, `temp_${uuidv4()}${ext}`)
       await fs.promises.writeFile(tempPath, imageBuffer)
 
       // 使用现有的压缩方法
       await this.compressImage(tempPath, destPath)
+
+      // 清理临时文件
+      try {
+        await fs.promises.unlink(tempPath)
+      } catch (error) {
+        logger.warn('Failed to cleanup temp file:', error as Error)
+      }
     } catch (error) {
       logger.error('Image buffer compression failed, saving original:', error as Error)
       // 压缩失败时保存原始文件
       await fs.promises.writeFile(destPath, imageBuffer)
-    } finally {
-      try {
-        await fs.promises.rm(tempPath, { force: true })
-      } catch (error) {
-        logger.warn('Failed to cleanup temp file:', error as Error)
-      }
     }
   }
 
   public base64File = async (_: Electron.IpcMainInvokeEvent, id: string): Promise<{ data: string; mime: string }> => {
-    const filePath = resolveStorageFilePath(this.storageDir, id)
+    const filePath = path.join(this.storageDir, id)
     const buffer = await fs.promises.readFile(filePath)
     const base64 = buffer.toString('base64')
     const mime = `application/${path.extname(filePath).slice(1)}`
@@ -997,7 +679,7 @@ class FileStorage {
   }
 
   public pdfPageCount = async (_: Electron.IpcMainInvokeEvent, id: string): Promise<number> => {
-    const filePath = resolveStorageFilePath(this.storageDir, id)
+    const filePath = path.join(this.storageDir, id)
     const buffer = await fs.promises.readFile(filePath)
 
     const pdfDoc = await PDFDocument.load(buffer)
@@ -1005,7 +687,7 @@ class FileStorage {
   }
 
   public binaryImage = async (_: Electron.IpcMainInvokeEvent, id: string): Promise<{ data: Buffer; mime: string }> => {
-    const filePath = resolveStorageFilePath(this.storageDir, id)
+    const filePath = path.join(this.storageDir, id)
     const data = await fs.promises.readFile(filePath)
     const mime = `image/${path.extname(filePath).slice(1)}`
     return { data, mime }
@@ -1013,7 +695,7 @@ class FileStorage {
 
   public clear = async (): Promise<void> => {
     await fs.promises.rm(this.storageDir, { recursive: true })
-    this.initStorageDir()
+    await fs.promises.mkdir(this.storageDir, { recursive: true })
   }
 
   public clearTemp = async (): Promise<void> => {
@@ -1035,7 +717,7 @@ class FileStorage {
 
       if (!result.canceled && result.filePaths.length > 0) {
         const filePath = result.filePaths[0]
-        const fileName = getCrossPlatformBaseName(filePath)
+        const fileName = filePath.split('/').pop() || ''
         const stats = await fs.promises.stat(filePath)
 
         // If the file is less than 2GB, read the content
@@ -1051,12 +733,15 @@ class FileStorage {
       return null
     } catch (err) {
       logger.error('[IPC - Error] An error occurred opening the file:', err as Error)
-      throw err
+      return null
     }
   }
 
   public openPath = async (_: Electron.IpcMainInvokeEvent, path: string): Promise<void> => {
-    await openPathInShell(resolveHomeRelativeFilePath(path))
+    const resolved = await shell.openPath(resolveHomeRelativeFilePath(path))
+    if (resolved !== '') {
+      throw new Error(resolved)
+    }
   }
 
   /**
@@ -1065,507 +750,12 @@ class FileStorage {
    * @param file
    */
   public openFileWithRelativePath = async (_: Electron.IpcMainInvokeEvent, file: FileMetadata): Promise<void> => {
-    const filePath = resolveStorageFilePath(this.storageDir, file.name)
+    const filePath = path.join(this.storageDir, file.name)
     if (fs.existsSync(filePath)) {
-      openPathInShellAndLog(filePath, 'stored file')
+      shell.openPath(filePath).catch((err) => logger.error('[IPC - Error] Failed to open file:', err))
     } else {
-      logger.warn('[IPC - Warning] File does not exist', { filePath: summarizeTextForLog(filePath) })
+      logger.warn(`[IPC - Warning] File does not exist: ${filePath}`)
     }
-  }
-
-  public getDirectoryStructure = async (_: Electron.IpcMainInvokeEvent, dirPath: string): Promise<NotesTreeNode[]> => {
-    try {
-      return await scanDir(dirPath)
-    } catch (error) {
-      logger.error('Failed to get directory structure:', error as Error)
-      throw error
-    }
-  }
-
-  public listDirectory = async (
-    _: Electron.IpcMainInvokeEvent,
-    dirPath: string,
-    options?: DirectoryListOptions
-  ): Promise<string[]> => {
-    const mergedOptions: Required<DirectoryListOptions> = {
-      ...DEFAULT_DIRECTORY_LIST_OPTIONS,
-      ...options
-    }
-
-    const resolvedPath = path.resolve(dirPath)
-
-    const stat = await fs.promises.stat(resolvedPath).catch((error) => {
-      logger.error(`[IPC - Error] Failed to access directory: ${resolvedPath}`, error as Error)
-      throw error
-    })
-
-    if (!stat.isDirectory()) {
-      throw new Error(`Path is not a directory: ${resolvedPath}`)
-    }
-
-    // Use ripgrep for file listing with relevance-based sorting
-    if (!getRipgrepBinaryPath()) {
-      throw new Error('Ripgrep binary not available')
-    }
-
-    return await this.listDirectoryWithRipgrep(resolvedPath, mergedOptions)
-  }
-
-  /**
-   * Search directories by name pattern
-   */
-  private async searchDirectories(
-    resolvedPath: string,
-    options: Required<DirectoryListOptions>,
-    currentDepth: number = 0
-  ): Promise<string[]> {
-    if (!options.includeDirectories) return []
-    if (!options.recursive && currentDepth > 0) return []
-    if (options.maxDepth > 0 && currentDepth >= options.maxDepth) return []
-
-    const directories: string[] = []
-    const excludedDirs = new Set([
-      'node_modules',
-      '.git',
-      '.idea',
-      '.vscode',
-      'dist',
-      'build',
-      '.next',
-      '.nuxt',
-      'coverage',
-      '.cache'
-    ])
-
-    try {
-      const entries = await fs.promises.readdir(resolvedPath, { withFileTypes: true })
-      const searchPatternLower = options.searchPattern.toLowerCase()
-
-      for (const entry of entries) {
-        if (!entry.isDirectory()) continue
-
-        // Skip hidden directories unless explicitly included
-        if (!options.includeHidden && entry.name.startsWith('.')) continue
-
-        // Skip excluded directories
-        if (excludedDirs.has(entry.name)) continue
-
-        const fullPath = path.join(resolvedPath, entry.name).replace(/\\/g, '/')
-
-        // Check if directory name matches search pattern
-        if (options.searchPattern === '.' || entry.name.toLowerCase().includes(searchPatternLower)) {
-          directories.push(fullPath)
-        }
-
-        // Recursively search subdirectories
-        if (options.recursive && currentDepth < options.maxDepth) {
-          const subDirs = await this.searchDirectories(fullPath, options, currentDepth + 1)
-          directories.push(...subDirs)
-        }
-      }
-    } catch (error) {
-      logger.warn(`Failed to search directories in: ${resolvedPath}`, error as Error)
-    }
-
-    return directories
-  }
-
-  /**
-   * Search files by filename pattern
-   */
-  private async searchByFilename(resolvedPath: string, options: Required<DirectoryListOptions>): Promise<string[]> {
-    const files: string[] = []
-    const directories: string[] = []
-
-    // Search for files using ripgrep
-    if (options.includeFiles) {
-      const args: string[] = ['--files']
-
-      // Handle hidden files
-      if (!options.includeHidden) {
-        args.push('--glob', '!.*')
-      }
-
-      // Use --iglob to let ripgrep filter filenames (case-insensitive)
-      if (options.searchPattern && options.searchPattern !== '.') {
-        args.push('--iglob', `*${options.searchPattern}*`)
-      }
-
-      // Exclude common hidden directories and large directories
-      args.push('-g', '!**/node_modules/**')
-      args.push('-g', '!**/.git/**')
-      args.push('-g', '!**/.idea/**')
-      args.push('-g', '!**/.vscode/**')
-      args.push('-g', '!**/.DS_Store')
-      args.push('-g', '!**/dist/**')
-      args.push('-g', '!**/build/**')
-      args.push('-g', '!**/.next/**')
-      args.push('-g', '!**/.nuxt/**')
-      args.push('-g', '!**/coverage/**')
-      args.push('-g', '!**/.cache/**')
-
-      // Handle max depth
-      if (!options.recursive) {
-        args.push('--max-depth', '1')
-      } else if (options.maxDepth > 0) {
-        args.push('--max-depth', options.maxDepth.toString())
-      }
-
-      // Add the directory path
-      args.push(resolvedPath)
-
-      const { exitCode, output } = await executeRipgrep(args)
-
-      // Exit code 0 means files found, 1 means no files found (still success), 2+ means error
-      if (exitCode >= 2) {
-        throw new Error(`Ripgrep failed with exit code ${exitCode}: ${output}`)
-      }
-
-      // Parse ripgrep output (no need to filter by filename - ripgrep already did it)
-      files.push(
-        ...output
-          .split('\n')
-          .filter((line) => line.trim())
-          .map((line) => line.replace(/\\/g, '/'))
-      )
-    }
-
-    // Search for directories
-    if (options.includeDirectories) {
-      directories.push(...(await this.searchDirectories(resolvedPath, options)))
-    }
-
-    // Combine and sort: directories first (alphabetically), then files (alphabetically)
-    const sortedDirectories = directories.sort((a, b) => {
-      const aName = path.basename(a)
-      const bName = path.basename(b)
-      return aName.localeCompare(bName)
-    })
-
-    const sortedFiles = files.sort((a, b) => {
-      const aName = path.basename(a)
-      const bName = path.basename(b)
-      return aName.localeCompare(bName)
-    })
-
-    return [...sortedDirectories, ...sortedFiles].slice(0, options.maxEntries)
-  }
-
-  /**
-   * Fuzzy match: checks if all characters in query appear in text in order (case-insensitive)
-   * Example: "updater" matches "packages/update/src/node/updateController.ts"
-   */
-  private isFuzzyMatch(text: string, query: string): boolean {
-    let i = 0 // text index
-    let j = 0 // query index
-    const textLower = text.toLowerCase()
-    const queryLower = query.toLowerCase()
-
-    while (i < textLower.length && j < queryLower.length) {
-      if (textLower[i] === queryLower[j]) {
-        j++
-      }
-      i++
-    }
-    return j === queryLower.length
-  }
-
-  /**
-   * Scoring constants for fuzzy match relevance ranking
-   * Higher values = higher priority in search results
-   */
-  private static readonly SCORE_SEGMENT_MATCH = 60 // Per path segment that matches query
-  private static readonly SCORE_FILENAME_CONTAINS = 80 // Filename contains exact query substring
-  private static readonly SCORE_FILENAME_STARTS = 100 // Filename starts with query (highest priority)
-  private static readonly SCORE_CONSECUTIVE_CHAR = 15 // Per consecutive character match
-  private static readonly SCORE_WORD_BOUNDARY = 20 // Query matches start of a word
-  private static readonly PATH_LENGTH_PENALTY_FACTOR = 4 // Logarithmic penalty multiplier for longer paths
-
-  /**
-   * Calculate fuzzy match score (higher is better)
-   * Scoring factors:
-   * - Consecutive character matches (bonus)
-   * - Match at word boundaries (bonus)
-   * - Shorter path length (bonus)
-   * - Match in filename vs directory (bonus)
-   */
-  private getFuzzyMatchScore(filePath: string, query: string): number {
-    const pathLower = filePath.toLowerCase()
-    const queryLower = query.toLowerCase()
-    const fileName = getCrossPlatformBaseName(filePath)
-    const fileNameLower = fileName.toLowerCase()
-
-    let score = 0
-
-    // Count how many times query-related words appear in path segments
-    const pathSegments = pathLower.split(/[/\\]/)
-    let segmentMatchCount = 0
-    for (const segment of pathSegments) {
-      if (this.isFuzzyMatch(segment, queryLower)) {
-        segmentMatchCount++
-      }
-    }
-    score += segmentMatchCount * FileStorage.SCORE_SEGMENT_MATCH
-
-    // Bonus for filename starting with query (stronger than generic "contains")
-    if (fileNameLower.startsWith(queryLower)) {
-      score += FileStorage.SCORE_FILENAME_STARTS
-    } else if (fileNameLower.includes(queryLower)) {
-      // Bonus for exact substring match in filename (e.g., "updater" in "RCUpdater.js")
-      score += FileStorage.SCORE_FILENAME_CONTAINS
-    }
-
-    // Calculate consecutive match bonus
-    let i = 0
-    let j = 0
-    let consecutiveCount = 0
-    let maxConsecutive = 0
-
-    while (i < pathLower.length && j < queryLower.length) {
-      if (pathLower[i] === queryLower[j]) {
-        consecutiveCount++
-        maxConsecutive = Math.max(maxConsecutive, consecutiveCount)
-        j++
-      } else {
-        consecutiveCount = 0
-      }
-      i++
-    }
-    score += maxConsecutive * FileStorage.SCORE_CONSECUTIVE_CHAR
-
-    // Bonus for word boundary matches (e.g., "upd" matches start of "update")
-    // Only count once to avoid inflating scores for paths with repeated patterns
-    const boundaryPrefix = queryLower.slice(0, Math.min(3, queryLower.length))
-    const words = pathLower.split(/[/\\._-]/)
-    for (const word of words) {
-      if (word.startsWith(boundaryPrefix)) {
-        score += FileStorage.SCORE_WORD_BOUNDARY
-        break
-      }
-    }
-
-    // Penalty for longer paths (prefer shorter, more specific matches)
-    // Use logarithmic scaling to prevent long paths from dominating the score
-    // A 50-char path gets ~-16 penalty, 100-char gets ~-18, 200-char gets ~-21
-    score -= Math.log(filePath.length + 1) * FileStorage.PATH_LENGTH_PENALTY_FACTOR
-
-    return score
-  }
-
-  /**
-   * Convert query to glob pattern for ripgrep pre-filtering
-   * e.g., "updater" -> "*u*p*d*a*t*e*r*"
-   */
-  private queryToGlobPattern(query: string): string {
-    // Escape special glob characters (including ! for negation)
-    const escaped = query.replace(/[[\]{}()*+?.,\\^$|#!]/g, '\\$&')
-    // Convert to fuzzy glob: each char separated by *
-    return '*' + escaped.split('').join('*') + '*'
-  }
-
-  /**
-   * Greedy substring match: check if all characters in query can be matched
-   * by finding consecutive substrings in text (not necessarily single chars)
-   * e.g., "updatercontroller" matches "updateController" by:
-   *   "update" + "r" (from Controller) + "controller"
-   */
-  private isGreedySubstringMatch(text: string, query: string): boolean {
-    const textLower = text.toLowerCase()
-    const queryLower = query.toLowerCase()
-
-    let queryIndex = 0
-    let searchStart = 0
-
-    while (queryIndex < queryLower.length) {
-      // Try to find the longest matching substring starting at queryIndex
-      let bestMatchLen = 0
-      let bestMatchPos = -1
-
-      for (let len = queryLower.length - queryIndex; len >= 1; len--) {
-        const substr = queryLower.slice(queryIndex, queryIndex + len)
-        const foundAt = textLower.indexOf(substr, searchStart)
-        if (foundAt !== -1) {
-          bestMatchLen = len
-          bestMatchPos = foundAt
-          break // Found longest possible match
-        }
-      }
-
-      if (bestMatchLen === 0) {
-        // No substring match found, query cannot be matched
-        return false
-      }
-
-      queryIndex += bestMatchLen
-      searchStart = bestMatchPos + bestMatchLen
-    }
-
-    return true
-  }
-
-  /**
-   * Calculate greedy substring match score (higher is better)
-   * Rewards: fewer match fragments, shorter match span, matches in filename
-   */
-  private getGreedyMatchScore(filePath: string, query: string): number {
-    const textLower = filePath.toLowerCase()
-    const queryLower = query.toLowerCase()
-    const fileName = getCrossPlatformBaseName(filePath)
-    const fileNameLower = fileName.toLowerCase()
-
-    let queryIndex = 0
-    let searchStart = 0
-    let fragmentCount = 0
-    let firstMatchPos = -1
-    let lastMatchEnd = 0
-
-    while (queryIndex < queryLower.length) {
-      let bestMatchLen = 0
-      let bestMatchPos = -1
-
-      for (let len = queryLower.length - queryIndex; len >= 1; len--) {
-        const substr = queryLower.slice(queryIndex, queryIndex + len)
-        const foundAt = textLower.indexOf(substr, searchStart)
-        if (foundAt !== -1) {
-          bestMatchLen = len
-          bestMatchPos = foundAt
-          break
-        }
-      }
-
-      if (bestMatchLen === 0) {
-        return -Infinity // No match
-      }
-
-      fragmentCount++
-      if (firstMatchPos === -1) firstMatchPos = bestMatchPos
-      lastMatchEnd = bestMatchPos + bestMatchLen
-      queryIndex += bestMatchLen
-      searchStart = lastMatchEnd
-    }
-
-    const matchSpan = lastMatchEnd - firstMatchPos
-    let score = 0
-
-    // Fewer fragments = better (single continuous match is best)
-    // Max bonus when fragmentCount=1, decreases as fragments increase
-    score += Math.max(0, 100 - (fragmentCount - 1) * 30)
-
-    // Shorter span relative to query length = better (tighter match)
-    // Perfect match: span equals query length
-    const spanRatio = queryLower.length / matchSpan
-    score += spanRatio * 50
-
-    // Bonus for match in filename
-    if (this.isGreedySubstringMatch(fileNameLower, queryLower)) {
-      score += 80
-    }
-
-    // Penalty for longer paths
-    score -= Math.log(filePath.length + 1) * 4
-
-    return score
-  }
-
-  /**
-   * Build common ripgrep arguments for file listing
-   */
-  private buildRipgrepBaseArgs(options: Required<DirectoryListOptions>, resolvedPath: string): string[] {
-    const args: string[] = ['--files']
-
-    // Handle hidden files
-    if (!options.includeHidden) {
-      args.push('--glob', '!.*')
-    }
-
-    // Exclude common hidden directories and large directories
-    args.push('-g', '!**/node_modules/**')
-    args.push('-g', '!**/.git/**')
-    args.push('-g', '!**/.idea/**')
-    args.push('-g', '!**/.vscode/**')
-    args.push('-g', '!**/.DS_Store')
-    args.push('-g', '!**/dist/**')
-    args.push('-g', '!**/build/**')
-    args.push('-g', '!**/.next/**')
-    args.push('-g', '!**/.nuxt/**')
-    args.push('-g', '!**/coverage/**')
-    args.push('-g', '!**/.cache/**')
-
-    // Handle max depth
-    if (!options.recursive) {
-      args.push('--max-depth', '1')
-    } else if (options.maxDepth > 0) {
-      args.push('--max-depth', options.maxDepth.toString())
-    }
-
-    args.push(resolvedPath)
-
-    return args
-  }
-
-  private async listDirectoryWithRipgrep(
-    resolvedPath: string,
-    options: Required<DirectoryListOptions>
-  ): Promise<string[]> {
-    // Fuzzy search mode: use ripgrep glob for pre-filtering, then score in JS
-    if (options.fuzzy && options.searchPattern && options.searchPattern !== '.') {
-      const args = this.buildRipgrepBaseArgs(options, resolvedPath)
-
-      // Insert glob pattern before the path (last element)
-      const globPattern = this.queryToGlobPattern(options.searchPattern)
-      args.splice(args.length - 1, 0, '--iglob', globPattern)
-
-      const { exitCode, output } = await executeRipgrep(args)
-
-      if (exitCode >= 2) {
-        throw new Error(`Ripgrep failed with exit code ${exitCode}: ${output}`)
-      }
-
-      const filteredFiles = output
-        .split('\n')
-        .filter((line) => line.trim())
-        .map((line) => line.replace(/\\/g, '/'))
-
-      // If fuzzy glob found results, validate fuzzy match, sort and return
-      if (filteredFiles.length > 0) {
-        return filteredFiles
-          .filter((file) => this.isFuzzyMatch(file, options.searchPattern))
-          .map((file) => ({ file, score: this.getFuzzyMatchScore(file, options.searchPattern) }))
-          .sort((a, b) => b.score - a.score)
-          .slice(0, options.maxEntries)
-          .map((item) => item.file)
-      }
-
-      // Fallback: if no results, try greedy substring match on all files
-      logger.debug('Fuzzy glob returned no results, falling back to greedy substring match')
-      const fallbackArgs = this.buildRipgrepBaseArgs(options, resolvedPath)
-
-      const fallbackResult = await executeRipgrep(fallbackArgs)
-
-      if (fallbackResult.exitCode >= 2) {
-        return []
-      }
-
-      const allFiles = fallbackResult.output
-        .split('\n')
-        .filter((line) => line.trim())
-        .map((line) => line.replace(/\\/g, '/'))
-
-      const greedyMatched = allFiles.filter((file) => this.isGreedySubstringMatch(file, options.searchPattern))
-
-      return greedyMatched
-        .map((file) => ({ file, score: this.getGreedyMatchScore(file, options.searchPattern) }))
-        .sort((a, b) => b.score - a.score)
-        .slice(0, options.maxEntries)
-        .map((item) => item.file)
-    }
-
-    // Fallback: search by filename only (non-fuzzy mode)
-    logger.debug('Searching by filename pattern', { pattern: options.searchPattern, path: resolvedPath })
-    const filenameResults = await this.searchByFilename(resolvedPath, options)
-
-    logger.debug('Found matches by filename', { count: filenameResults.length })
-    return filenameResults.slice(0, options.maxEntries)
   }
 
   public validateNotesDirectory = async (_: Electron.IpcMainInvokeEvent, dirPath: string): Promise<boolean> => {
@@ -1589,14 +779,14 @@ class FileStorage {
       }
 
       // Get app paths to prevent selection of restricted directories
-      const appDataPath = path.resolve(process.env.APPDATA || path.join(require('os').homedir(), '.config'))
-      const filesDir = path.resolve(getFilesDir())
-      const currentNotesDir = path.resolve(getNotesDir())
+      const appDataPath = path.resolve(application.getPath('sys.appdata'))
+      const filesDir = path.resolve(application.getPath('feature.files.data'))
+      const currentNotesDir = path.resolve(application.getPath('feature.notes.data'))
 
       // Prevent selecting app data directories
       if (
-        isPathInsideOrEqual(normalizedPath, filesDir) ||
-        isPathInsideOrEqual(normalizedPath, appDataPath) ||
+        normalizedPath.startsWith(filesDir) ||
+        normalizedPath.startsWith(appDataPath) ||
         normalizedPath === currentNotesDir
       ) {
         logger.warn(`Invalid directory selection: ${normalizedPath} (app data directory)`)
@@ -1604,13 +794,12 @@ class FileStorage {
       }
 
       // Prevent selecting system root directories
-      const isSystemRoot =
-        process.platform === 'win32'
-          ? /^[a-zA-Z]:[\\/]?$/.test(normalizedPath)
-          : normalizedPath === '/' ||
-            normalizedPath === '/usr' ||
-            normalizedPath === '/etc' ||
-            normalizedPath === '/System'
+      const isSystemRoot = isWin
+        ? /^[a-zA-Z]:[\\/]?$/.test(normalizedPath)
+        : normalizedPath === '/' ||
+          normalizedPath === '/usr' ||
+          normalizedPath === '/etc' ||
+          normalizedPath === '/System'
 
       if (isSystemRoot) {
         logger.warn(`Invalid directory selection: ${normalizedPath} (system root directory)`)
@@ -1666,31 +855,23 @@ class FileStorage {
       })
 
       if (filePath) {
-        const { buffer } = decodeBase64ImageInput(data, 'saveImage')
-        fs.writeFileSync(filePath, buffer)
+        const parseResult = parseDataUrl(data)
+        fs.writeFileSync(filePath, parseResult?.data ?? data, 'base64')
         return true
       }
     } catch (error) {
       logger.error('[IPC - Error] An error occurred saving the image:', error as Error)
-      throw error
     }
     return false
   }
 
-  public selectFolder = async (
-    event: Electron.IpcMainInvokeEvent,
-    options: OpenDialogOptions = {}
-  ): Promise<string | null> => {
+  public selectFolder = async (_: Electron.IpcMainInvokeEvent, options: OpenDialogOptions): Promise<string | null> => {
     try {
-      const dialogOptions: OpenDialogOptions = {
+      const result: OpenDialogReturnValue = await dialog.showOpenDialog({
         title: t('dialog.select_folder'),
         properties: ['openDirectory'],
         ...options
-      }
-      const parentWindow = BrowserWindow.fromWebContents(event.sender)
-      const result: OpenDialogReturnValue = parentWindow
-        ? await dialog.showOpenDialog(parentWindow, dialogOptions)
-        : await dialog.showOpenDialog(dialogOptions)
+      })
 
       if (!result.canceled && result.filePaths.length > 0) {
         return result.filePaths[0]
@@ -1699,7 +880,7 @@ class FileStorage {
       return null
     } catch (err) {
       logger.error('[IPC - Error] An error occurred selecting the folder:', err as Error)
-      throw err
+      return null
     }
   }
 
@@ -1708,21 +889,10 @@ class FileStorage {
     url: string,
     isUseContentType?: boolean
   ): Promise<FileMetadata> => {
-    let destPath: string | undefined
     try {
-      const safeUrl = sanitizeRemoteUrl(url)
-      const response = await net.fetch(safeUrl, {
-        signal: AbortSignal.timeout(REMOTE_FILE_DOWNLOAD_TIMEOUT_MS)
-      })
+      const response = await net.fetch(url)
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const contentLength = parseContentLength(response.headers.get('Content-Length'))
-      if (contentLength !== undefined && contentLength > REMOTE_FILE_DOWNLOAD_MAX_BYTES) {
-        throw new Error(
-          `Remote file is too large (${contentLength} bytes, limit ${REMOTE_FILE_DOWNLOAD_MAX_BYTES} bytes)`
-        )
       }
 
       // 尝试从Content-Disposition获取文件名
@@ -1732,12 +902,12 @@ class FileStorage {
       if (contentDisposition) {
         const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i)
         if (filenameMatch) {
-          filename = sanitizeTempFileName(filenameMatch[1])
+          filename = filenameMatch[1]
         }
       }
 
       // 如果URL中有文件名，使用URL中的文件名
-      const urlFilename = sanitizeTempFileName(path.posix.basename(new URL(safeUrl).pathname))
+      const urlFilename = url.split('/').pop()?.split('?')[0]
       if (urlFilename && urlFilename.includes('.')) {
         filename = urlFilename
       }
@@ -1751,10 +921,11 @@ class FileStorage {
 
       const uuid = uuidv4()
       const ext = path.extname(filename)
-      destPath = path.join(this.storageDir, uuid + ext)
+      const destPath = path.join(this.storageDir, uuid + ext)
 
       // 将响应内容写入文件
-      const writtenBytes = await this.writeRemoteResponseToFile(response, destPath)
+      const buffer = Buffer.from(await response.arrayBuffer())
+      await fs.promises.writeFile(destPath, buffer)
 
       const stats = await fs.promises.stat(destPath)
       const fileType = await this.getFileType(destPath)
@@ -1765,68 +936,14 @@ class FileStorage {
         name: uuid + ext,
         path: destPath,
         created_at: stats.birthtime.toISOString(),
-        size: writtenBytes,
+        size: stats.size,
         ext: ext,
         type: fileType,
         count: 1
       }
     } catch (error) {
-      if (destPath) {
-        await fs.promises.rm(destPath, { force: true }).catch(() => undefined)
-      }
-      logger.error('Download file error:', error as Error, { url: summarizeUrlForLog(url) })
+      logger.error('Download file error:', error as Error)
       throw error
-    }
-  }
-
-  private writeRemoteResponseToFile = async (response: Response, destPath: string): Promise<number> => {
-    if (!response.body) {
-      throw new Error('Downloaded file response has no body')
-    }
-
-    const reader = response.body.getReader()
-    const writer = createAtomicWriteStream(destPath as FilePath)
-    let writtenBytes = 0
-    let writerFinished = false
-
-    try {
-      for (;;) {
-        const { value, done } = await reader.read()
-        if (done) {
-          break
-        }
-
-        writtenBytes += value.byteLength
-        if (writtenBytes > REMOTE_FILE_DOWNLOAD_MAX_BYTES) {
-          throw new Error(
-            `Remote file is too large (${writtenBytes} bytes, limit ${REMOTE_FILE_DOWNLOAD_MAX_BYTES} bytes)`
-          )
-        }
-
-        if (!writer.write(Buffer.from(value))) {
-          await new Promise<void>((resolve, reject) => {
-            writer.once('drain', resolve)
-            writer.once('error', reject)
-          })
-        }
-      }
-
-      await new Promise<void>((resolve, reject) => {
-        writer.once('error', reject)
-        writer.end(() => resolve())
-      })
-      writerFinished = true
-
-      return writtenBytes
-    } catch (error) {
-      await reader.cancel(error).catch(() => undefined)
-      await writer.abort().catch(() => undefined)
-      await fs.promises.rm(destPath, { force: true }).catch(() => undefined)
-      throw error
-    } finally {
-      if (!writerFinished) {
-        await writer.abort().catch(() => undefined)
-      }
     }
   }
 
@@ -1854,7 +971,7 @@ class FileStorage {
   // @TraceProperty({ spanName: 'copyFile', tag: 'FileStorage' })
   public copyFile = async (_: Electron.IpcMainInvokeEvent, id: string, destPath: string): Promise<void> => {
     try {
-      const sourcePath = resolveStorageFilePath(this.storageDir, id)
+      const sourcePath = path.join(this.storageDir, id)
 
       // 确保目标目录存在
       const destDir = path.dirname(destPath)
@@ -1873,8 +990,8 @@ class FileStorage {
 
   public writeFileWithId = async (_: Electron.IpcMainInvokeEvent, id: string, content: string): Promise<void> => {
     try {
-      const filePath = resolveStorageFilePath(this.storageDir, id)
-      logger.debug('Writing file', { filePath: summarizeTextForLog(filePath) })
+      const filePath = path.join(this.storageDir, id)
+      logger.debug(`Writing file: ${filePath}`)
 
       // 确保目录存在
       if (!fs.existsSync(this.storageDir)) {
@@ -1882,248 +999,16 @@ class FileStorage {
         fs.mkdirSync(this.storageDir, { recursive: true })
       }
 
-      if (id === CUSTOM_MIN_APPS_FILE_NAME) {
-        await writeLegacyCustomMiniAppsFile(filePath, content)
-        await mirrorCustomMiniAppsContentToStorageV2(content)
-      } else {
-        await fs.promises.writeFile(filePath, content, 'utf8')
-      }
-      logger.debug('File written successfully', { filePath: summarizeTextForLog(filePath) })
+      await fs.promises.writeFile(filePath, content, 'utf8')
+      logger.debug(`File written successfully: ${filePath}`)
     } catch (error) {
       logger.error('Failed to write file:', error as Error)
       throw error
     }
   }
 
-  public startFileWatcher = async (
-    event: Electron.IpcMainInvokeEvent,
-    dirPath: string,
-    config?: FileWatcherConfig
-  ): Promise<void> => {
-    try {
-      this.watcherConfig = { ...DEFAULT_WATCHER_CONFIG, ...config }
-
-      if (!dirPath?.trim()) {
-        throw new Error('Directory path is required')
-      }
-
-      const normalizedPath = path.resolve(dirPath.trim())
-
-      if (!fs.existsSync(normalizedPath)) {
-        throw new Error(`Directory does not exist: ${normalizedPath}`)
-      }
-
-      const stats = fs.statSync(normalizedPath)
-      if (!stats.isDirectory()) {
-        throw new Error(`Path is not a directory: ${normalizedPath}`)
-      }
-
-      if (this.currentWatchPath === normalizedPath && this.watcher) {
-        this.watcherSender = event.sender
-        logger.debug('Already watching directory, updated sender', { path: normalizedPath })
-        return
-      }
-
-      await this.stopFileWatcher()
-
-      logger.info('Starting file watcher', {
-        path: normalizedPath,
-        config: {
-          extensions: this.watcherConfig.watchExtensions,
-          debounceMs: this.watcherConfig.debounceMs,
-          maxDepth: this.watcherConfig.maxDepth
-        }
-      })
-
-      this.currentWatchPath = normalizedPath
-      this.watcherSender = event.sender
-
-      const watchOptions = {
-        ignored: this.watcherConfig.ignoredPatterns,
-        persistent: true,
-        ignoreInitial: true,
-        depth: this.watcherConfig.maxDepth,
-        usePolling: this.watcherConfig.usePolling,
-        awaitWriteFinish: {
-          stabilityThreshold: this.watcherConfig.stabilityThreshold,
-          pollInterval: 100
-        },
-        alwaysStat: false,
-        atomic: true
-      }
-
-      this.watcher = chokidar.watch(normalizedPath, watchOptions)
-
-      const handleChange = this.createChangeHandler()
-
-      this.watcher
-        .on('add', (filePath: string) => handleChange('add', filePath))
-        .on('unlink', (filePath: string) => handleChange('unlink', filePath))
-        .on('addDir', (dirPath: string) => handleChange('addDir', dirPath))
-        .on('unlinkDir', (dirPath: string) => handleChange('unlinkDir', dirPath))
-        .on('error', (error: unknown) => {
-          logger.error('File watcher error', { error: error as Error, path: normalizedPath })
-          if (this.watcherConfig.retryOnError) {
-            this.handleWatcherError(error as Error)
-          }
-        })
-        .on('ready', () => {
-          logger.debug('File watcher ready', { path: normalizedPath })
-        })
-
-      logger.info('File watcher started successfully')
-    } catch (error) {
-      logger.error('Failed to start file watcher', error as Error)
-      this.cleanup()
-      throw error
-    }
-  }
-
-  private createChangeHandler() {
-    return (eventType: string, filePath: string) => {
-      // Skip processing if watcher is paused
-      if (this.isPaused) {
-        logger.debug('File change ignored (watcher paused)', { eventType, filePath: summarizeTextForLog(filePath) })
-        return
-      }
-
-      if (!this.shouldWatchFile(filePath, eventType)) {
-        return
-      }
-
-      logger.debug('File change detected', {
-        eventType,
-        filePath: summarizeTextForLog(filePath),
-        watchPath: summarizeTextForLog(this.currentWatchPath)
-      })
-
-      // 对于目录操作，立即触发同步，不使用防抖
-      if (eventType === 'addDir' || eventType === 'unlinkDir') {
-        logger.debug('Directory operation detected, triggering immediate sync', {
-          eventType,
-          filePath: summarizeTextForLog(filePath)
-        })
-        this.notifyChange(eventType, filePath)
-        return
-      }
-
-      // 对于文件操作，使用防抖机制
-      if (this.debounceTimer) {
-        clearTimeout(this.debounceTimer)
-      }
-
-      this.debounceTimer = setTimeout(() => {
-        this.notifyChange(eventType, filePath)
-        this.debounceTimer = undefined
-      }, this.watcherConfig.debounceMs)
-      this.debounceTimer.unref?.()
-    }
-  }
-
-  private shouldWatchFile(filePath: string, eventType: string): boolean {
-    if (eventType.includes('Dir')) {
-      return true
-    }
-
-    const ext = path.extname(filePath).toLowerCase()
-    return this.watcherConfig.watchExtensions.includes(ext)
-  }
-
-  private notifyChange(eventType: string, filePath: string) {
-    try {
-      if (!this.watcherSender || this.watcherSender.isDestroyed()) {
-        logger.warn('Sender destroyed, stopping watcher')
-        void this.stopFileWatcher()
-        return
-      }
-
-      logger.debug('Sending file change event', {
-        eventType,
-        filePath,
-        channel: this.watcherConfig.eventChannel,
-        senderExists: !!this.watcherSender,
-        senderDestroyed: this.watcherSender.isDestroyed()
-      })
-      this.watcherSender.send(this.watcherConfig.eventChannel, {
-        eventType,
-        filePath,
-        watchPath: this.currentWatchPath
-      })
-      logger.debug('File change event sent successfully')
-    } catch (error) {
-      logger.error('Failed to send notification', error as Error)
-    }
-  }
-
-  private handleWatcherError(error: Error) {
-    const retryableErrors = ['EMFILE', 'ENFILE', 'ENOSPC']
-    const isRetryable = retryableErrors.some((code) => error.message.includes(code))
-
-    if (isRetryable && this.currentWatchPath && this.watcherSender && !this.watcherSender.isDestroyed()) {
-      if (this.watcherRetryTimer) {
-        logger.debug('File watcher restart already scheduled', { error: error.message })
-        return
-      }
-
-      const retryPath = this.currentWatchPath
-      const retryConfig = this.watcherConfig
-
-      logger.warn('Attempting restart due to recoverable error', { error: error.message })
-
-      this.watcherRetryTimer = setTimeout(async () => {
-        this.watcherRetryTimer = undefined
-        try {
-          if (this.currentWatchPath === retryPath && this.watcherSender && !this.watcherSender.isDestroyed()) {
-            const mockEvent = { sender: this.watcherSender } as Electron.IpcMainInvokeEvent
-            await this.startFileWatcher(mockEvent, retryPath, retryConfig)
-          }
-        } catch (retryError) {
-          logger.error('Restart failed', retryError as Error)
-        }
-      }, this.watcherConfig.retryDelayMs)
-      this.watcherRetryTimer.unref?.()
-    }
-  }
-
-  private cleanup() {
-    this.currentWatchPath = undefined
-    this.watcherSender = undefined
-    if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer)
-      this.debounceTimer = undefined
-    }
-    if (this.watcherRetryTimer) {
-      clearTimeout(this.watcherRetryTimer)
-      this.watcherRetryTimer = undefined
-    }
-  }
-
-  public stopFileWatcher = async (): Promise<void> => {
-    try {
-      if (this.watcher) {
-        logger.info('Stopping file watcher', { watchPath: summarizeTextForLog(this.currentWatchPath) })
-        await this.watcher.close()
-        this.watcher = undefined
-        logger.debug('File watcher stopped')
-      }
-      this.cleanup()
-    } catch (error) {
-      logger.error('Failed to stop file watcher', error as Error)
-      this.watcher = undefined
-      this.cleanup()
-    }
-  }
-
-  public getWatcherStatus(): { isActive: boolean; watchPath?: string; hasValidSender: boolean } {
-    return {
-      isActive: !!this.watcher,
-      watchPath: this.currentWatchPath,
-      hasValidSender: !!this.watcherSender && !this.watcherSender.isDestroyed()
-    }
-  }
-
   public getFilePathById(file: FileMetadata): string {
-    return resolveStorageFilePath(this.storageDir, file.id + file.ext)
+    return path.join(this.storageDir, file.id + file.ext)
   }
 
   public isTextFile = async (_: Electron.IpcMainInvokeEvent, filePath: string): Promise<boolean> => {
@@ -2193,12 +1078,10 @@ class FileStorage {
     fileCount: number
     folderCount: number
     skippedFiles: number
+    failedFiles: number
   }> => {
     try {
-      logger.info('Starting batch upload', {
-        fileCount: filePaths.length,
-        targetPath: summarizeTextForLog(targetPath)
-      })
+      logger.info('Starting batch upload', { fileCount: filePaths.length, targetPath })
 
       const basePath = path.resolve(targetPath)
       const MARKDOWN_EXTS = ['.md', '.markdown']
@@ -2212,12 +1095,13 @@ class FileStorage {
       const skippedFiles = filePaths.length - markdownFiles.length
 
       if (markdownFiles.length === 0) {
-        return { fileCount: 0, folderCount: 0, skippedFiles }
+        return { fileCount: 0, folderCount: 0, skippedFiles, failedFiles: 0 }
       }
 
       // Collect unique folders needed
       const foldersSet = new Set<string>()
       const fileOperations: Array<{ sourcePath: string; targetPath: string }> = []
+      let failedFiles = 0
 
       for (const filePath of markdownFiles) {
         try {
@@ -2256,9 +1140,8 @@ class FileStorage {
 
           fileOperations.push({ sourcePath: filePath, targetPath: finalPath })
         } catch (error) {
-          logger.error('Failed to prepare file operation:', error as Error, {
-            filePath: summarizeTextForLog(filePath)
-          })
+          failedFiles += 1
+          logger.error('Failed to prepare file operation:', error as Error, { filePath })
         }
       }
 
@@ -2294,6 +1177,7 @@ class FileStorage {
           if (result.status === 'fulfilled') {
             successCount++
           } else {
+            failedFiles += 1
             logger.error('Failed to upload file:', result.reason, {
               file: batch[index].sourcePath
             })
@@ -2304,44 +1188,19 @@ class FileStorage {
       logger.info('Batch upload completed', {
         successCount,
         folderCount: foldersSet.size,
-        skippedFiles
+        skippedFiles,
+        failedFiles
       })
 
       return {
         fileCount: successCount,
         folderCount: foldersSet.size,
-        skippedFiles
+        skippedFiles,
+        failedFiles
       }
     } catch (error) {
       logger.error('Batch upload failed:', error as Error)
       throw error
-    }
-  }
-
-  /**
-   * Pause file watcher to prevent events during batch operations
-   */
-  public pauseFileWatcher = async (): Promise<void> => {
-    if (this.watcher) {
-      logger.debug('Pausing file watcher')
-      this.isPaused = true
-      // Clear any pending debounced notifications
-      if (this.debounceTimer) {
-        clearTimeout(this.debounceTimer)
-        this.debounceTimer = undefined
-      }
-    }
-  }
-
-  /**
-   * Resume file watcher and trigger a refresh
-   */
-  public resumeFileWatcher = async (): Promise<void> => {
-    if (this.watcher && this.currentWatchPath) {
-      logger.debug('Resuming file watcher')
-      this.isPaused = false
-      // Send a synthetic refresh event to trigger tree reload
-      this.notifyChange('refresh', this.currentWatchPath)
     }
   }
 }

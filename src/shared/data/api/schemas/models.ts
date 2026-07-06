@@ -82,6 +82,7 @@ export type CreateModelDto = z.infer<typeof CreateModelSchema>
 
 export const MODELS_BATCH_MAX_ITEMS = 500
 export const MODELS_BULK_UPDATE_MAX_ITEMS = 1000
+export const MODELS_DELETE_MAX_IDS = 1000
 export const MODELS_RECONCILE_MAX_ITEMS = 5000
 
 /**
@@ -130,6 +131,13 @@ export type BulkUpdateModelItem = z.infer<typeof BulkUpdateModelItemSchema>
  */
 export const BulkUpdateModelsSchema = z.array(BulkUpdateModelItemSchema).min(1).max(MODELS_BULK_UPDATE_MAX_ITEMS)
 export type BulkUpdateModelsDto = z.infer<typeof BulkUpdateModelsSchema>
+
+export const DeleteModelsQuerySchema = z.object({
+  ids: z
+    .union([UniqueModelIdSchema, z.array(UniqueModelIdSchema).min(1).max(MODELS_DELETE_MAX_IDS)])
+    .transform((ids) => (Array.isArray(ids) ? ids : [ids]))
+})
+export type DeleteModelsQuery = z.infer<typeof DeleteModelsQuerySchema>
 
 /**
  * `POST /providers/:providerId/models:reconcile` body.
@@ -192,6 +200,11 @@ export type ModelSchemas = {
     PATCH: {
       body: BulkUpdateModelsDto
       response: Model[]
+    }
+    /** Delete one or more models in a single transaction */
+    DELETE: {
+      query: DeleteModelsQuery
+      response: void
     }
   }
 

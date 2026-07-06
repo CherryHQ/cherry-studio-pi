@@ -10,7 +10,7 @@ import type { McpCallToolResponse, McpToolResultContent } from '@main/ai/mcp/typ
 import { promptForToolApproval } from '@main/services/agents/services/ToolPermissionService'
 import mcpService from '@main/services/MCPService'
 import { sanitizeRemoteUrl } from '@main/utils/remoteUrlSafety'
-import getShellEnv from '@main/utils/shell-env'
+import { getShellEnv } from '@main/utils/shellEnv'
 import { HOME_CHERRY_DIR } from '@shared/config/constant'
 import type { McpTool } from '@shared/types/mcp'
 import fg from 'fast-glob'

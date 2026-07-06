@@ -19,12 +19,12 @@ import { defaultLanguage, ZOOM_SHORTCUTS } from '@shared/config/constant'
 import type { LanguageVarious, UpgradeChannel } from '@shared/data/preference/preferenceTypes'
 import { ThemeMode } from '@shared/data/preference/preferenceTypes'
 import type { Shortcut } from '@shared/types/shortcut'
+import { languageEnglishNameMap } from '@shared/utils/languages'
 import { app } from 'electron'
 import Store from 'electron-store'
 import { v7 as uuid } from 'uuid'
 
 import { getErrorMessage as getStructuredErrorMessage } from '../utils/errorMessage'
-import { locales } from '../utils/language'
 import { storageV2SettingsRepository } from './storageV2/StorageV2Repositories'
 
 const logger = loggerService.withContext('ConfigManager')
@@ -106,7 +106,7 @@ export class ConfigManager {
   }
 
   getLanguage(): LanguageVarious {
-    const locale = Object.keys(locales).includes(app.getLocale()) ? app.getLocale() : defaultLanguage
+    const locale = Object.keys(languageEnglishNameMap).includes(app.getLocale()) ? app.getLocale() : defaultLanguage
     return this.get(ConfigKeys.Language, locale) as LanguageVarious
   }
 

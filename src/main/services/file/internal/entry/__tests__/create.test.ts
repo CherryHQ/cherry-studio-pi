@@ -15,7 +15,6 @@ vi.mock('@application', async () => {
 const { application } = await import('@application')
 const { fileEntryService } = await import('@data/services/FileEntryService')
 const { fileRefService } = await import('@data/services/FileRefService')
-const { createDefaultOrphanCheckerRegistry } = await import('@main/services/file/orphanCheckerRegistry')
 const { createInternal, ensureExternal } = await import('../create')
 
 import type { FileManagerDeps } from '../../deps'
@@ -85,8 +84,7 @@ describe('internal/entry/create.createInternal', () => {
         set: vi.fn(),
         invalidate: vi.fn(),
         clear: vi.fn()
-      },
-      orphanRegistry: createDefaultOrphanCheckerRegistry()
+      }
     }
   })
 
@@ -111,7 +109,7 @@ describe('internal/entry/create.createInternal', () => {
 
     it('writes a row that survives schema parse (brand contract)', async () => {
       const entry = await createInternal(deps, { source: 'bytes', data: new Uint8Array([0]), name: 'x', ext: null })
-      const found = await fileEntryService.getById(entry.id)
+      const found = fileEntryService.getById(entry.id)
       expect(found.id).toBe(entry.id)
       if (found.origin !== 'internal') throw new Error('expected internal entry')
       expect(found.size).toBe(1)
@@ -123,7 +121,9 @@ describe('internal/entry/create.createInternal', () => {
       // call in createInternal, the orphan blob would persist until the next
       // startup file sweep — the regression this test pins.
       const insertErr = new Error('UNIQUE constraint failed: file_entry.id')
-      const spy = vi.spyOn(fileEntryService, 'create').mockRejectedValueOnce(insertErr)
+      const spy = vi.spyOn(fileEntryService, 'create').mockImplementationOnce(() => {
+        throw insertErr
+      })
       await expect(
         createInternal(deps, { source: 'bytes', data: new Uint8Array([1, 2, 3]), name: 'rollback-doc', ext: 'bin' })
       ).rejects.toBe(insertErr)
@@ -277,7 +277,9 @@ describe('internal/entry/create.createInternal', () => {
       const file = path.join(tmp, 'peer-probe-fail.txt')
       await writeFile(file, 'x')
       const probeErr = new Error('peer SELECT boom')
-      vi.spyOn(fileEntryService, 'findCaseInsensitivePeers').mockRejectedValueOnce(probeErr)
+      vi.spyOn(fileEntryService, 'findCaseInsensitivePeers').mockImplementationOnce(() => {
+        throw probeErr
+      })
       await expect(ensureExternal(deps, { externalPath: file as FilePath })).rejects.toBe(probeErr)
     })
   })

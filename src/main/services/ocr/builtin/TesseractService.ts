@@ -2,12 +2,11 @@ import { application } from '@application'
 import { loggerService } from '@logger'
 import { getIpCountry } from '@main/utils/ipService'
 import { loadOcrImage } from '@main/utils/ocr'
-import type { ImageFileMetadata } from '@shared/data/types/file/legacyFileMetadata'
-import { isImageFileMetadata } from '@shared/data/types/file/legacyFileMetadata'
+import type { ImageFileMetadata } from '@shared/data/types/legacyFile'
+import { isImageFileMetadata } from '@shared/data/types/legacyFile'
 import type { OcrResult, OcrTesseractConfig, SupportedOcrFile } from '@shared/types/ocr'
 import { MB } from '@shared/utils/constants'
 import fs from 'fs'
-import { isEqual } from 'lodash'
 import type { LanguageCode } from 'tesseract.js'
 import type Tesseract from 'tesseract.js'
 import { createWorker } from 'tesseract.js'
@@ -23,13 +22,16 @@ enum TesseractLangsDownloadUrl {
   CN = 'https://gitcode.com/beyondkmp/tessdata-best/releases/download/1.0.0/'
 }
 
+function sameLangs(left: readonly LanguageCode[], right: readonly LanguageCode[]) {
+  return left.length === right.length && left.every((lang, index) => lang === right[index])
+}
+
 export class TesseractService extends OcrBaseService {
   private worker: Tesseract.Worker | null = null
-  private previousLangs: OcrTesseractConfig['langs']
+  private previousLangs: LanguageCode[] = []
 
   constructor() {
     super()
-    this.previousLangs = {}
   }
 
   async getWorker(options?: OcrTesseractConfig): Promise<Tesseract.Worker> {
@@ -45,7 +47,7 @@ export class TesseractService extends OcrBaseService {
       langsArray = defaultLangs
     }
     logger.debug('langsArray', langsArray)
-    if (!this.worker || !isEqual(this.previousLangs, langsArray)) {
+    if (!this.worker || !sameLangs(this.previousLangs, langsArray)) {
       if (this.worker) {
         await this.dispose()
       }
@@ -66,6 +68,7 @@ export class TesseractService extends OcrBaseService {
           .catch(reject)
       })
       this.worker = await promise
+      this.previousLangs = [...langsArray]
     }
     return this.worker
   }

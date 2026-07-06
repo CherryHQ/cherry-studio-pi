@@ -1,4 +1,4 @@
-import type { Middleware, RequestContext } from '@shared/data/api/apiTypes'
+import type { Middleware, RequestContext } from '@shared/data/api/types'
 import { describe, expect, it, vi } from 'vitest'
 
 const { debugMock, errorMock, warnMock } = vi.hoisted(() => ({

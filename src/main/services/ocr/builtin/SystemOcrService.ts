@@ -1,8 +1,8 @@
 import { isLinux, isWin } from '@main/core/platform'
 import { loadOcrImage } from '@main/utils/ocr'
 import { OcrAccuracy, recognize } from '@napi-rs/system-ocr'
-import type { ImageFileMetadata } from '@shared/data/types/file/legacyFileMetadata'
-import { isImageFileMetadata } from '@shared/data/types/file/legacyFileMetadata'
+import type { ImageFileMetadata } from '@shared/data/types/legacyFile'
+import { isImageFileMetadata } from '@shared/data/types/legacyFile'
 import type { OcrResult, OcrSystemConfig, SupportedOcrFile } from '@shared/types/ocr'
 
 import { OcrBaseService } from './OcrBaseService'

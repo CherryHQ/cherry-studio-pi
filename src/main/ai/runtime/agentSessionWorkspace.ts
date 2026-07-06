@@ -1,8 +1,8 @@
 import { mkdir } from 'node:fs/promises'
 
 import { loggerService } from '@logger'
-import { getPathStatus, type PathStatus } from '@main/utils/file/pathStatus'
-import { t } from '@main/utils/language'
+import { t } from '@main/i18n'
+import { getPathStatus, type PathStatus } from '@main/utils/file'
 
 const logger = loggerService.withContext('AgentSessionWorkspace')
 

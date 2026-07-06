@@ -12,10 +12,7 @@ import { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError } fr
 import { parseUniqueModelId, type UniqueModelId } from '@shared/data/types/model'
 import { app } from 'electron'
 
-import { isSensitiveMcpDiagnosticKey } from './logging'
-
-const logger = loggerService.withContext('MCPServer:Assistant')
-const DIAGNOSTIC_SECRET_VALUE = '<redacted>'
+const logger = loggerService.withContext('McpServer:Assistant')
 
 /**
  * Whether `read_source` must refuse a file as sensitive. Covers every dotenv variant
@@ -28,24 +25,6 @@ export function isBlockedSourceFile(basename: string): boolean {
   const isPrivateKeyOrCert = /\.(pem|key|p12|pfx)$/.test(name)
   const isExactSensitive = ['credentials.json', 'id_rsa', 'id_dsa', 'id_ecdsa', 'id_ed25519'].includes(name)
   return isSensitiveEnv || isPrivateKeyOrCert || isExactSensitive
-}
-
-export function redactAssistantDiagnosticText(text: string): string {
-  return text
-    .replace(/(https?:\/\/)([^/@\s]+):([^/@\s]+)@/gi, `$1${DIAGNOSTIC_SECRET_VALUE}@`)
-    .replace(/\b(Authorization\s*[:=]\s*)(Bearer|Basic)\s+[^\s"',}]+/gi, `$1$2 ${DIAGNOSTIC_SECRET_VALUE}`)
-    .replace(
-      /(["'])([^"']+)\1(\s*:\s*)(["'])([^"']*)\4/g,
-      (match, quote: string, key: string, separator: string, valueQuote: string) =>
-        isSensitiveMcpDiagnosticKey(key)
-          ? `${quote}${key}${quote}${separator}${valueQuote}${DIAGNOSTIC_SECRET_VALUE}${valueQuote}`
-          : match
-    )
-    .replace(
-      /\b([A-Za-z][A-Za-z0-9_.-]*)(\s*[:=]\s*)(["']?)([^\s"',}]+)/g,
-      (match, key: string, separator: string, quote: string) =>
-        isSensitiveMcpDiagnosticKey(key) ? `${key}${separator}${quote}${DIAGNOSTIC_SECRET_VALUE}${quote}` : match
-    )
 }
 
 /**
@@ -78,7 +57,7 @@ function resolveRealOrNearestExistingPath(targetPath: string): string {
 
 // Allowed route prefixes to prevent arbitrary navigation
 const ALLOWED_ROUTES = [
-  '/settings/',
+  '/settings',
   '/agents',
   '/knowledge',
   '/openclaw',
@@ -88,26 +67,18 @@ const ALLOWED_ROUTES = [
   '/notes',
   '/apps',
   '/code',
-  '/store',
-  '/launchpad',
-  '/'
+  '/launchpad'
 ]
 
-export function isAllowedAssistantNavigationRoute(targetPath: string): boolean {
-  const normalizedPath = targetPath.startsWith('/') ? targetPath : `/${targetPath}`
-  const canonicalPath = normalizedPath.length > 1 ? normalizedPath.replace(/\/+$/g, '') : normalizedPath
-
-  return ALLOWED_ROUTES.some((route) => {
-    const canonicalRoute = route === '/' ? '/' : route.replace(/\/+$/g, '')
-    if (canonicalRoute === '/') return canonicalPath === '/'
-    return canonicalPath === canonicalRoute || canonicalPath.startsWith(`${canonicalRoute}/`)
-  })
+export function isAllowedAssistantNavigationPath(path: string): boolean {
+  if (path === '/') return true
+  return ALLOWED_ROUTES.some((route) => path === route || path.startsWith(`${route}/`))
 }
 
 const NAVIGATE_TOOL: Tool = {
   name: 'navigate',
   description:
-    'Navigate Cherry Studio Pi to a specific page. Refer to the route table in your skills for available paths.',
+    'Navigate Cherry Studio to a specific page. Refer to the route table in your skills for available paths.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -128,7 +99,7 @@ const NAVIGATE_TOOL: Tool = {
 const DIAGNOSE_TOOL: Tool = {
   name: 'diagnose',
   description:
-    'Read Cherry Studio Pi runtime state for troubleshooting. Use this to inspect app info, provider config, connectivity, logs, and MCP server status.',
+    'Read Cherry Studio runtime state for troubleshooting. Use this to inspect app info, provider config, connectivity, logs, and MCP server status.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -155,10 +126,6 @@ const DIAGNOSE_TOOL: Tool = {
   }
 }
 
-export function getAssistantTools(): Tool[] {
-  return [NAVIGATE_TOOL, DIAGNOSE_TOOL]
-}
-
 // Health check cache: { providerId -> { result, timestamp } }
 const healthCache = new Map<string, { result: unknown; timestamp: number }>()
 const HEALTH_CACHE_TTL = 30_000 // 30 seconds
@@ -183,7 +150,7 @@ class AssistantServer {
 
   private setupHandlers() {
     this.mcpServer.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: getAssistantTools()
+      tools: [NAVIGATE_TOOL, DIAGNOSE_TOOL]
     }))
 
     this.mcpServer.server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -216,7 +183,7 @@ class AssistantServer {
 
     const normalizedPath = targetPath.startsWith('/') ? targetPath : `/${targetPath}`
 
-    if (!isAllowedAssistantNavigationRoute(normalizedPath)) {
+    if (!isAllowedAssistantNavigationPath(normalizedPath)) {
       throw new McpError(ErrorCode.InvalidParams, `Blocked navigation to disallowed route: ${normalizedPath}`)
     }
 
@@ -252,7 +219,7 @@ class AssistantServer {
       case 'info':
         return this.diagnoseInfo()
       case 'providers':
-        return await this.diagnoseProviders()
+        return this.diagnoseProviders()
       case 'health':
         return await this.diagnoseHealth(args.provider_id as string | undefined)
       case 'logs':
@@ -260,7 +227,7 @@ class AssistantServer {
       case 'errors':
         return this.diagnoseErrors(args.lines as number | undefined)
       case 'mcp_status':
-        return await this.diagnoseMcpStatus()
+        return this.diagnoseMcpStatus()
       case 'read_source':
         return this.readSource(args.file_path as string | undefined, args.lines as number | undefined)
       case 'config':
@@ -307,9 +274,9 @@ class AssistantServer {
     }
   }
 
-  private async diagnoseProviders() {
+  private diagnoseProviders() {
     try {
-      const providers = await providerService.list({})
+      const providers = providerService.list({})
 
       const summary = providers.map((p) => ({
         id: p.id,
@@ -354,7 +321,12 @@ class AssistantServer {
     }
 
     try {
-      const provider = await providerService.getByProviderId(providerId).catch(() => null)
+      let provider: ReturnType<typeof providerService.getByProviderId> | null = null
+      try {
+        provider = providerService.getByProviderId(providerId)
+      } catch {
+        provider = null
+      }
 
       if (!provider) {
         return {
@@ -396,16 +368,11 @@ class AssistantServer {
         const testUrl = apiHost.startsWith('http') ? apiHost : `https://${apiHost}`
         const controller = new AbortController()
         const timeout = setTimeout(() => controller.abort(), 10000)
-        timeout.unref?.()
-        let response: Response
-        try {
-          response = await fetch(testUrl, {
-            method: 'HEAD',
-            signal: controller.signal
-          })
-        } finally {
-          clearTimeout(timeout)
-        }
+        const response = await fetch(testUrl, {
+          method: 'HEAD',
+          signal: controller.signal
+        })
+        clearTimeout(timeout)
         const latency = Date.now() - startTime
 
         const result = {
@@ -498,7 +465,7 @@ class AssistantServer {
       const logPath = path.join(logsDir, latestLog.name)
       const content = fs.readFileSync(logPath, 'utf-8')
       const allLines = content.split('\n')
-      const tailLines = redactAssistantDiagnosticText(allLines.slice(-lines).join('\n'))
+      const tailLines = allLines.slice(-lines).join('\n')
 
       return {
         content: [
@@ -551,7 +518,7 @@ class AssistantServer {
         const lines = content.split('\n')
         for (let i = lines.length - 1; i >= 0 && errorLines.length < limit; i--) {
           if (errorPattern.test(lines[i])) {
-            errorLines.push(redactAssistantDiagnosticText(`[${logFile.name}] ${lines[i]}`))
+            errorLines.push(`[${logFile.name}] ${lines[i]}`)
           }
         }
       }
@@ -581,9 +548,9 @@ class AssistantServer {
     }
   }
 
-  private async diagnoseMcpStatus() {
+  private diagnoseMcpStatus() {
     try {
-      const { items: mcpServers } = await mcpServerService.list({})
+      const { items: mcpServers } = mcpServerService.list({})
 
       const summary = mcpServers.map((s) => ({
         id: s.id,
@@ -674,18 +641,13 @@ class AssistantServer {
       const currentVersion = app.getVersion()
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 5000)
-      timeout.unref?.()
 
-      let response: Response
-      try {
-        response = await fetch('https://api.github.com/repos/CherryHQ/cherry-studio-pi/releases/latest', {
-          method: 'GET',
-          headers: { Accept: 'application/vnd.github.v3+json', 'User-Agent': 'CherryStudioPi' },
-          signal: controller.signal
-        })
-      } finally {
-        clearTimeout(timeout)
-      }
+      const response = await fetch('https://api.github.com/repos/CherryHQ/cherry-studio/releases/latest', {
+        method: 'GET',
+        headers: { Accept: 'application/vnd.github.v3+json', 'User-Agent': 'CherryStudio' },
+        signal: controller.signal
+      })
+      clearTimeout(timeout)
 
       if (!response.ok) {
         return {

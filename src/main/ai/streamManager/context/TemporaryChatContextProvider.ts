@@ -10,7 +10,7 @@ import { temporaryChatService } from '@main/data/services/TemporaryChatService'
 import { toContentRole } from '@shared/data/types/message'
 import type { UniqueModelId } from '@shared/data/types/model'
 
-import type { AiStreamRequest } from '../../types/requests'
+import type { AiStreamRequest } from '../../types'
 import { PersistenceListener } from '../listeners/PersistenceListener'
 import { TemporaryChatBackend } from '../persistence/backends/TemporaryChatBackend'
 import type { CherryUIMessage, StreamListener } from '../types'
@@ -56,7 +56,7 @@ export class TemporaryChatContextProvider implements ChatContextProvider {
     const topic = temporaryChatService.getTopic(req.topicId)
     if (!topic) throw new Error(`Temporary topic not found: ${req.topicId}`)
 
-    const { assistantId, defaultModelId } = await resolveAssistantModelId(topic.assistantId)
+    const { assistantId, defaultModelId } = resolveAssistantModelId(topic.assistantId)
 
     let resolveWith: UniqueModelId[] | undefined
     if (req.mentionedModelIds?.length) {
@@ -68,12 +68,12 @@ export class TemporaryChatContextProvider implements ChatContextProvider {
       }
       resolveWith = [req.mentionedModelIds[0]]
     }
-    const models = await resolveModels(resolveWith, defaultModelId)
+    const models = resolveModels(resolveWith, defaultModelId)
     const model = models[0]
     const modelSnapshot = createModelSnapshot(model)
 
     // Append user first so `history` (listMessages) includes it. Service generates the id.
-    await temporaryChatService.appendMessage(req.topicId, {
+    temporaryChatService.appendMessage(req.topicId, {
       role: 'user',
       data: { parts: req.userMessageParts },
       status: 'success',
@@ -81,7 +81,7 @@ export class TemporaryChatContextProvider implements ChatContextProvider {
       modelSnapshot
     })
 
-    const prior = await temporaryChatService.listMessages(req.topicId)
+    const prior = temporaryChatService.listMessages(req.topicId)
     const history: CherryUIMessage[] = prior.map((m) => ({
       id: m.id,
       role: toContentRole(m.role),

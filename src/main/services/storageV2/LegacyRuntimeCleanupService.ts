@@ -3,7 +3,7 @@ import path from 'node:path'
 
 import { app } from 'electron'
 
-import { getConfigDir } from '../../utils/file'
+import { getConfigDir } from '../../utils/legacyFile'
 import { storageV2DataRootService } from './DataRootService'
 import { getAvailablePathSync, movePathSync } from './SafeFileMove'
 import { storageV2Database } from './StorageV2Database'

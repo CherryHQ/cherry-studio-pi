@@ -73,6 +73,10 @@ export class ProxyManager extends BaseService {
     apply: (config) => (config ? this.applyProxyConfig(config) : undefined)
   })
 
+  get appliedProxyKey(): string | null {
+    return this.appliedKey
+  }
+
   /**
    * Apply the proxy from user preferences on startup, then re-apply whenever the proxy
    * preferences change. Without this the global proxy mechanism is never wired to settings —

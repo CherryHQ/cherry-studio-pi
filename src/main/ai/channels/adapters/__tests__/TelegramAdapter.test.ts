@@ -11,32 +11,38 @@ vi.mock('../../ChannelManager', () => ({
   registerAdapterFactory: vi.fn()
 }))
 
-function createMockBot() {
-  return {
-    use: vi.fn(),
-    command: vi.fn(),
-    on: vi.fn(),
-    api: {
-      setMyCommands: vi.fn().mockResolvedValue(undefined),
-      sendMessage: vi.fn().mockResolvedValue(undefined),
-      sendChatAction: vi.fn().mockResolvedValue(undefined)
-    },
-    catch: vi.fn(),
-    start: vi.fn().mockResolvedValue(undefined),
-    stop: vi.fn().mockResolvedValue(undefined)
-  }
+const mockBot = {
+  use: vi.fn(),
+  command: vi.fn(),
+  on: vi.fn(),
+  api: {
+    setMyCommands: vi.fn().mockResolvedValue(undefined),
+    sendMessage: vi.fn().mockResolvedValue(undefined),
+    sendChatAction: vi.fn().mockResolvedValue(undefined),
+    sendDocument: vi.fn().mockResolvedValue(undefined)
+  },
+  catch: vi.fn(),
+  start: vi.fn().mockResolvedValue(undefined),
+  stop: vi.fn().mockResolvedValue(undefined)
 }
 
-const mockBot = createMockBot()
-
-vi.mock('grammy', () => ({
-  Bot: vi.fn().mockImplementation(() => mockBot)
-}))
+vi.mock('grammy', () => {
+  class MockInputFile {
+    constructor(
+      readonly data: Buffer,
+      readonly filename: string
+    ) {}
+  }
+  return {
+    Bot: vi.fn().mockImplementation(() => mockBot),
+    InputFile: MockInputFile
+  }
+})
 
 // Import the module to trigger self-registration side effect
 import '../telegram/TelegramAdapter'
 
-import { Bot } from 'grammy'
+import { InputFile } from 'grammy'
 
 import { registerAdapterFactory } from '../../ChannelManager'
 
@@ -55,12 +61,10 @@ describe('TelegramAdapter', () => {
     mockBot.api.setMyCommands.mockClear().mockResolvedValue(undefined)
     mockBot.api.sendMessage.mockClear().mockResolvedValue(undefined)
     mockBot.api.sendChatAction.mockClear().mockResolvedValue(undefined)
+    mockBot.api.sendDocument.mockClear().mockResolvedValue(undefined)
     mockBot.catch.mockClear()
     mockBot.start.mockClear().mockResolvedValue(undefined)
     mockBot.stop.mockClear().mockResolvedValue(undefined)
-    vi.mocked(Bot)
-      .mockClear()
-      .mockImplementation(() => mockBot as any)
   })
 
   afterEach(() => {
@@ -157,34 +161,6 @@ describe('TelegramAdapter', () => {
     expect(mockBot.start.mock.calls.length).toBe(callsAfterDisconnect) // no further reconnect
   })
 
-  it('ignores polling rejection from a stale bot after replacement', async () => {
-    vi.useFakeTimers()
-    const staleBot = createMockBot()
-    const currentBot = createMockBot()
-    let rejectStalePolling!: (error: Error) => void
-
-    staleBot.start.mockReturnValue(
-      new Promise((_resolve, reject) => {
-        rejectStalePolling = reject
-      })
-    )
-    currentBot.start.mockResolvedValue(undefined)
-    vi.mocked(Bot)
-      .mockImplementationOnce(() => staleBot as any)
-      .mockImplementationOnce(() => currentBot as any)
-
-    const adapter = createAdapter()
-    await adapter.connect()
-    await adapter.startBot()
-
-    rejectStalePolling(new Error('409: Conflict'))
-    await vi.advanceTimersByTimeAsync(0)
-
-    expect(adapter.connected).toBe(true)
-    expect(adapter.reconnectTimer).toBeNull()
-    expect(currentBot.start).toHaveBeenCalledTimes(1)
-  })
-
   it('sendMessage() sends text with MarkdownV2 by default', async () => {
     const adapter = createAdapter()
     await adapter.connect()
@@ -234,6 +210,21 @@ describe('TelegramAdapter', () => {
     // After MarkdownV2 conversion the total length may differ slightly
     const totalSent = mockBot.api.sendMessage.mock.calls[0][1].length + mockBot.api.sendMessage.mock.calls[1][1].length
     expect(totalSent).toBe(5000)
+  })
+
+  it('sendFile() sends a document built from the decoded buffer and filename', async () => {
+    const adapter = createAdapter()
+    await adapter.connect()
+
+    const data = Buffer.from('file-bytes').toString('base64')
+    await adapter.sendFile('123', { filename: 'report.pdf', data, media_type: 'application/pdf', size: 10 })
+
+    expect(mockBot.api.sendDocument).toHaveBeenCalledTimes(1)
+    const [chatId, inputFile] = mockBot.api.sendDocument.mock.calls[0]
+    expect(chatId).toBe('123')
+    expect(inputFile).toBeInstanceOf(InputFile)
+    expect(inputFile.filename).toBe('report.pdf')
+    expect(inputFile.data.toString()).toBe('file-bytes')
   })
 
   it('sendTypingIndicator() sends typing action', async () => {

@@ -16,7 +16,7 @@ import { getDataService, registerDataService } from '@data/services/dataServiceR
 import { pinService } from '@data/services/PinService'
 import { applyMoves, insertManyWithOrderKey, insertWithOrderKey } from '@data/services/utils/orderKey'
 import { loggerService } from '@logger'
-import { DataApiError, DataApiErrorFactory, ErrorCode } from '@shared/data/api'
+import { DataApiError, DataApiErrorFactory, ErrorCode } from '@shared/data/api/errors'
 import type { OrderBatchRequest, OrderRequest } from '@shared/data/api/schemas/_endpointHelpers'
 import type { CreateProviderDto, ListProvidersQuery, UpdateProviderDto } from '@shared/data/api/schemas/providers'
 import { isManagedCherryAiProviderId } from '@shared/data/presets/cherryai'
@@ -123,6 +123,8 @@ function rowToRuntimeProvider(row: UserProviderRow): Provider {
     websites: presetMetadata.websites,
     endpointConfigs: row.endpointConfigs ?? undefined,
     defaultChatEndpoint: row.defaultChatEndpoint ?? undefined,
+    modelListSource: presetMetadata.modelListSource,
+    authMethods: presetMetadata.authMethods,
     apiKeys,
     authType,
     apiFeatures,
@@ -132,40 +134,6 @@ function rowToRuntimeProvider(row: UserProviderRow): Provider {
 }
 
 class ProviderService {
-  private apiKeyMutationQueues = new Map<string, Promise<void>>()
-
-  private get dbService() {
-    return application.get('DbService')
-  }
-
-  private get db() {
-    return this.dbService.getDb()
-  }
-
-  private async runApiKeyMutation<T>(providerId: string, operation: () => Promise<T>): Promise<T> {
-    const previous = this.apiKeyMutationQueues.get(providerId) ?? Promise.resolve()
-    let release!: () => void
-    const current = new Promise<void>((resolve) => {
-      release = resolve
-    })
-    const queued = previous.then(
-      () => current,
-      () => current
-    )
-
-    this.apiKeyMutationQueues.set(providerId, queued)
-
-    try {
-      await previous.catch(() => undefined)
-      return await operation()
-    } finally {
-      release()
-      if (this.apiKeyMutationQueues.get(providerId) === queued) {
-        this.apiKeyMutationQueues.delete(providerId)
-      }
-    }
-  }
-
   private rethrowOrderError(error: unknown): never {
     if (
       error instanceof DataApiError &&
@@ -181,7 +149,9 @@ class ProviderService {
   /**
    * List providers with optional filters
    */
-  async list(query: ListProvidersQuery): Promise<Provider[]> {
+  list(query: ListProvidersQuery): Provider[] {
+    const db = application.get('DbService').getDb()
+
     const conditions: SQLWrapper[] = []
 
     if (query.enabled !== undefined) {
@@ -196,12 +166,13 @@ class ProviderService {
 
     const rows =
       conditions.length > 0
-        ? await this.db
+        ? db
             .select()
             .from(userProviderTable)
             .where(and(...conditions))
             .orderBy(asc(userProviderTable.orderKey))
-        : await this.db.select().from(userProviderTable).orderBy(asc(userProviderTable.orderKey))
+            .all()
+        : db.select().from(userProviderTable).orderBy(asc(userProviderTable.orderKey)).all()
 
     return rows.map(rowToRuntimeProvider)
   }
@@ -209,12 +180,9 @@ class ProviderService {
   /**
    * Get a provider by its provider ID
    */
-  async getByProviderId(providerId: string): Promise<Provider> {
-    const [row] = await this.db
-      .select()
-      .from(userProviderTable)
-      .where(eq(userProviderTable.providerId, providerId))
-      .limit(1)
+  getByProviderId(providerId: string): Provider {
+    const db = application.get('DbService').getDb()
+    const [row] = db.select().from(userProviderTable).where(eq(userProviderTable.providerId, providerId)).limit(1).all()
 
     if (!row) {
       throw DataApiErrorFactory.notFound('Provider', providerId)
@@ -226,8 +194,10 @@ class ProviderService {
   /**
    * Create a new provider
    */
-  async create(dto: CreateProviderDto): Promise<Provider> {
+  create(dto: CreateProviderDto): Provider {
     assertManagedCherryAiProviderMutationAllowed(dto.providerId, `create provider ${dto.providerId}`)
+
+    const db = application.get('DbService').getDb()
     const apiKeys = normalizeApiKeyEntries(dto.apiKeys ?? [])
 
     const values: NewUserProviderInput = {
@@ -243,12 +213,12 @@ class ProviderService {
       isEnabled: apiKeys.some((entry) => entry.isEnabled)
     }
 
-    const row = await withSqliteErrors(
-      async () =>
-        await this.dbService.withWriteTx(async (tx) => {
-          return (await insertWithOrderKey(tx, userProviderTable, values, {
+    const row = withSqliteErrors(
+      () =>
+        db.transaction((tx) => {
+          return insertWithOrderKey(tx, userProviderTable, values, {
             pkColumn: userProviderTable.providerId
-          })) as UserProviderRow
+          }) as UserProviderRow
         }),
       {
         unique: () => DataApiErrorFactory.conflict(`Provider '${dto.providerId}' already exists`, 'Provider')
@@ -263,7 +233,7 @@ class ProviderService {
   /**
    * Update an existing provider
    */
-  async update(providerId: string, dto: UpdateProviderDto): Promise<Provider> {
+  update(providerId: string, dto: UpdateProviderDto): Provider {
     assertManagedCherryAiProviderPatchAllowed(providerId, dto)
 
     // Read + merge + write the providerSettings JSON in ONE serialized write
@@ -271,16 +241,17 @@ class ProviderService {
     // read the same old providerSettings and have the later write clobber the
     // other's keys (lost update); withWriteTx serializes them so each merges on
     // the latest row value.
-    const row = await this.dbService.withWriteTx(async (tx) => {
+    const row = application.get('DbService').withWriteTx((tx) => {
       // Read the raw row's providerSettings, not the merged entity. PATCH
       // semantics require merging with the stored partial, not with runtime
       // defaults — otherwise DEFAULT_PROVIDER_SETTINGS would be persisted
       // into the row and break the "row stores only overrides" contract.
-      const [current] = await tx
+      const [current] = tx
         .select({ providerSettings: userProviderTable.providerSettings })
         .from(userProviderTable)
         .where(eq(userProviderTable.providerId, providerId))
         .limit(1)
+        .all()
 
       if (!current) {
         throw DataApiErrorFactory.notFound('Provider', providerId)
@@ -301,11 +272,12 @@ class ProviderService {
       }
       if (dto.isEnabled !== undefined) updates.isEnabled = dto.isEnabled
 
-      const [updated] = await tx
+      const [updated] = tx
         .update(userProviderTable)
         .set(updates)
         .where(eq(userProviderTable.providerId, providerId))
         .returning()
+        .all()
 
       if (!updated) {
         throw DataApiErrorFactory.notFound('Provider', providerId)
@@ -323,22 +295,23 @@ class ProviderService {
    * Insert-only — existing providers are filtered out before order keys are assigned.
    * All user-customizable fields are preserved.
    */
-  async batchUpsert(providers: NewUserProviderInput[]): Promise<void> {
+  batchUpsert(providers: NewUserProviderInput[]): void {
     if (providers.length === 0) return
 
-    const insertedCount = await this.dbService.withWriteTx((tx) => this.batchUpsertTx(tx, providers))
+    const db = application.get('DbService').getDb()
+    const insertedCount = db.transaction((tx) => this.batchUpsertTx(tx, providers))
 
     logger.info('Batch upserted providers', { insertedCount })
   }
 
-  async batchUpsertTx(tx: Pick<DbType, 'select' | 'insert'>, providers: NewUserProviderInput[]): Promise<number> {
-    const existing = await tx.select({ providerId: userProviderTable.providerId }).from(userProviderTable)
+  batchUpsertTx(tx: Pick<DbType, 'select' | 'insert'>, providers: NewUserProviderInput[]): number {
+    const existing = tx.select({ providerId: userProviderTable.providerId }).from(userProviderTable).all()
     const existingIds = new Set(existing.map((row) => row.providerId))
     const newProviders = providers.filter((provider) => !existingIds.has(provider.providerId))
 
     if (newProviders.length === 0) return 0
 
-    await insertManyWithOrderKey(tx, userProviderTable, newProviders, {
+    insertManyWithOrderKey(tx, userProviderTable, newProviders, {
       pkColumn: userProviderTable.providerId
     })
     return newProviders.length
@@ -348,12 +321,9 @@ class ProviderService {
    * Get a rotated API key for a provider (round-robin across enabled keys).
    * Returns empty string for providers that don't have keys.
    */
-  async getRotatedApiKey(providerId: string): Promise<string> {
-    const [row] = await this.db
-      .select()
-      .from(userProviderTable)
-      .where(eq(userProviderTable.providerId, providerId))
-      .limit(1)
+  getRotatedApiKey(providerId: string): string {
+    const db = application.get('DbService').getDb()
+    const [row] = db.select().from(userProviderTable).where(eq(userProviderTable.providerId, providerId)).limit(1).all()
 
     if (!row) {
       throw DataApiErrorFactory.notFound('Provider', providerId)
@@ -394,12 +364,9 @@ class ProviderService {
    * iteration, rotation consumers); omit it to get all keys (settings management
    * UI that needs to preserve disabled entries).
    */
-  async getApiKeys(providerId: string, options: { enabled?: boolean } = {}): Promise<ApiKeyEntry[]> {
-    const [row] = await this.db
-      .select()
-      .from(userProviderTable)
-      .where(eq(userProviderTable.providerId, providerId))
-      .limit(1)
+  getApiKeys(providerId: string, options: { enabled?: boolean } = {}): ApiKeyEntry[] {
+    const db = application.get('DbService').getDb()
+    const [row] = db.select().from(userProviderTable).where(eq(userProviderTable.providerId, providerId)).limit(1).all()
 
     if (!row) {
       throw DataApiErrorFactory.notFound('Provider', providerId)
@@ -412,12 +379,9 @@ class ProviderService {
   /**
    * Get full auth config (includes sensitive credentials).
    */
-  async getAuthConfig(providerId: string): Promise<AuthConfig | null> {
-    const [row] = await this.db
-      .select()
-      .from(userProviderTable)
-      .where(eq(userProviderTable.providerId, providerId))
-      .limit(1)
+  getAuthConfig(providerId: string): AuthConfig | null {
+    const db = application.get('DbService').getDb()
+    const [row] = db.select().from(userProviderTable).where(eq(userProviderTable.providerId, providerId)).limit(1).all()
 
     if (!row) {
       throw DataApiErrorFactory.notFound('Provider', providerId)
@@ -430,7 +394,7 @@ class ProviderService {
    * Add an API key to a provider. Skips if the key value already exists.
    * Returns the updated Provider.
    */
-  async addApiKey(providerId: string, key: string, label?: string): Promise<Provider> {
+  addApiKey(providerId: string, key: string, label?: string): Provider {
     assertManagedCherryAiProviderMutationAllowed(providerId, `add API key to provider ${providerId}`)
 
     const normalizedKey = key.trim()
@@ -438,58 +402,60 @@ class ProviderService {
       throw DataApiErrorFactory.validation({ key: ['API key cannot be empty'] })
     }
 
-    const { provider, status } = await this.runApiKeyMutation(providerId, async () => {
-      return await this.dbService.withWriteTx(async (tx) => {
-        const [row] = await tx
-          .select()
-          .from(userProviderTable)
-          .where(eq(userProviderTable.providerId, providerId))
-          .limit(1)
+    const db = application.get('DbService').getDb()
+    const { provider, status } = db.transaction((tx) => {
+      const [row] = tx
+        .select()
+        .from(userProviderTable)
+        .where(eq(userProviderTable.providerId, providerId))
+        .limit(1)
+        .all()
 
-        if (!row) {
-          throw DataApiErrorFactory.notFound('Provider', providerId)
+      if (!row) {
+        throw DataApiErrorFactory.notFound('Provider', providerId)
+      }
+
+      const existingKeys = row.apiKeys ?? []
+      const existingKeyIndex = existingKeys.findIndex((k) => k.key.trim() === normalizedKey)
+
+      // Do not create duplicate keys. If the user re-imports an existing disabled
+      // key/provider, treat it as an explicit request to make that credential usable.
+      if (existingKeyIndex !== -1) {
+        const existingKey = existingKeys[existingKeyIndex]
+        if (row.isEnabled && existingKey.isEnabled) {
+          return { provider: rowToRuntimeProvider(row), status: 'skipped' as const }
         }
 
-        const existingKeys = row.apiKeys ?? []
-        const existingKeyIndex = existingKeys.findIndex((k) => k.key.trim() === normalizedKey)
-
-        // Do not create duplicate keys. If the user re-imports an existing disabled
-        // key/provider, treat it as an explicit request to make that credential usable.
-        if (existingKeyIndex !== -1) {
-          const existingKey = existingKeys[existingKeyIndex]
-          if (row.isEnabled && existingKey.isEnabled) {
-            return { provider: rowToRuntimeProvider(row), status: 'skipped' as const }
-          }
-
-          const updatedKeys = existingKeys.map((entry, index) =>
-            index === existingKeyIndex ? { ...entry, isEnabled: true } : entry
-          )
-          const [updated] = await tx
-            .update(userProviderTable)
-            .set({ apiKeys: updatedKeys, isEnabled: true })
-            .where(eq(userProviderTable.providerId, providerId))
-            .returning()
-
-          return { provider: rowToRuntimeProvider(updated), status: 'enabled-existing' as const }
-        }
-
-        const newEntry = {
-          id: uuidv4(),
-          key: normalizedKey,
-          ...(label ? { label } : {}),
-          isEnabled: true
-        }
-
-        const updatedKeys = [...existingKeys, newEntry]
-
-        const [updated] = await tx
+        const updatedKeys = existingKeys.map((entry, index) =>
+          index === existingKeyIndex ? { ...entry, isEnabled: true } : entry
+        )
+        const [updated] = tx
           .update(userProviderTable)
           .set({ apiKeys: updatedKeys, isEnabled: true })
           .where(eq(userProviderTable.providerId, providerId))
           .returning()
+          .all()
 
-        return { provider: rowToRuntimeProvider(updated), status: 'added' as const }
-      })
+        return { provider: rowToRuntimeProvider(updated), status: 'enabled-existing' as const }
+      }
+
+      const newEntry = {
+        id: uuidv4(),
+        key: normalizedKey,
+        ...(label ? { label } : {}),
+        isEnabled: true
+      }
+
+      const updatedKeys = [...existingKeys, newEntry]
+
+      const [updated] = tx
+        .update(userProviderTable)
+        .set({ apiKeys: updatedKeys, isEnabled: true })
+        .where(eq(userProviderTable.providerId, providerId))
+        .returning()
+        .all()
+
+      return { provider: rowToRuntimeProvider(updated), status: 'added' as const }
     })
 
     if (status === 'added') {
@@ -506,24 +472,24 @@ class ProviderService {
   /**
    * Replace the full API key list via the dedicated API-key resource.
    */
-  async replaceApiKeys(providerId: string, apiKeys: ApiKeyEntry[]): Promise<Provider> {
+  replaceApiKeys(providerId: string, apiKeys: ApiKeyEntry[]): Provider {
     assertManagedCherryAiProviderMutationAllowed(providerId, `replace API keys for provider ${providerId}`)
 
     const normalizedApiKeys = normalizeApiKeyEntries(apiKeys)
-    const provider = await this.runApiKeyMutation(providerId, async () => {
-      return await this.dbService.withWriteTx(async (tx) => {
-        const [row] = await tx
-          .update(userProviderTable)
-          .set({ apiKeys: normalizedApiKeys })
-          .where(eq(userProviderTable.providerId, providerId))
-          .returning()
+    const db = application.get('DbService').getDb()
+    const provider = db.transaction((tx) => {
+      const [row] = tx
+        .update(userProviderTable)
+        .set({ apiKeys: normalizedApiKeys })
+        .where(eq(userProviderTable.providerId, providerId))
+        .returning()
+        .all()
 
-        if (!row) {
-          throw DataApiErrorFactory.notFound('Provider', providerId)
-        }
+      if (!row) {
+        throw DataApiErrorFactory.notFound('Provider', providerId)
+      }
 
-        return rowToRuntimeProvider(row)
-      })
+      return rowToRuntimeProvider(row)
     })
 
     logger.info('Replaced provider API keys', { providerId, count: normalizedApiKeys.length })
@@ -534,7 +500,7 @@ class ProviderService {
   /**
    * Update a single API key entry by key ID.
    */
-  async updateApiKey(
+  updateApiKey(
     providerId: string,
     keyId: string,
     updates: {
@@ -542,70 +508,71 @@ class ProviderService {
       label?: string
       isEnabled?: boolean
     }
-  ): Promise<Provider> {
+  ): Provider {
     assertManagedCherryAiProviderMutationAllowed(providerId, `update API key for provider ${providerId}`)
 
-    const provider = await this.runApiKeyMutation(providerId, async () => {
-      return await this.dbService.withWriteTx(async (tx) => {
-        const [row] = await tx
-          .select()
-          .from(userProviderTable)
-          .where(eq(userProviderTable.providerId, providerId))
-          .limit(1)
+    const db = application.get('DbService').getDb()
+    const provider = db.transaction((tx) => {
+      const [row] = tx
+        .select()
+        .from(userProviderTable)
+        .where(eq(userProviderTable.providerId, providerId))
+        .limit(1)
+        .all()
 
-        if (!row) {
-          throw DataApiErrorFactory.notFound('Provider', providerId)
+      if (!row) {
+        throw DataApiErrorFactory.notFound('Provider', providerId)
+      }
+
+      const existingKeys = row.apiKeys ?? []
+      const keyIndex = existingKeys.findIndex((entry) => entry.id === keyId)
+
+      if (keyIndex === -1) {
+        throw DataApiErrorFactory.notFound('API key', keyId)
+      }
+
+      const nextKeyValue = updates.key?.trim()
+      if (updates.key !== undefined && !nextKeyValue) {
+        throw DataApiErrorFactory.validation({ key: ['API key cannot be empty'] })
+      }
+
+      if (
+        nextKeyValue &&
+        existingKeys.some((entry, index) => index !== keyIndex && entry.key.trim() === nextKeyValue)
+      ) {
+        throw DataApiErrorFactory.conflict('API key already exists', 'API key')
+      }
+
+      const updatedKeys = existingKeys.map((entry, index) => {
+        if (index !== keyIndex) {
+          return entry
         }
 
-        const existingKeys = row.apiKeys ?? []
-        const keyIndex = existingKeys.findIndex((entry) => entry.id === keyId)
-
-        if (keyIndex === -1) {
-          throw DataApiErrorFactory.notFound('API key', keyId)
+        const updatedEntry = {
+          ...entry,
+          ...(updates.isEnabled !== undefined ? { isEnabled: updates.isEnabled } : {}),
+          ...(nextKeyValue ? { key: nextKeyValue } : {})
         }
 
-        const nextKeyValue = updates.key?.trim()
-        if (updates.key !== undefined && !nextKeyValue) {
-          throw DataApiErrorFactory.validation({ key: ['API key cannot be empty'] })
-        }
-
-        if (
-          nextKeyValue &&
-          existingKeys.some((entry, index) => index !== keyIndex && entry.key.trim() === nextKeyValue)
-        ) {
-          throw DataApiErrorFactory.conflict('API key already exists', 'API key')
-        }
-
-        const updatedKeys = existingKeys.map((entry, index) => {
-          if (index !== keyIndex) {
-            return entry
+        if (updates.label !== undefined) {
+          if (updates.label) {
+            updatedEntry.label = updates.label
+          } else {
+            delete updatedEntry.label
           }
+        }
 
-          const updatedEntry = {
-            ...entry,
-            ...(updates.isEnabled !== undefined ? { isEnabled: updates.isEnabled } : {}),
-            ...(nextKeyValue ? { key: nextKeyValue } : {})
-          }
-
-          if (updates.label !== undefined) {
-            if (updates.label) {
-              updatedEntry.label = updates.label
-            } else {
-              delete updatedEntry.label
-            }
-          }
-
-          return updatedEntry
-        })
-
-        const [updated] = await tx
-          .update(userProviderTable)
-          .set({ apiKeys: updatedKeys })
-          .where(eq(userProviderTable.providerId, providerId))
-          .returning()
-
-        return rowToRuntimeProvider(updated)
+        return updatedEntry
       })
+
+      const [updated] = tx
+        .update(userProviderTable)
+        .set({ apiKeys: updatedKeys })
+        .where(eq(userProviderTable.providerId, providerId))
+        .returning()
+        .all()
+
+      return rowToRuntimeProvider(updated)
     })
 
     logger.info('Updated API key', { providerId, keyId, changes: Object.keys(updates) })
@@ -616,36 +583,37 @@ class ProviderService {
   /**
    * Delete an API key by key ID and return updated provider.
    */
-  async deleteApiKey(providerId: string, keyId: string): Promise<Provider> {
+  deleteApiKey(providerId: string, keyId: string): Provider {
     assertManagedCherryAiProviderMutationAllowed(providerId, `delete API key from provider ${providerId}`)
 
-    const provider = await this.runApiKeyMutation(providerId, async () => {
-      return await this.dbService.withWriteTx(async (tx) => {
-        const [row] = await tx
-          .select()
-          .from(userProviderTable)
-          .where(eq(userProviderTable.providerId, providerId))
-          .limit(1)
+    const db = application.get('DbService').getDb()
+    const provider = db.transaction((tx) => {
+      const [row] = tx
+        .select()
+        .from(userProviderTable)
+        .where(eq(userProviderTable.providerId, providerId))
+        .limit(1)
+        .all()
 
-        if (!row) {
-          throw DataApiErrorFactory.notFound('Provider', providerId)
-        }
+      if (!row) {
+        throw DataApiErrorFactory.notFound('Provider', providerId)
+      }
 
-        const existingKeys = row.apiKeys ?? []
-        const updatedKeys = existingKeys.filter((entry) => entry.id !== keyId)
+      const existingKeys = row.apiKeys ?? []
+      const updatedKeys = existingKeys.filter((entry) => entry.id !== keyId)
 
-        if (updatedKeys.length === existingKeys.length) {
-          throw DataApiErrorFactory.notFound('API key', keyId)
-        }
+      if (updatedKeys.length === existingKeys.length) {
+        throw DataApiErrorFactory.notFound('API key', keyId)
+      }
 
-        const [updated] = await tx
-          .update(userProviderTable)
-          .set({ apiKeys: updatedKeys })
-          .where(eq(userProviderTable.providerId, providerId))
-          .returning()
+      const [updated] = tx
+        .update(userProviderTable)
+        .set({ apiKeys: updatedKeys })
+        .where(eq(userProviderTable.providerId, providerId))
+        .returning()
+        .all()
 
-        return rowToRuntimeProvider(updated)
-      })
+      return rowToRuntimeProvider(updated)
     })
 
     logger.info('Deleted API key from provider', { providerId, keyId })
@@ -657,13 +625,16 @@ class ProviderService {
    * Delete a provider. Canonical preset providers (where providerId === presetProviderId)
    * cannot be deleted. User-created providers that inherit from a preset can be deleted.
    */
-  async delete(providerId: string): Promise<void> {
-    await this.dbService.withWriteTx(async (tx) => {
-      const [provider] = await tx
+  delete(providerId: string): void {
+    const db = application.get('DbService').getDb()
+
+    db.transaction((tx) => {
+      const [provider] = tx
         .select({ presetProviderId: userProviderTable.presetProviderId })
         .from(userProviderTable)
         .where(eq(userProviderTable.providerId, providerId))
         .limit(1)
+        .all()
 
       if (!provider) {
         throw DataApiErrorFactory.notFound('Provider', providerId)
@@ -681,21 +652,23 @@ class ProviderService {
         throw DataApiErrorFactory.invalidOperation(`Cannot delete preset provider '${providerId}'`)
       }
 
-      const models = await tx
+      const models = tx
         .select({ id: userModelTable.id })
         .from(userModelTable)
         .where(eq(userModelTable.providerId, providerId))
+        .all()
 
-      await pinService.purgeForEntitiesTx(
+      pinService.purgeForEntitiesTx(
         tx,
         'model',
         models.map((model) => model.id)
       )
 
-      const deleted = await tx
+      const deleted = tx
         .delete(userProviderTable)
         .where(eq(userProviderTable.providerId, providerId))
         .returning({ providerId: userProviderTable.providerId })
+        .all()
 
       if (deleted.length === 0) {
         throw DataApiErrorFactory.notFound('Provider', providerId)
@@ -705,12 +678,14 @@ class ProviderService {
     logger.info('Deleted provider', { providerId })
   }
 
-  async move(providerId: string, anchor: OrderRequest): Promise<void> {
+  move(providerId: string, anchor: OrderRequest): void {
     assertManagedCherryAiProviderMutationAllowed(providerId, `move provider ${providerId}`)
 
+    const db = application.get('DbService').getDb()
+
     try {
-      await this.dbService.withWriteTx(async (tx) => {
-        await applyMoves(tx, userProviderTable, [{ id: providerId, anchor }], {
+      db.transaction((tx) => {
+        applyMoves(tx, userProviderTable, [{ id: providerId, anchor }], {
           pkColumn: userProviderTable.providerId
         })
       })
@@ -720,14 +695,16 @@ class ProviderService {
     logger.info('Moved provider', { providerId, anchor })
   }
 
-  async reorder(moves: OrderBatchRequest['moves']): Promise<void> {
+  reorder(moves: OrderBatchRequest['moves']): void {
     for (const move of moves) {
       assertManagedCherryAiProviderMutationAllowed(move.id, `move provider ${move.id}`)
     }
 
+    const db = application.get('DbService').getDb()
+
     try {
-      await this.dbService.withWriteTx(async (tx) => {
-        await applyMoves(tx, userProviderTable, moves, {
+      db.transaction((tx) => {
+        applyMoves(tx, userProviderTable, moves, {
           pkColumn: userProviderTable.providerId
         })
       })

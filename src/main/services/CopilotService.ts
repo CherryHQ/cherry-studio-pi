@@ -4,7 +4,7 @@ import { net, safeStorage } from 'electron'
 import fs from 'fs'
 import path from 'path'
 
-import { getConfigDir } from '../utils/file'
+import { getConfigDir } from '../utils/legacyFile'
 import { storageV2SecretVaultService } from './storageV2/SecretVaultService'
 import { storageV2SettingsRepository } from './storageV2/StorageV2Repositories'
 
@@ -102,7 +102,7 @@ class CopilotService {
   // singleton at the bottom of this file
   // (`export const copilotService = new CopilotService()`). That
   // singleton is instantiated during the static import graph of
-  // `src/main/index.ts` (via `ipc.ts`), BEFORE
+  // `src/main/main.ts` (via `ipc.ts`), BEFORE
   // `application.bootstrap()` runs and builds the path registry. The
   // previous shape resolved `tokenFilePath` in the constructor
   // (`this.tokenFilePath = this.getTokenFilePath()`), which called

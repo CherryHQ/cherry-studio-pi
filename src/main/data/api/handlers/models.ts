@@ -11,19 +11,20 @@ import { providerRegistryService } from '@data/services/ProviderRegistryService'
 import { providerService } from '@data/services/ProviderService'
 import { loggerService } from '@logger'
 import { storageV2Service } from '@main/services/storageV2/StorageService'
-import { DataApiErrorFactory, ErrorCode, isDataApiError } from '@shared/data/api'
-import type { HandlersFor } from '@shared/data/api/apiTypes'
-import { SuccessStatus } from '@shared/data/api/apiTypes'
+import { DataApiErrorFactory, ErrorCode, isDataApiError } from '@shared/data/api/errors'
 import type { CreateModelDto } from '@shared/data/api/schemas/models'
 import {
   BulkUpdateModelsSchema,
   CreateModelsSchema,
+  DeleteModelsQuerySchema,
   ListModelsQuerySchema,
   type ModelSchemas,
   ReconcileProviderModelsSchema,
   ResolveProviderModelsQuerySchema,
   UpdateModelSchema
 } from '@shared/data/api/schemas/models'
+import type { HandlersFor } from '@shared/data/api/types'
+import { SuccessStatus } from '@shared/data/api/types'
 import { isUniqueModelId, parseUniqueModelId } from '@shared/data/types/model'
 
 const logger = loggerService.withContext('DataApi:ModelHandlers')
@@ -146,6 +147,14 @@ export const modelHandlers: HandlersFor<ModelSchemas> = {
       const models = await modelService.bulkUpdate(items)
       await mirrorChangedProviderModelsToStorageV2(models.map(getModelProviderId))
       return models
+    },
+
+    DELETE: async ({ query }) => {
+      const parsed = DeleteModelsQuerySchema.parse(query)
+      const items = parsed.ids.map((uniqueModelId) => parseOrValidationError(uniqueModelId))
+      modelService.bulkDelete(items)
+      await mirrorChangedProviderModelsToStorageV2(items.map((item) => item.providerId))
+      return undefined
     }
   },
 

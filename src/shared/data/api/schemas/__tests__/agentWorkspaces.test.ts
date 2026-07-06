@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { AgentSessionEntitySchema, CreateAgentSessionSchema, UpdateAgentSessionSchema } from '../agentSessions'
-import { AgentWorkspaceEntitySchema, CreateAgentWorkspaceSchema } from '../agentWorkspaces'
+import { AgentSessionEntitySchema, CreateAgentSessionSchema } from '../agentSessions'
+import {
+  AgentSessionWorkspaceSourceSchema,
+  AgentWorkspaceEntitySchema,
+  CreateAgentWorkspaceSchema,
+  UpdateAgentWorkspaceSchema
+} from '../agentWorkspaces'
 
 describe('AgentWorkspaceEntitySchema', () => {
   const workspace = {
@@ -18,11 +23,14 @@ describe('AgentWorkspaceEntitySchema', () => {
     expect(AgentWorkspaceEntitySchema.parse(workspace)).toEqual(workspace)
   })
 
-  it('accepts local workspace directories for creation', () => {
-    expect(CreateAgentWorkspaceSchema.parse({ path: '/tmp/workspace', name: 'workspace' })).toEqual({
+  it('accepts workspace display-name updates only', () => {
+    expect(UpdateAgentWorkspaceSchema.parse({ name: 'Renamed workspace' })).toEqual({ name: 'Renamed workspace' })
+    expect(CreateAgentWorkspaceSchema.parse({ path: '/tmp/workspace', name: '  Renamed workspace  ' })).toEqual({
       path: '/tmp/workspace',
-      name: 'workspace'
+      name: 'Renamed workspace'
     })
+    expect(UpdateAgentWorkspaceSchema.safeParse({ name: '   ' }).success).toBe(false)
+    expect(UpdateAgentWorkspaceSchema.safeParse({ path: '/tmp/renamed' }).success).toBe(false)
   })
 
   it('exposes workspace on sessions instead of accessiblePaths', () => {
@@ -30,6 +38,7 @@ describe('AgentWorkspaceEntitySchema', () => {
       id: 'session-1',
       agentId: 'agent-1',
       name: 'Session',
+      isNameManuallyEdited: false,
       description: '',
       workspaceId: workspace.id,
       workspace,
@@ -42,12 +51,13 @@ describe('AgentWorkspaceEntitySchema', () => {
     expect(AgentSessionEntitySchema.safeParse({ ...session, accessiblePaths: ['/tmp/workspace'] }).success).toBe(false)
   })
 
-  it('allows legacy session entities while create still requires a workspace binding', () => {
+  it('rejects sessions without a workspace binding', () => {
     expect(
       AgentSessionEntitySchema.safeParse({
         id: 'session-1',
         agentId: 'agent-1',
         name: 'Session',
+        isNameManuallyEdited: false,
         description: '',
         workspaceId: null,
         workspace: null,
@@ -55,10 +65,10 @@ describe('AgentWorkspaceEntitySchema', () => {
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z'
       }).success
-    ).toBe(true)
+    ).toBe(false)
   })
 
-  it('allows workspace selection on session create and update', () => {
+  it('requires workspace selection on session create', () => {
     expect(
       CreateAgentSessionSchema.parse({
         agentId: 'agent-1',
@@ -66,6 +76,24 @@ describe('AgentWorkspaceEntitySchema', () => {
         workspace: { type: 'user', workspaceId: workspace.id }
       }).workspace
     ).toEqual({ type: 'user', workspaceId: workspace.id })
-    expect(UpdateAgentSessionSchema.parse({ workspaceId: workspace.id }).workspaceId).toBe(workspace.id)
+    expect(
+      CreateAgentSessionSchema.parse({
+        agentId: 'agent-1',
+        name: 'Session',
+        workspace: { type: 'system' }
+      }).workspace
+    ).toEqual({ type: 'system' })
+    expect(CreateAgentSessionSchema.safeParse({ agentId: 'agent-1', name: 'Session' }).success).toBe(false)
+  })
+
+  it('rejects malformed workspace source shapes', () => {
+    expect(AgentSessionWorkspaceSourceSchema.safeParse({ type: 'user' }).success).toBe(false)
+    expect(AgentSessionWorkspaceSourceSchema.safeParse({ type: 'user', workspaceId: '' }).success).toBe(false)
+    expect(AgentSessionWorkspaceSourceSchema.safeParse({ type: 'external', workspaceId: workspace.id }).success).toBe(
+      false
+    )
+    expect(AgentSessionWorkspaceSourceSchema.safeParse({ type: 'system', workspaceId: workspace.id }).success).toBe(
+      false
+    )
   })
 })

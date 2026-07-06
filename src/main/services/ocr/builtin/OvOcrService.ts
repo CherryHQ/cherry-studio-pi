@@ -1,7 +1,7 @@
 import { application } from '@application'
 import { loggerService } from '@logger'
 import { isWin } from '@main/core/platform'
-import { isImageFileMetadata } from '@shared/data/types/file/legacyFileMetadata'
+import { isImageFileMetadata } from '@shared/data/types/legacyFile'
 import type { OcrOvConfig, OcrResult, SupportedOcrFile } from '@shared/types/ocr'
 import { execFile, type ExecFileOptions } from 'child_process'
 import * as fs from 'fs'

@@ -10,7 +10,8 @@ vi.mock('@logger', () => ({
   }
 }))
 
-import { fileEntryTable, fileRefTable } from '@data/db/schemas/file'
+import { fileEntryTable } from '@data/db/schemas/file'
+import { chatMessageFileRefTable } from '@data/db/schemas/fileRelations'
 import { messageTable } from '@data/db/schemas/message'
 import { pinTable } from '@data/db/schemas/pin'
 import { setupTestDatabase } from '@test-helpers/db'
@@ -543,9 +544,9 @@ describe('ChatMigrator validate orphan-ratio diagnostic', () => {
         const get = vi.fn().mockImplementation(() => {
           if (!firstCountReturned) {
             firstCountReturned = true
-            return Promise.resolve({ count: targetTopicCount })
+            return { count: targetTopicCount }
           }
-          return Promise.resolve({ count: 0 })
+          return { count: 0 }
         })
         return {
           from: vi.fn().mockReturnValue({
@@ -556,7 +557,7 @@ describe('ChatMigrator validate orphan-ratio diagnostic', () => {
       }
       return {
         from: vi.fn().mockReturnValue({
-          limit: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) })
+          limit: vi.fn().mockReturnValue({ all: vi.fn().mockReturnValue([]) })
         })
       }
     })
@@ -766,7 +767,7 @@ describe('ChatMigrator.insertStagedTopics phase 3 (pin emission)', () => {
     ) => Promise<{ pinsInserted: number }>
 
     // Should not throw despite the existing pin row.
-    await expect(fn.call(migrator, ctxOf())).resolves.toBeDefined()
+    expect(fn.call(migrator, ctxOf())).toBeDefined()
 
     // Original pin row is preserved (DO NOTHING leaves it in place).
     const pins = await dbh.db.select().from(pinTable).where(eq(pinTable.entityType, 'topic'))
@@ -808,10 +809,10 @@ describe('ChatMigrator model reference sanitization', () => {
   })
 })
 
-describe('ChatMigrator.insertStagedTopics file_ref backfill', () => {
+describe('ChatMigrator.insertStagedTopics chat_message_file_ref backfill', () => {
   const dbh = setupTestDatabase()
 
-  /** Seed a minimal file_entry row so FK-constrained file_ref inserts succeed. */
+  /** Seed a minimal file_entry row so FK-constrained chat_message_file_ref inserts succeed. */
   async function seedFileEntry(id: string): Promise<void> {
     const now = Date.now()
     await dbh.db.insert(fileEntryTable).values({
@@ -888,7 +889,7 @@ describe('ChatMigrator.insertStagedTopics file_ref backfill', () => {
     return { db: dbh.db } as unknown as MigrationContext
   }
 
-  it('creates file_ref rows for image/file blocks referencing existing file_entry', async () => {
+  it('creates chat_message_file_ref rows for image/file blocks referencing existing file_entry', async () => {
     await seedFileEntry('fe-img-1')
     await seedFileEntry('fe-file-1')
 
@@ -906,9 +907,8 @@ describe('ChatMigrator.insertStagedTopics file_ref backfill', () => {
     ) => Promise<{ pinsInserted: number }>
     await fn.call(migrator, ctxOf())
 
-    const refs = await dbh.db.select().from(fileRefTable)
+    const refs = await dbh.db.select().from(chatMessageFileRefTable)
     expect(refs).toHaveLength(2)
-    expect(refs.every((r) => r.sourceType === 'chat_message')).toBe(true)
     expect(refs.every((r) => r.role === 'attachment')).toBe(true)
     expect(refs.every((r) => r.sourceId === 'm1')).toBe(true)
     const fileEntryIds = refs.map((r) => r.fileEntryId).sort()
@@ -940,60 +940,7 @@ describe('ChatMigrator.insertStagedTopics file_ref backfill', () => {
     expect(rows.filter((r) => r.role !== 'root').some((r) => r.parentId === null)).toBe(false)
   })
 
-  it('converts content-bearing legacy root rows before inserting message_root_parent_check data', async () => {
-    const migrator = new ChatMigrator()
-    const legacyRoot = newMessage('legacy-root', 't-legacy-root', [{ type: 'main_text', content: 'kept content' }])
-    legacyRoot.role = 'root'
-    const child = newMessage('legacy-child', 't-legacy-root', [{ type: 'main_text', content: 'child' }], 'legacy-root')
-    stage(migrator, [{ topic: newTopic('t-legacy-root', 100), messages: [legacyRoot, child], pinned: false }], [])
-
-    const fn = (migrator as unknown as Record<string, unknown>)['insertStagedTopics'] as (
-      ctx: MigrationContext
-    ) => Promise<{ messagesInserted: number }>
-    await fn.call(migrator, ctxOf())
-
-    const rows = await dbh.db.select().from(messageTable).where(eq(messageTable.topicId, 't-legacy-root'))
-    const structuralRoots = rows.filter((r) => r.parentId === null)
-    const migratedRoot = rows.find((r) => r.id === 'legacy-root')
-    const migratedChild = rows.find((r) => r.id === 'legacy-child')
-
-    expect(structuralRoots).toHaveLength(1)
-    expect(structuralRoots[0].role).toBe('root')
-    expect(migratedRoot?.role).toBe('system')
-    expect(migratedRoot?.parentId).toBe(structuralRoots[0].id)
-    expect(migratedChild?.parentId).toBe('legacy-root')
-    expect(rows.every((r) => (r.role === 'root') === (r.parentId === null))).toBe(true)
-  })
-
-  it('drops empty legacy root rows and remaps their children to the new virtual root', async () => {
-    const migrator = new ChatMigrator()
-    const emptyLegacyRoot = newMessage('legacy-empty-root', 't-empty-root', [])
-    emptyLegacyRoot.role = 'root'
-    const child = newMessage(
-      'legacy-root-child',
-      't-empty-root',
-      [{ type: 'main_text', content: 'child content' }],
-      'legacy-empty-root'
-    )
-    stage(migrator, [{ topic: newTopic('t-empty-root', 100), messages: [emptyLegacyRoot, child], pinned: false }], [])
-
-    const fn = (migrator as unknown as Record<string, unknown>)['insertStagedTopics'] as (
-      ctx: MigrationContext
-    ) => Promise<{ messagesInserted: number }>
-    await fn.call(migrator, ctxOf())
-
-    const rows = await dbh.db.select().from(messageTable).where(eq(messageTable.topicId, 't-empty-root'))
-    const structuralRoots = rows.filter((r) => r.parentId === null)
-    const migratedChild = rows.find((r) => r.id === 'legacy-root-child')
-
-    expect(rows.some((r) => r.id === 'legacy-empty-root')).toBe(false)
-    expect(structuralRoots).toHaveLength(1)
-    expect(structuralRoots[0].role).toBe('root')
-    expect(migratedChild?.parentId).toBe(structuralRoots[0].id)
-    expect(rows.every((r) => (r.role === 'root') === (r.parentId === null))).toBe(true)
-  })
-
-  it('skips file_ref for dangling fileId and records warning', async () => {
+  it('skips chat_message_file_ref for dangling fileId and records warning', async () => {
     const migrator = new ChatMigrator()
     const messages = [newMessage('m-dangle', 't-dangle', [{ type: 'image', fileId: 'nonexistent-fe' }])]
     // migratedFileEntryIds is empty — simulates no matching file_entry
@@ -1004,7 +951,7 @@ describe('ChatMigrator.insertStagedTopics file_ref backfill', () => {
     ) => Promise<{ pinsInserted: number }>
     await fn.call(migrator, ctxOf())
 
-    const refs = await dbh.db.select().from(fileRefTable)
+    const refs = await dbh.db.select().from(chatMessageFileRefTable)
     expect(refs).toHaveLength(0)
 
     const m = migrator as unknown as Record<string, unknown>
@@ -1030,12 +977,12 @@ describe('ChatMigrator.insertStagedTopics file_ref backfill', () => {
     ) => Promise<{ pinsInserted: number }>
     await fn.call(migrator, ctxOf())
 
-    const refs = await dbh.db.select().from(fileRefTable)
+    const refs = await dbh.db.select().from(chatMessageFileRefTable)
     expect(refs).toHaveLength(1)
     expect(refs[0].fileEntryId).toBe('fe-dup')
   })
 
-  it('inserts zero file_ref rows for text-only messages', async () => {
+  it('inserts zero chat_message_file_ref rows for text-only messages', async () => {
     const migrator = new ChatMigrator()
     const messages = [newMessage('m-text', 't-text', [{ type: 'main_text', content: 'just text' }])]
     stage(migrator, [{ topic: newTopic('t-text', 100), messages, pinned: false }], [])
@@ -1045,7 +992,7 @@ describe('ChatMigrator.insertStagedTopics file_ref backfill', () => {
     ) => Promise<{ pinsInserted: number }>
     await fn.call(migrator, ctxOf())
 
-    const refs = await dbh.db.select().from(fileRefTable)
+    const refs = await dbh.db.select().from(chatMessageFileRefTable)
     expect(refs).toHaveLength(0)
   })
 
@@ -1067,7 +1014,7 @@ describe('ChatMigrator.insertStagedTopics file_ref backfill', () => {
     ) => Promise<{ pinsInserted: number }>
     await fn.call(migrator, ctxOf())
 
-    const refs = await dbh.db.select().from(fileRefTable)
+    const refs = await dbh.db.select().from(chatMessageFileRefTable)
     expect(refs).toHaveLength(1)
     expect(refs[0].fileEntryId).toBe('fe-valid')
     expect(refs[0].sourceId).toBe('m-img')
@@ -1078,7 +1025,7 @@ describe('ChatMigrator.insertStagedTopics file_ref backfill', () => {
     expect(warnings.get('chat_message_dangling_file_entry')!.count).toBe(1)
   })
 
-  it('uses remapped message ID as file_ref.sourceId when dedup renames a collided ID', async () => {
+  it('uses remapped message ID as chat_message_file_ref.sourceId when dedup renames a collided ID', async () => {
     await seedFileEntry('fe-a')
     await seedFileEntry('fe-b')
 
@@ -1102,7 +1049,7 @@ describe('ChatMigrator.insertStagedTopics file_ref backfill', () => {
     const fn = m['insertStagedTopics'] as (ctx: MigrationContext) => Promise<any>
     await fn.call(migrator, ctxOf())
 
-    const refs = await dbh.db.select().from(fileRefTable)
+    const refs = await dbh.db.select().from(chatMessageFileRefTable)
     expect(refs).toHaveLength(2)
 
     const sourceIds = refs.map((r) => r.sourceId).sort()
@@ -1116,7 +1063,7 @@ describe('ChatMigrator.insertStagedTopics file_ref backfill', () => {
     expect(remappedId).toMatch(/^[0-9a-f]{8}-/)
   })
 
-  it('accumulates file_ref rows across multiple topic batches (>TOPIC_BATCH_SIZE)', async () => {
+  it('accumulates chat_message_file_ref rows across multiple topic batches (>TOPIC_BATCH_SIZE)', async () => {
     const topicCount = 52
     const feIds = Array.from({ length: topicCount }, (_, i) => `fe-batch-${i}`)
     for (const id of feIds) await seedFileEntry(id)
@@ -1136,12 +1083,12 @@ describe('ChatMigrator.insertStagedTopics file_ref backfill', () => {
     const fn = m['insertStagedTopics'] as (ctx: MigrationContext) => Promise<any>
     await fn.call(migrator, ctxOf())
 
-    const refs = await dbh.db.select().from(fileRefTable)
+    const refs = await dbh.db.select().from(chatMessageFileRefTable)
     expect(refs).toHaveLength(topicCount)
     expect(m['fileRefInsertCount']).toBe(topicCount)
   })
 
-  it('produces separate file_ref rows when different messages reference the same fileId', async () => {
+  it('produces separate chat_message_file_ref rows when different messages reference the same fileId', async () => {
     await seedFileEntry('fe-shared')
 
     const migrator = new ChatMigrator()
@@ -1159,7 +1106,7 @@ describe('ChatMigrator.insertStagedTopics file_ref backfill', () => {
     const fn = m['insertStagedTopics'] as (ctx: MigrationContext) => Promise<any>
     await fn.call(migrator, ctxOf())
 
-    const refs = await dbh.db.select().from(fileRefTable)
+    const refs = await dbh.db.select().from(chatMessageFileRefTable)
     expect(refs).toHaveLength(2)
     expect(refs.every((r) => r.fileEntryId === 'fe-shared')).toBe(true)
     expect(new Set(refs.map((r) => r.sourceId)).size).toBe(2)

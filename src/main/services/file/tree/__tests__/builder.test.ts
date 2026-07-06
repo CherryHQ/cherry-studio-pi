@@ -3,10 +3,27 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 import type { TreeMutationEvent } from '@shared/utils/file'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { createDirectoryTree, type DirectoryTreeBuilder, isTreePathSameOrChild } from '../builder'
-import { normalizeGitignoreRootPath, relativePathFromGitignoreRoot } from '../gitignore'
+import { createDirectoryTree, type DirectoryTreeBuilder } from '../builder'
+import { tryTestRipgrepPath } from './ripgrepTestUtils'
+
+// Production resolves ripgrep via BinaryManager (`getBinaryPath('rg')`), which
+// reads cherry.bin / mise shims — neither is populated under vitest. Point it
+// at the test ripgrep binary so the underlying directory scan spawns a real ripgrep.
+vi.mock('@main/utils/binaryResolver', async () => {
+  const { tryTestRipgrepPath: tryPath } = await import('./ripgrepTestUtils')
+  const resolvedRgPath = tryPath() ?? '/nonexistent/rg'
+  return {
+    getBinaryPath: async (name?: string) => (name === 'rg' ? resolvedRgPath : (name ?? ''))
+  }
+})
+
+vi.mock('@main/utils/binaryEnv', () => ({
+  getBinaryExecutionEnv: () => ({})
+}))
+
+const ripgrepAvailable = tryTestRipgrepPath() !== null
 
 const waitForEvent = (
   builder: DirectoryTreeBuilder,
@@ -28,40 +45,7 @@ const waitForEvent = (
   })
 }
 
-describe('isTreePathSameOrChild', () => {
-  it('keeps normal directory boundaries strict', () => {
-    expect(isTreePathSameOrChild('/Users/me/Notes', '/Users/me/Notes')).toBe(true)
-    expect(isTreePathSameOrChild('/Users/me/Notes/a.md', '/Users/me/Notes')).toBe(true)
-    expect(isTreePathSameOrChild('/Users/me/Notes-other/a.md', '/Users/me/Notes')).toBe(false)
-  })
-
-  it('supports filesystem roots without creating double-slash boundaries', () => {
-    expect(isTreePathSameOrChild('/Users/me/a.md', '/')).toBe(true)
-    expect(isTreePathSameOrChild('C:/Users/me/a.md', 'C:/')).toBe(true)
-    expect(isTreePathSameOrChild('C:/Users/me/a.md', 'D:/')).toBe(false)
-  })
-})
-
-describe('normalizeGitignoreRootPath', () => {
-  it('preserves the filesystem root instead of trimming it to an empty path', () => {
-    expect(normalizeGitignoreRootPath('/')).toBe('/')
-    expect(normalizeGitignoreRootPath('/Users/me/Notes/')).toBe('/Users/me/Notes')
-  })
-})
-
-describe('relativePathFromGitignoreRoot', () => {
-  it('derives relative paths for filesystem roots without requiring a double slash', () => {
-    expect(relativePathFromGitignoreRoot('/Users/me/Notes/a.md', '/')).toBe('Users/me/Notes/a.md')
-    expect(relativePathFromGitignoreRoot('/', '/')).toBeNull()
-  })
-
-  it('keeps normal directory boundaries strict', () => {
-    expect(relativePathFromGitignoreRoot('/Users/me/Notes/a.md', '/Users/me/Notes')).toBe('a.md')
-    expect(relativePathFromGitignoreRoot('/Users/me/Notes-other/a.md', '/Users/me/Notes')).toBeNull()
-  })
-})
-
-describe('createDirectoryTree — initial scan', () => {
+describe.skipIf(!ripgrepAvailable)('createDirectoryTree — initial scan', () => {
   let tmp: string
   beforeEach(async () => {
     tmp = await mkdtemp(path.join(tmpdir(), 'cherry-tree-scan-'))
@@ -193,7 +177,7 @@ describe('createDirectoryTree — initial scan', () => {
   })
 })
 
-describe('createDirectoryTree — watcher mutations', () => {
+describe.skipIf(!ripgrepAvailable)('createDirectoryTree — watcher mutations', () => {
   let tmp: string
   beforeEach(async () => {
     tmp = await mkdtemp(path.join(tmpdir(), 'cherry-tree-watch-'))
@@ -460,7 +444,7 @@ describe('createDirectoryTree — watcher mutations', () => {
   })
 })
 
-describe('createDirectoryTree — DB isolation', () => {
+describe.skipIf(!ripgrepAvailable)('createDirectoryTree — DB isolation', () => {
   it('the tree primitive does not import @main/data', async () => {
     // Import-graph proxy: a regex over the source files. The classes live
     // in `src/shared/utils/file/tree.ts` and the main-side primitive

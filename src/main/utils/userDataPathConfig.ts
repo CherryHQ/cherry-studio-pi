@@ -3,7 +3,7 @@ import path from 'node:path'
 import { bootConfigService } from '@main/data/bootConfig'
 import type { BootConfigSchema } from '@shared/data/bootConfig/bootConfigSchemas'
 
-import { untildify } from './file'
+import { untildify } from './legacyFile'
 
 export interface UserDataPathBootConfig {
   get(key: 'app.user_data_path'): BootConfigSchema['app.user_data_path']

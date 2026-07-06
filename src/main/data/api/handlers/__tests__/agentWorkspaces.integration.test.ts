@@ -10,20 +10,14 @@ import type { AgentWorkspaceEntity } from '@shared/data/api/schemas/agentWorkspa
 import { setupTestDatabase } from '@test-helpers/db'
 import { eq } from 'drizzle-orm'
 import path from 'path'
-import { afterEach, beforeEach, describe, expect, it, type Mock } from 'vitest'
+import { beforeEach, describe, expect, it, type Mock } from 'vitest'
 
 describe('agentWorkspaceHandlers integration', () => {
   const dbh = setupTestDatabase()
   const agentId = 'agent-workspace-handler-test'
 
   beforeEach(async () => {
-    ;(application.get('DbService').withWriteTx as Mock).mockImplementation(async (fn) =>
-      dbh.db.transaction(fn as never)
-    )
-    ;(application.getPath as Mock).mockImplementation((key: string, filename?: string) => {
-      const base = key === 'feature.agents.workspaces' ? workspacePath('managed-workspaces') : `/mock/${key}`
-      return filename ? path.join(base, filename) : base
-    })
+    ;(application.get('DbService').withWriteTx as Mock).mockImplementation((fn) => dbh.db.transaction(fn as never))
     await dbh.db.insert(agentTable).values({
       id: agentId,
       type: 'claude-code',
@@ -34,27 +28,22 @@ describe('agentWorkspaceHandlers integration', () => {
     })
   })
 
-  afterEach(() => {
-    ;(application.get('DbService').withWriteTx as Mock).mockReset()
-    ;(application.getPath as Mock).mockReset()
-  })
-
   function workspacePath(name: string): string {
     return path.join('/tmp', 'cherry-workspace-handler', name)
   }
 
   async function createWorkspace(name: string): Promise<AgentWorkspaceEntity> {
-    return await dbh.db.transaction((tx) => agentWorkspaceService.findOrCreateByPathTx(tx, workspacePath(name)))
+    return dbh.db.transaction((tx) => agentWorkspaceService.findOrCreateByPathTx(tx, workspacePath(name)))
   }
 
   it('deletes a user workspace and its bound sessions and pins in one handler call', async () => {
     const workspace = await createWorkspace('cascade')
-    const first = await agentSessionService.create({
+    const first = agentSessionService.create({
       agentId,
       name: 'First',
       workspace: { type: 'user', workspaceId: workspace.id }
     })
-    const second = await agentSessionService.create({
+    const second = agentSessionService.create({
       agentId,
       name: 'Second',
       workspace: { type: 'user', workspaceId: workspace.id }
@@ -79,11 +68,17 @@ describe('agentWorkspaceHandlers integration', () => {
       await dbh.db.select().from(agentSessionTable).where(eq(agentSessionTable.workspaceId, workspace.id))
     ).toEqual([])
     expect(await dbh.db.select().from(pinTable).where(eq(pinTable.entityId, first.id))).toEqual([])
-    await expect(agentSessionService.getById(second.id)).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    let err: unknown
+    try {
+      agentSessionService.getById(second.id)
+    } catch (e) {
+      err = e
+    }
+    expect(err).toMatchObject({ code: 'NOT_FOUND' })
   })
 
   it('rejects system workspace deletes and preserves the backing session and pin', async () => {
-    const session = await agentSessionService.create({
+    const session = agentSessionService.create({
       agentId,
       name: 'System Session',
       workspace: { type: 'system' }
@@ -96,19 +91,17 @@ describe('agentWorkspaceHandlers integration', () => {
       createdAt: 1,
       updatedAt: 1
     })
-    expect(session.workspace).not.toBeNull()
-    const workspace = session.workspace!
 
     await expect(
       agentWorkspaceHandlers['/agent-workspaces/:workspaceId'].DELETE({
-        params: { workspaceId: workspace.id }
+        params: { workspaceId: session.workspace!.id }
       } as never)
     ).rejects.toMatchObject({ code: 'NOT_FOUND' })
 
     const workspaceRows = await dbh.db
       .select()
       .from(agentWorkspaceTable)
-      .where(eq(agentWorkspaceTable.id, workspace.id))
+      .where(eq(agentWorkspaceTable.id, session.workspace!.id))
     expect(workspaceRows).toHaveLength(1)
     expect(await dbh.db.select().from(agentSessionTable).where(eq(agentSessionTable.id, session.id))).toHaveLength(1)
     expect(await dbh.db.select().from(pinTable).where(eq(pinTable.entityId, session.id))).toHaveLength(1)

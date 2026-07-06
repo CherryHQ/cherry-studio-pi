@@ -1,6 +1,6 @@
 import { translateLanguageTable } from '@data/db/schemas/translateLanguage'
 import { translateLanguageService } from '@data/services/TranslateLanguageService'
-import { ErrorCode } from '@shared/data/api'
+import { ErrorCode } from '@shared/data/api/errors'
 import type { CreateTranslateLanguageDto } from '@shared/data/api/schemas/translate'
 import { parsePersistedLangCode } from '@shared/data/preference/preferenceTypes'
 import { setupTestDatabase } from '@test-helpers/db'
@@ -28,7 +28,7 @@ describe('TranslateLanguageService', () => {
     it('should return all languages ordered by createdAt', async () => {
       await seedLanguage()
 
-      const result = await translateLanguageService.list()
+      const result = translateLanguageService.list()
       expect(result).toHaveLength(1)
       expect(result[0].langCode).toBe('ja-jp')
     })
@@ -38,12 +38,12 @@ describe('TranslateLanguageService', () => {
     it('should return a language by langCode', async () => {
       await seedLanguage()
 
-      const result = await translateLanguageService.getByLangCode('ja-jp')
+      const result = translateLanguageService.getByLangCode('ja-jp')
       expect(result.langCode).toBe('ja-jp')
     })
 
     it('should throw NotFound for non-existent langCode', async () => {
-      await expect(translateLanguageService.getByLangCode('xx-xx')).rejects.toThrow()
+      expect(() => translateLanguageService.getByLangCode('xx-xx')).toThrow()
     })
   })
 
@@ -55,7 +55,7 @@ describe('TranslateLanguageService', () => {
         emoji: '🇯🇵'
       }
 
-      const result = await translateLanguageService.create(dto)
+      const result = translateLanguageService.create(dto)
       expect(result.langCode).toBe('ja-jp')
 
       const rows = await dbh.db.select().from(translateLanguageTable)
@@ -75,7 +75,13 @@ describe('TranslateLanguageService', () => {
       // `e.message.includes('UNIQUE constraint failed')`, which misses
       // Drizzle's wrapped "Failed query:" envelope. The fix walks the
       // cause chain; the assertion here locks that contract in.
-      await expect(translateLanguageService.create(dto)).rejects.toMatchObject({
+      let err: unknown
+      try {
+        translateLanguageService.create(dto)
+      } catch (e) {
+        err = e
+      }
+      expect(err).toMatchObject({
         code: ErrorCode.CONFLICT,
         message: expect.stringContaining('already exists')
       })
@@ -98,7 +104,7 @@ describe('TranslateLanguageService', () => {
     it('should update value/emoji', async () => {
       await seedLanguage()
 
-      const result = await translateLanguageService.update('ja-jp', { value: 'Updated' })
+      const result = translateLanguageService.update('ja-jp', { value: 'Updated' })
       expect(result.value).toBe('Updated')
 
       const [row] = await dbh.db.select().from(translateLanguageTable)
@@ -108,14 +114,14 @@ describe('TranslateLanguageService', () => {
     it('should return existing record on empty update', async () => {
       await seedLanguage()
 
-      const result = await translateLanguageService.update('ja-jp', {})
+      const result = translateLanguageService.update('ja-jp', {})
       expect(result.langCode).toBe('ja-jp')
       expect(result.value).toBe('Japanese')
       expect(MockMainDbServiceExport.dbService.withWriteTx).not.toHaveBeenCalled()
     })
 
     it('should throw NotFound for non-existent langCode', async () => {
-      await expect(translateLanguageService.update('xx-xx', { value: 'Test' })).rejects.toThrow()
+      expect(() => translateLanguageService.update('xx-xx', { value: 'Test' })).toThrow()
     })
 
     it('should route non-empty updates through the serialized write transaction helper', async () => {
@@ -131,14 +137,14 @@ describe('TranslateLanguageService', () => {
     it('should delete an existing language', async () => {
       await seedLanguage()
 
-      await expect(translateLanguageService.delete('ja-jp')).resolves.toBeUndefined()
+      expect(translateLanguageService.delete('ja-jp')).toBeUndefined()
 
       const rows = await dbh.db.select().from(translateLanguageTable)
       expect(rows).toHaveLength(0)
     })
 
     it('should throw NotFound for non-existent langCode', async () => {
-      await expect(translateLanguageService.delete('xx-xx')).rejects.toThrow()
+      expect(() => translateLanguageService.delete('xx-xx')).toThrow()
     })
 
     it('should route deletion through the serialized write transaction helper', async () => {

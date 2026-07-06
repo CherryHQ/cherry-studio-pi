@@ -28,4 +28,28 @@ describe('DefaultPreferences', () => {
     expect(clickAssistantDefault).toBe(false)
     expect(DefaultPreferences.default['assistant.click_to_show_topic']).toBe(false)
   })
+
+  it('requires users to choose keyword web search provider by default', () => {
+    const searchKeywordsDefault: PreferenceSchemas['default']['chat.web_search.default_search_keywords_provider'] = null
+
+    expect(DefaultPreferences.default['chat.web_search.default_search_keywords_provider']).toBe(searchKeywordsDefault)
+  })
+
+  it('groups conversations and agent sessions by the traditional view defaults for new users', () => {
+    const topicDisplayDefault: PreferenceSchemas['default']['topic.tab.display_mode'] = 'time'
+    const agentSessionDisplayDefault: PreferenceSchemas['default']['agent.session.display_mode'] = 'workdir'
+
+    expect(DefaultPreferences.default['topic.tab.display_mode']).toBe(topicDisplayDefault)
+    expect(DefaultPreferences.default['agent.session.display_mode']).toBe(agentSessionDisplayDefault)
+  })
+
+  it('defaults both conversation and work surfaces to the classic layout for new users', () => {
+    const topicLayoutDefault: PreferenceSchemas['default']['topic.layout'] = 'classic'
+    const agentLayoutDefault: PreferenceSchemas['default']['agent.layout'] = 'classic'
+
+    // preferenceSchemas.ts is generated from classification.json; pin the defaults so a
+    // regeneration that drops or flips either layout key fails loudly instead of shipping silently.
+    expect(DefaultPreferences.default['topic.layout']).toBe(topicLayoutDefault)
+    expect(DefaultPreferences.default['agent.layout']).toBe(agentLayoutDefault)
+  })
 })

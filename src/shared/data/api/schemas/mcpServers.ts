@@ -8,8 +8,7 @@
 import * as z from 'zod'
 
 import { type McpServer, McpServerSchema, McpServerTypeSchema } from '../../types/mcpServer'
-import type { OffsetPaginationResponse } from '../apiTypes'
-import { QueryBooleanSchema } from './_endpointHelpers'
+import type { OffsetPaginationResponse } from '../types'
 
 /**
  * Mutable MCP server fields — explicit whitelist of everything a client may write.
@@ -48,19 +47,13 @@ const MCP_SERVER_MUTABLE_FIELDS = {
   installedAt: true
 } as const
 
-const McpServerWriteSchema = McpServerSchema.pick(MCP_SERVER_MUTABLE_FIELDS).extend({
-  // Nullable DB columns are exposed as undefined on reads, but write DTOs need
-  // a distinct value that can clear an existing custom timeout.
-  timeout: z.number().nullable().optional()
-})
-
 /**
  * DTO for creating a new MCP server.
  * - `name` is required (non-empty)
  * - `id` is excluded (auto-generated UUID by database)
  * - All other fields are optional
  */
-export const CreateMcpServerSchema = McpServerWriteSchema.partial().required({ name: true })
+export const CreateMcpServerSchema = McpServerSchema.pick(MCP_SERVER_MUTABLE_FIELDS).partial().required({ name: true })
 export type CreateMcpServerDto = z.infer<typeof CreateMcpServerSchema>
 
 /**
@@ -76,7 +69,7 @@ export const ListMcpServersQuerySchema = z.object({
   /** Filter by server ID */
   id: z.string().optional(),
   /** Filter by active state */
-  isActive: QueryBooleanSchema.optional(),
+  isActive: z.boolean().optional(),
   /** Filter by server type */
   type: McpServerTypeSchema.optional()
 })

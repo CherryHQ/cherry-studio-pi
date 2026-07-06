@@ -6,7 +6,7 @@ import { knowledgeItemService } from '@data/services/KnowledgeItemService'
 import { loggerService } from '@logger'
 import type { JobHandler, JobSettledEvent } from '@main/core/job/types'
 import type { JobSnapshot } from '@shared/data/api/schemas/jobs'
-import type { KnowledgeItemStatus } from '@shared/data/types/knowledge'
+import { KNOWLEDGE_ITEM_ERROR_INDEXING_INTERRUPTED, type KnowledgeItemStatus } from '@shared/data/types/knowledge'
 
 import type { KnowledgeLockManager } from '../KnowledgeLockManager'
 import type { KnowledgeWorkflowService } from '../KnowledgeWorkflowService'
@@ -32,7 +32,9 @@ export function createReindexSubtreeJobHandler(
   workflowService: KnowledgeWorkflowService
 ): JobHandler<KnowledgeReindexSubtreePayload> {
   return {
-    recovery: 'retry',
+    // Don't auto-resume on restart — a deliberate app quit must not re-spend the
+    // embedding API; the item is parked at `failed` and reindexed on demand.
+    recovery: 'abandon',
     defaultQueue: (input) => knowledgeQueueName(toKnowledgeBaseId(input.baseId)),
     defaultConcurrency: 5,
     defaultRetryPolicy: {
@@ -50,15 +52,15 @@ export function createReindexSubtreeJobHandler(
 
       // Reindex is admitted only for completed/failed subtrees, but delete may win
       // after enqueue. Keep this fast path so delete remains the only preemptive action.
-      if (await shouldSkipDeletingSubtreeReindex(baseId, rootItemIds, ctx.jobId)) {
+      if (shouldSkipDeletingSubtreeReindex(baseId, rootItemIds, ctx.jobId)) {
         reportKnowledgeProgress(ctx, 100, { stage: 'deleting' })
         return
       }
 
       // Reset vectors, expanded children, and root statuses as one base-level mutation.
       const resetResult = await knowledgeLockManager.withBaseMutationLock(baseId, async () => {
-        const base = await knowledgeBaseService.getById(baseId)
-        const rootItems = await knowledgeItemService.getSubtreeItems(baseId, rootItemIds, { includeRoots: true })
+        const base = knowledgeBaseService.getById(baseId)
+        const rootItems = knowledgeItemService.getSubtreeItems(baseId, rootItemIds, { includeRoots: true })
         // Re-check under the mutation lock so reindex cannot turn a just-deleted
         // subtree back into preparing/processing during cleanup/reset.
         if (rootItems.some((item) => item.status === 'deleting')) {
@@ -92,9 +94,9 @@ export function createReindexSubtreeJobHandler(
         }
 
         const rebuildableRootIds = rebuildableRoots.map((item) => item.id)
-        const leafItemIds = (
-          await knowledgeItemService.getSubtreeItems(baseId, rebuildableRootIds, { includeRoots: true, leafOnly: true })
-        ).map((item) => item.id)
+        const leafItemIds = knowledgeItemService
+          .getSubtreeItems(baseId, rebuildableRootIds, { includeRoots: true, leafOnly: true })
+          .map((item) => item.id)
 
         await deleteKnowledgeItemVectors(base, leafItemIds)
 
@@ -103,17 +105,17 @@ export function createReindexSubtreeJobHandler(
           .map((item) => item.id)
         if (containerRootIds.length > 0) {
           // Container roots are rescanned from source, so their previous expansion must be removed.
-          const descendantItems = await knowledgeItemService.getSubtreeItems(baseId, containerRootIds)
+          const descendantItems = knowledgeItemService.getSubtreeItems(baseId, containerRootIds)
           // Best-effort: a file-removal failure must not abort the row deletion below.
           await deleteKnowledgeItemFilesBestEffort(baseId, descendantItems, { baseId, jobId: ctx.jobId })
-          await knowledgeItemService.deleteItemsByIds(
+          knowledgeItemService.deleteItemsByIds(
             baseId,
             descendantItems.map((item) => item.id)
           )
         }
 
         for (const item of rebuildableRoots) {
-          await knowledgeItemService.updateStatus(item.id, item.type === 'directory' ? 'preparing' : 'processing')
+          knowledgeItemService.updateStatus(item.id, item.type === 'directory' ? 'preparing' : 'processing')
         }
         return { roots: rebuildableRoots, skippedDeleting: false, skippedMissingSource: missingSourceRootIds.length }
       })
@@ -144,8 +146,15 @@ export function createReindexSubtreeJobHandler(
           .map((item) => item.id)
           .filter((rootItemId) => !completedSchedulingRootIds.has(rootItemId))
         if (unscheduledRootIds.length > 0) {
-          await knowledgeItemService.setSubtreeStatus(baseId, unscheduledRootIds, 'failed', {
-            error: `Failed to schedule reindex after reset: ${message}`
+          // A shutdown abort (deliberate quit) lands here when `throwIfAborted` fires in the
+          // scheduling loop. Store the localized `indexing_interrupted` code instead of a raw
+          // `…: JobManager shutdown` string the tooltip would pass through verbatim; a genuine
+          // scheduling failure keeps its diagnostic message.
+          const failError = ctx.signal.aborted
+            ? KNOWLEDGE_ITEM_ERROR_INDEXING_INTERRUPTED
+            : `Failed to schedule reindex after reset: ${message}`
+          knowledgeItemService.setSubtreeStatus(baseId, unscheduledRootIds, 'failed', {
+            error: failError
           })
         }
         throw error
@@ -164,12 +173,8 @@ export function createReindexSubtreeJobHandler(
   }
 }
 
-async function shouldSkipDeletingSubtreeReindex(
-  baseId: string,
-  rootItemIds: string[],
-  jobId: string
-): Promise<boolean> {
-  const subtreeItems = await knowledgeItemService.getSubtreeItems(baseId, rootItemIds, { includeRoots: true })
+function shouldSkipDeletingSubtreeReindex(baseId: string, rootItemIds: string[], jobId: string): boolean {
+  const subtreeItems = knowledgeItemService.getSubtreeItems(baseId, rootItemIds, { includeRoots: true })
   const hasDeletingItem = subtreeItems.some((item) => item.status === 'deleting')
   if (hasDeletingItem) {
     logger.info('Skipping reindex-subtree for deleting subtree', { baseId, rootItemIds, jobId })
@@ -194,7 +199,7 @@ async function markReindexSubtreeFailedOnSettled(event: JobSettledEvent): Promis
       limit: KNOWLEDGE_ACTIVE_JOB_LIMIT
     })
     const rootsWithFollowUpJobs = getRootsWithFollowUpJobs(activeJobs, event.jobId, input.rootItemIds)
-    const rootItems = await knowledgeItemService.getSubtreeItems(input.baseId, input.rootItemIds, {
+    const rootItems = knowledgeItemService.getSubtreeItems(input.baseId, input.rootItemIds, {
       includeRoots: true
     })
     const rootsToFail = rootItems
@@ -205,9 +210,15 @@ async function markReindexSubtreeFailedOnSettled(event: JobSettledEvent): Promis
 
     if (rootsToFail.length === 0) return
 
-    await knowledgeItemService.setSubtreeStatus(input.baseId, rootsToFail, 'failed', {
-      error: `Reindex job ${event.status}: ${reason}`
-    })
+    // A cancelled reindex job was aborted by an app quit (knowledge has no per-item user
+    // cancel), so store the localized `indexing_interrupted` code instead of a raw English
+    // string the tooltip would pass through verbatim. Mirrors settled.ts; other terminal
+    // states keep their diagnostic `Reindex job …` message.
+    const error =
+      event.status === 'cancelled'
+        ? KNOWLEDGE_ITEM_ERROR_INDEXING_INTERRUPTED
+        : `Reindex job ${event.status}: ${reason}`
+    knowledgeItemService.setSubtreeStatus(input.baseId, rootsToFail, 'failed', { error })
   } catch (error) {
     logger.error(
       'Failed to flip reindex-subtree targets to failed in onSettled',

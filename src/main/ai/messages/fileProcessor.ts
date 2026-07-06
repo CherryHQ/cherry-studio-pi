@@ -19,8 +19,7 @@ import { fileURLToPath } from 'node:url'
 
 import { application } from '@application'
 import { loggerService } from '@logger'
-import { read as fsRead } from '@main/utils/file/fs'
-import { summarizeUrlForLog } from '@main/utils/logging'
+import { read as fsRead } from '@main/utils/file'
 import type { FileUIPart } from '@shared/data/types/message'
 import { readCherryMeta } from '@shared/data/types/uiParts'
 import type { FilePath } from '@shared/types/file'
@@ -56,10 +55,7 @@ async function fileUrlToDataUrl(fileUrl: string) {
     const { data, mime } = await fsRead(absPath, { encoding: 'base64' })
     return { url: `data:${mime};base64,${data}`, mediaType: mime }
   } catch (error) {
-    logger.warn('Failed to inline file:// URL', {
-      fileUrl: summarizeUrlForLog(fileUrl),
-      error: error instanceof Error ? error.message : error
-    })
+    logger.warn('Failed to inline file:// URL', { fileUrl, error: error instanceof Error ? error.message : error })
     return null
   }
 }

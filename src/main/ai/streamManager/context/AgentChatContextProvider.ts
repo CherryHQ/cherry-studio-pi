@@ -9,6 +9,7 @@ import { agentSessionMessageService } from '@data/services/AgentSessionMessageSe
 import { agentSessionService } from '@data/services/AgentSessionService'
 import { resolveAgentRuntimeModel } from '@main/ai/agentSession/modelResolution'
 import { application } from '@main/core/application'
+import { topicNamingService } from '@main/services/TopicNamingService'
 import type { AgentSessionMessageEntity } from '@shared/data/api/schemas/agentSessions'
 import type { CherryUIMessage } from '@shared/data/types/message'
 import { parseUniqueModelId } from '@shared/data/types/model'
@@ -18,7 +19,7 @@ import { v7 as uuidv7 } from 'uuid'
 import { AGENT_SESSION_IDLE_TIMEOUT_MS } from '../../agentSession/constants'
 import { extractAgentSessionId, isAgentSessionTopic } from '../../agentSession/topic'
 import { applyTurnInputAttributes, startAiChildTurnSpan } from '../../observability'
-import { runtimeDriverRegistry } from '../../runtime'
+import { runtimeDriverRegistry } from '../../runtime/registry'
 import type { StreamListener } from '../types'
 import type { ChatContextProvider, PreparedDispatch } from './ChatContextProvider'
 import type { MainDispatchRequest } from './dispatch'
@@ -54,13 +55,13 @@ export class AgentChatContextProvider implements ChatContextProvider {
 
     const sessionId = extractAgentSessionId(req.topicId)
 
-    const session = await agentSessionService.getById(sessionId)
+    const session = agentSessionService.getById(sessionId)
     if (!session.agentId) {
       throw new Error(`Cannot dispatch on orphan session ${sessionId} — its agent was deleted`)
     }
 
     const agentId = session.agentId
-    const agent = await agentService.getAgent(agentId)
+    const agent = agentService.getAgent(agentId)
     if (!agent) throw new Error(`Agent not found for session ${sessionId}: ${agentId}`)
     const model = await resolveAgentRuntimeModel(agent)
 
@@ -104,7 +105,7 @@ export class AgentChatContextProvider implements ChatContextProvider {
       // Follow-up to an in-flight session: persist the user row, hand the message to the
       // runtime so it opens the next turn (interrupt → re-dispatch), and attach
       // the new subscriber. No new placeholder/model — that would orphan a row.
-      const savedUserMessage = await agentSessionMessageService.saveMessage({
+      const savedUserMessage = agentSessionMessageService.saveMessage({
         sessionId,
         message: {
           id: userMessageId,
@@ -113,6 +114,8 @@ export class AgentChatContextProvider implements ChatContextProvider {
           data: { parts: userMessageParts }
         }
       })
+      // Fire-and-forget is safe: the naming service isolates errors and rechecks state before writing.
+      topicNamingService.maybeRenameAgentSessionFromFirstUserMessage(sessionId, savedUserMessage.data)
 
       if (runtimeService.enqueueUserMessage(sessionId, savedUserMessage)) {
         return {
@@ -135,7 +138,7 @@ export class AgentChatContextProvider implements ChatContextProvider {
 
     // Container trace: one trace tree per session. The turn's `ai.turn` span is a
     // child under it; Claude Code child spans join via the connection's TRACEPARENT.
-    const traceId = await agentSessionService.ensureTraceId(sessionId)
+    const traceId = agentSessionService.ensureTraceId(sessionId)
     const turnTrace = startAiChildTurnSpan(
       'ai.turn',
       {
@@ -163,13 +166,13 @@ export class AgentChatContextProvider implements ChatContextProvider {
     const savedMessages = savedExistingUserMessage
       ? [
           savedExistingUserMessage,
-          await agentSessionMessageService.saveMessage({
+          agentSessionMessageService.saveMessage({
             sessionId,
             message: assistantMessageInput
           })
         ]
       : // Atomic user + pending-assistant write so `useAgentSessionParts` observes both at once.
-        await agentSessionMessageService.saveMessages({
+        agentSessionMessageService.saveMessages({
           sessionId,
           messages: [
             {
@@ -181,6 +184,8 @@ export class AgentChatContextProvider implements ChatContextProvider {
             assistantMessageInput
           ]
         })
+    // Fire-and-forget is safe: the naming service isolates errors and rechecks state before writing.
+    topicNamingService.maybeRenameAgentSessionFromFirstUserMessage(sessionId, savedMessages[0]?.data)
 
     // Author the turn span's input/identity here (where the agent + user message live).
     applyTurnInputAttributes(turnTrace.rootSpan, {

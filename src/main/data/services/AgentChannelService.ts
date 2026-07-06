@@ -8,8 +8,7 @@ import {
 import type { DbOrTx } from '@data/db/types'
 import { nullsToUndefined, timestampToISO } from '@data/services/utils/rowMappers'
 import { loggerService } from '@logger'
-import { storageV2AgentRuntimeTombstoneService } from '@main/services/storageV2/AgentRuntimeTombstoneService'
-import { DataApiErrorFactory } from '@shared/data/api'
+import { DataApiErrorFactory } from '@shared/data/api/errors'
 import type { AgentChannelEntity, CreateAgentChannelDto } from '@shared/data/api/schemas/agentChannels'
 import type { AgentSessionWorkspaceSource } from '@shared/data/api/schemas/agentWorkspaces'
 import type { ChannelConfig } from '@shared/data/types/channel'
@@ -25,14 +24,6 @@ function normalizeChannelConfig(config: unknown): Record<string, unknown> {
 }
 
 export class AgentChannelService {
-  private get dbService() {
-    return application.get('DbService')
-  }
-
-  private get db() {
-    return this.dbService.getDb()
-  }
-
   private rowToEntity(row: ChannelRow): AgentChannelEntity {
     const clean = nullsToUndefined(row)
     return {
@@ -46,7 +37,7 @@ export class AgentChannelService {
     } as AgentChannelEntity
   }
 
-  async createChannel(
+  createChannel(
     data:
       | CreateAgentChannelDto
       | {
@@ -58,7 +49,9 @@ export class AgentChannelService {
           isActive?: boolean
           permissionMode?: string | null
         }
-  ): Promise<AgentChannelEntity> {
+  ): AgentChannelEntity {
+    const database = application.get('DbService').getDb()
+
     const insertData: InsertChannelRow = {
       type: data.type,
       name: data.name,
@@ -69,7 +62,7 @@ export class AgentChannelService {
       permissionMode: data.permissionMode
     }
 
-    const result = await this.dbService.withWriteTx((tx) => tx.insert(channelsTable).values(insertData).returning())
+    const result = database.insert(channelsTable).values(insertData).returning().all()
 
     if (!result[0]) {
       throw DataApiErrorFactory.invalidOperation('create channel', 'database insert returned no row')
@@ -79,24 +72,28 @@ export class AgentChannelService {
     return this.rowToEntity(result[0])
   }
 
-  async getChannel(id: string): Promise<AgentChannelEntity | null> {
-    const result = await this.db.select().from(channelsTable).where(eq(channelsTable.id, id)).limit(1)
+  getChannel(id: string): AgentChannelEntity | null {
+    const database = application.get('DbService').getDb()
+    const result = database.select().from(channelsTable).where(eq(channelsTable.id, id)).limit(1).all()
     return result[0] ? this.rowToEntity(result[0]) : null
   }
 
-  async findBySessionId(sessionId: string): Promise<AgentChannelEntity | null> {
-    const result = await this.db.select().from(channelsTable).where(eq(channelsTable.sessionId, sessionId)).limit(1)
+  findBySessionId(sessionId: string): AgentChannelEntity | null {
+    const database = application.get('DbService').getDb()
+    const result = database.select().from(channelsTable).where(eq(channelsTable.sessionId, sessionId)).limit(1).all()
     return result[0] ? this.rowToEntity(result[0]) : null
   }
 
-  async listChannels(filters?: { agentId?: string; type?: string }): Promise<AgentChannelEntity[]> {
+  listChannels(filters?: { agentId?: string; type?: string }): AgentChannelEntity[] {
+    const database = application.get('DbService').getDb()
+
     const agentCond = filters?.agentId ? eq(channelsTable.agentId, filters.agentId) : undefined
     const typeCond = filters?.type ? eq(channelsTable.type, filters.type) : undefined
     const where = agentCond && typeCond ? and(agentCond, typeCond) : (agentCond ?? typeCond)
 
     const rows = where
-      ? await this.db.select().from(channelsTable).where(where)
-      : await this.db.select().from(channelsTable)
+      ? database.select().from(channelsTable).where(where).all()
+      : database.select().from(channelsTable).all()
 
     return rows.map((row) => this.rowToEntity(row))
   }
@@ -105,23 +102,17 @@ export class AgentChannelService {
    * Add a chatId to the channel's activeChatIds if not already present.
    * Used to auto-track conversations when allowed_chat_ids is empty.
    */
-  async addActiveChatId(channelId: string, chatId: string): Promise<void> {
-    await this.dbService.withWriteTx(async (tx) => {
-      const result = await tx.select().from(channelsTable).where(eq(channelsTable.id, channelId)).limit(1)
-      const row = result[0]
-      if (!row) return
+  addActiveChatId(channelId: string, chatId: string): void {
+    const channel = this.getChannel(channelId)
+    if (!channel) return
 
-      const existing = row.activeChatIds ?? []
-      if (existing.includes(chatId)) return
+    const existing = channel.activeChatIds ?? []
+    if (existing.includes(chatId)) return
 
-      await tx
-        .update(channelsTable)
-        .set({ activeChatIds: [...existing, chatId] })
-        .where(eq(channelsTable.id, channelId))
-    })
+    this.updateChannel(channelId, { activeChatIds: [...existing, chatId] })
   }
 
-  async updateChannel(
+  updateChannel(
     id: string,
     updates: Partial<
       Pick<
@@ -129,14 +120,18 @@ export class AgentChannelService {
         'name' | 'agentId' | 'sessionId' | 'config' | 'isActive' | 'activeChatIds' | 'permissionMode'
       > & { workspace: AgentSessionWorkspaceSource }
     >
-  ): Promise<AgentChannelEntity | null> {
+  ): AgentChannelEntity | null {
+    const database = application.get('DbService').getDb()
     const normalizedUpdates = {
       ...updates,
       ...(updates.config !== undefined ? { config: normalizeChannelConfig(updates.config) } : {})
     }
-    const result = await this.dbService.withWriteTx((tx) =>
-      tx.update(channelsTable).set(normalizedUpdates).where(eq(channelsTable.id, id)).returning()
-    )
+    const result = database
+      .update(channelsTable)
+      .set(normalizedUpdates)
+      .where(eq(channelsTable.id, id))
+      .returning()
+      .all()
 
     if (!result[0]) {
       return null
@@ -146,72 +141,71 @@ export class AgentChannelService {
     return this.rowToEntity(result[0])
   }
 
-  async deleteChannel(id: string): Promise<boolean> {
-    const result = await this.dbService.withWriteTx((tx) =>
-      tx.delete(channelsTable).where(eq(channelsTable.id, id)).returning()
-    )
+  deleteChannel(id: string): boolean {
+    const database = application.get('DbService').getDb()
+    const result = database.delete(channelsTable).where(eq(channelsTable.id, id)).returning().all()
     if (result.length > 0) {
       logger.info('Channel deleted', { channelId: id })
-      await storageV2AgentRuntimeTombstoneService.tombstoneChannel(id).catch((error) => {
-        logger.warn('Failed to tombstone deleted agent channel in Storage v2', { channelId: id, error })
-      })
     }
     return result.length > 0
   }
 
   // ---- Task subscription methods ----
 
-  async subscribeToTask(channelId: string, taskId: string): Promise<void> {
-    await this.dbService.withWriteTx((tx) =>
-      tx.insert(channelTaskSubscriptionsTable).values({ channelId, taskId }).onConflictDoNothing()
-    )
+  subscribeToTask(channelId: string, taskId: string): void {
+    const database = application.get('DbService').getDb()
+    database.insert(channelTaskSubscriptionsTable).values({ channelId, taskId }).onConflictDoNothing().run()
     logger.info('Channel subscribed to task', { channelId, taskId })
   }
 
-  async unsubscribeFromTask(channelId: string, taskId: string): Promise<void> {
-    await this.dbService.withWriteTx((tx) =>
-      tx
-        .delete(channelTaskSubscriptionsTable)
-        .where(
-          and(eq(channelTaskSubscriptionsTable.channelId, channelId), eq(channelTaskSubscriptionsTable.taskId, taskId))
-        )
-    )
+  unsubscribeFromTask(channelId: string, taskId: string): void {
+    const database = application.get('DbService').getDb()
+    database
+      .delete(channelTaskSubscriptionsTable)
+      .where(
+        and(eq(channelTaskSubscriptionsTable.channelId, channelId), eq(channelTaskSubscriptionsTable.taskId, taskId))
+      )
+      .run()
     logger.info('Channel unsubscribed from task', { channelId, taskId })
   }
 
-  async replaceTaskSubscriptions(taskId: string, channelIds: readonly string[]): Promise<void> {
-    await this.dbService.withWriteTx((tx) => this.replaceTaskSubscriptionsTx(tx, taskId, channelIds))
+  replaceTaskSubscriptions(taskId: string, channelIds: readonly string[]): void {
+    application.get('DbService').withWriteTx((tx) => this.replaceTaskSubscriptionsTx(tx, taskId, channelIds))
     logger.info('Channel task subscriptions replaced', { taskId, channelCount: channelIds.length })
   }
 
-  async replaceTaskSubscriptionsTx(tx: DbOrTx, taskId: string, channelIds: readonly string[]): Promise<void> {
-    await tx.delete(channelTaskSubscriptionsTable).where(eq(channelTaskSubscriptionsTable.taskId, taskId))
+  replaceTaskSubscriptionsTx(tx: DbOrTx, taskId: string, channelIds: readonly string[]): void {
+    tx.delete(channelTaskSubscriptionsTable).where(eq(channelTaskSubscriptionsTable.taskId, taskId)).run()
     if (channelIds.length > 0) {
-      await tx
-        .insert(channelTaskSubscriptionsTable)
+      tx.insert(channelTaskSubscriptionsTable)
         .values(channelIds.map((channelId) => ({ channelId, taskId })))
         .onConflictDoNothing()
+        .run()
     }
   }
 
-  async getSubscribedChannels(taskId: string): Promise<AgentChannelEntity[]> {
-    const subs = await this.db
+  getSubscribedChannels(taskId: string): AgentChannelEntity[] {
+    const database = application.get('DbService').getDb()
+    const subs = database
       .select({ channelId: channelTaskSubscriptionsTable.channelId })
       .from(channelTaskSubscriptionsTable)
       .where(eq(channelTaskSubscriptionsTable.taskId, taskId))
+      .all()
 
     if (subs.length === 0) return []
 
     const channelIds = subs.map((s) => s.channelId)
-    const rows = await this.db.select().from(channelsTable).where(inArray(channelsTable.id, channelIds))
+    const rows = database.select().from(channelsTable).where(inArray(channelsTable.id, channelIds)).all()
     return rows.map((row) => this.rowToEntity(row))
   }
 
-  async getSubscribedTasks(channelId: string): Promise<string[]> {
-    const subs = await this.db
+  getSubscribedTasks(channelId: string): string[] {
+    const database = application.get('DbService').getDb()
+    const subs = database
       .select({ taskId: channelTaskSubscriptionsTable.taskId })
       .from(channelTaskSubscriptionsTable)
       .where(eq(channelTaskSubscriptionsTable.channelId, channelId))
+      .all()
     return subs.map((s) => s.taskId)
   }
 }

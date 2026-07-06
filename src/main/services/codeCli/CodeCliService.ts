@@ -2,34 +2,35 @@
  * TODO(v2): Performance — run() blocks up to ~100s before opening terminal
  *
  * Problem:
- * - isUserInChina() makes HTTP request (5s timeout) with no caching, called 2-3x per run()
+ * - regionService.isInChina() makes an HTTP request (5s timeout) on cache miss, called 2-3x per run()
  * - getVersionInfo() blocks on npm registry fetch (15s) + local --version (10s)
  * - updatePackage() blocks on bun install (60s) when autoUpdateToLatest is enabled
  * - All above run serially BEFORE spawn(terminal)
  *
  * Fix:
- * 1. Cache isUserInChina() promise at module level in ipService.ts (process-lifetime)
+ * 1. (done) Egress detection is cached in RegionService (TTL + proxy-key invalidation)
  * 2. Extract local-only getInstalledVersion() for qwen-code --auth-type check
  * 3. Move getVersionInfo() + updatePackage() to fire-and-forget background task
  * 4. Cache getNpmRegistryUrl() at instance level
  * 5. Track background update promise in lifecycle (registerDisposable / onStop)
  */
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 
 import { application } from '@application'
 import { loggerService } from '@logger'
 import { BaseService, Injectable, Phase, ServicePhase } from '@main/core/lifecycle'
 import { isMac, isWin } from '@main/core/platform'
-import { removeEnvProxy } from '@main/utils'
-import { isUserInChina } from '@main/utils/ipService'
+import { regionService } from '@main/services/RegionService'
+import { getBinaryExecutionEnv } from '@main/utils/binaryEnv'
+import { getBinaryPath, isBinaryExists } from '@main/utils/binaryResolver'
 import { getFunctionalKeys, parseJSONC } from '@main/utils/jsonc'
-import { getBinaryName } from '@main/utils/process'
+import { removeEnvProxy } from '@main/utils/processRunner'
+import { getShellEnv } from '@main/utils/shellEnv'
 import { IpcChannel } from '@shared/IpcChannel'
-import { codeCLI, terminalApps, type TerminalConfig, type TerminalConfigWithCommand } from '@shared/types/codeCli'
+import { CodeCli, TerminalApp, type TerminalConfig, type TerminalConfigWithCommand } from '@shared/types/codeCli'
 import type { CodeToolsRunResult } from '@shared/types/codeTools'
-import { type ChildProcess, exec, execFile, spawn } from 'child_process'
+import { spawn } from 'child_process'
 import semver from 'semver'
 import { promisify } from 'util'
 
@@ -41,8 +42,7 @@ import {
   WINDOWS_TERMINALS_WITH_COMMANDS
 } from './terminals'
 
-const execAsync = promisify(exec)
-const execFileAsync = promisify(execFile)
+const execAsync = promisify(require('child_process').exec)
 const logger = loggerService.withContext('CodeCliService')
 
 interface VersionInfo {
@@ -68,7 +68,6 @@ export class CodeCliService extends BaseService {
   private readonly TERMINALS_CACHE_DURATION = 1000 * 60 * 5 // 5 minutes cache for terminals
   private openCodeCleanupTimers: Map<string, NodeJS.Timeout> = new Map() // Track cleanup timers by directory for debounce
   private openCodeConfigBackups: Map<string, string | null> = new Map() // Store raw backup content of opencode.json
-  private npmRegistryUrlPromise: Promise<string> | null = null
 
   protected async onInit(): Promise<void> {
     this.registerIpcHandlers()
@@ -86,7 +85,7 @@ export class CodeCliService extends BaseService {
         model: string,
         directory: string,
         env: Record<string, string>,
-        options?: { autoUpdateToLatest?: boolean; terminal?: string }
+        options?: { autoUpdateToLatest?: boolean; terminal?: string; loginFlow?: boolean }
       ) => this.run(event, cliTool, model, directory, env, options)
     )
     this.ipcHandle(IpcChannel.CodeCli_GetAvailableTerminals, () => this.getAvailableTerminalsForPlatform())
@@ -99,6 +98,52 @@ export class CodeCliService extends BaseService {
     this.ipcHandle(IpcChannel.CodeCli_RemoveCustomTerminalPath, (_, terminalId: string) =>
       this.removeCustomTerminalPath(terminalId)
     )
+    // `checkClaudeLogin` is exposed through the IpcApi `oauth.check_external_login`
+    // route (see src/main/ipc/handlers/oauth.ts), not a legacy IpcChannel.
+  }
+
+  /**
+   * Read-only probe of whether the user already has a Claude Code CLI
+   * subscription login (Claude Pro/Max OAuth) usable by the Agent SDK. Never
+   * reads or stores the credential value itself — only its presence.
+   *
+   * macOS: the OAuth token lives in the global login Keychain under the generic
+   * password service `Claude Code-credentials` (independent of CLAUDE_CONFIG_DIR);
+   * we query existence without `-w` so no secret is read and no ACL prompt fires.
+   * Linux/Windows: it lives in `<CLAUDE_CONFIG_DIR>/.credentials.json` (default
+   * `~/.claude`). A present token may still be expired — the SDK refreshes on use;
+   * this is a best-effort "is the user signed in" hint for the settings UI.
+   */
+  public async checkClaudeLogin(): Promise<boolean> {
+    if (isMac) {
+      try {
+        await execAsync('security find-generic-password -s "Claude Code-credentials"', { timeout: 3000 })
+        return true
+      } catch {
+        // `security` exits non-zero when the keychain item is absent — the
+        // normal "not signed in" signal, so this path stays silent.
+        return false
+      }
+    }
+    try {
+      // Resolve from the same source the runtime uses (settingsBuilder reads the
+      // shell CLAUDE_CONFIG_DIR), not raw process.env: a GUI-launched Electron
+      // process does not inherit rc-exported vars, so probing process.env alone
+      // falsely reports "not signed in".
+      const shellEnv = await getShellEnv()
+      const configDir =
+        shellEnv.CLAUDE_CONFIG_DIR ||
+        process.env.CLAUDE_CONFIG_DIR ||
+        path.join(application.getPath('sys.home'), '.claude')
+      return fs.existsSync(path.join(configDir, '.credentials.json'))
+    } catch (error) {
+      // A probe failure here (e.g. login-shell env resolution throwing on a
+      // broken rc file) is NOT "not signed in" — log it so a genuinely
+      // signed-in user's stuck "not signed in" card is diagnosable instead of
+      // silently swallowed.
+      logger.warn('Failed to probe Claude login state; reporting not signed in', error as Error)
+      return false
+    }
   }
 
   protected async onStop(): Promise<void> {
@@ -110,7 +155,6 @@ export class CodeCliService extends BaseService {
     this.openCodeConfigBackups.clear()
     this.versionCache.clear()
     this.terminalsCache = null
-    this.npmRegistryUrlPromise = null
     this.customTerminalPaths.clear()
   }
 
@@ -127,31 +171,48 @@ export class CodeCliService extends BaseService {
     }
   }
 
-  public async getBunPath() {
-    const dir = application.getPath('cherry.bin')
-    const bunName = await getBinaryName('bun')
-    const bunPath = path.join(dir, bunName)
-    return bunPath
+  // npm package name used only for version registry lookups (not installation)
+  private async getPackageName(cliTool: string) {
+    switch (cliTool) {
+      case CodeCli.CLAUDE_CODE:
+        return '@anthropic-ai/claude-code'
+      case CodeCli.GEMINI_CLI:
+        return '@google/gemini-cli'
+      case CodeCli.OPENAI_CODEX:
+        return '@openai/codex'
+      case CodeCli.QWEN_CODE:
+        return '@qwen-code/qwen-code'
+      case CodeCli.QODER_CLI:
+        return '@qodercn-ai/qoderclicn'
+      case CodeCli.GITHUB_COPILOT_CLI:
+        return '@github/copilot'
+      case CodeCli.KIMI_CLI:
+        return 'kimi-cli'
+      case CodeCli.OPEN_CODE:
+        return 'opencode-ai'
+      default:
+        throw new Error(`Unsupported CLI tool: ${cliTool}`)
+    }
   }
 
-  public async getPackageName(cliTool: string) {
+  private getToolInstallSpec(cliTool: string): { name: string; tool: string } {
     switch (cliTool) {
-      case codeCLI.claudeCode:
-        return '@anthropic-ai/claude-code'
-      case codeCLI.geminiCli:
-        return '@google/gemini-cli'
-      case codeCLI.openaiCodex:
-        return '@openai/codex'
-      case codeCLI.qwenCode:
-        return '@qwen-code/qwen-code'
-      case codeCLI.qoderCli:
-        return '@qodercn-ai/qoderclicn'
-      case codeCLI.githubCopilotCli:
-        return '@github/copilot'
-      case codeCLI.kimiCli:
-        return '@moonshot-ai/kimi-code'
-      case codeCLI.openCode:
-        return 'opencode-ai'
+      case CodeCli.CLAUDE_CODE:
+        return { name: 'claude', tool: 'claude' }
+      case CodeCli.GEMINI_CLI:
+        return { name: 'gemini', tool: 'npm:@google/gemini-cli' }
+      case CodeCli.OPENAI_CODEX:
+        return { name: 'codex', tool: 'codex' }
+      case CodeCli.QWEN_CODE:
+        return { name: 'qwen', tool: 'npm:@qwen-code/qwen-code' }
+      case CodeCli.QODER_CLI:
+        return { name: 'qoderclicn', tool: 'npm:@qodercn-ai/qoderclicn' }
+      case CodeCli.GITHUB_COPILOT_CLI:
+        return { name: 'copilot', tool: 'npm:@github/copilot' }
+      case CodeCli.KIMI_CLI:
+        return { name: 'kimi', tool: 'pipx:kimi-cli' }
+      case CodeCli.OPEN_CODE:
+        return { name: 'opencode', tool: 'opencode' }
       default:
         throw new Error(`Unsupported CLI tool: ${cliTool}`)
     }
@@ -159,81 +220,25 @@ export class CodeCliService extends BaseService {
 
   public async getCliExecutableName(cliTool: string) {
     switch (cliTool) {
-      case codeCLI.claudeCode:
+      case CodeCli.CLAUDE_CODE:
         return 'claude'
-      case codeCLI.geminiCli:
+      case CodeCli.GEMINI_CLI:
         return 'gemini'
-      case codeCLI.openaiCodex:
+      case CodeCli.OPENAI_CODEX:
         return 'codex'
-      case codeCLI.qwenCode:
+      case CodeCli.QWEN_CODE:
         return 'qwen'
-      case codeCLI.qoderCli:
+      case CodeCli.QODER_CLI:
         return 'qoderclicn'
-      case codeCLI.githubCopilotCli:
+      case CodeCli.GITHUB_COPILOT_CLI:
         return 'copilot'
-      case codeCLI.kimiCli:
+      case CodeCli.KIMI_CLI:
         return 'kimi'
-      case codeCLI.openCode:
+      case CodeCli.OPEN_CODE:
         return 'opencode'
       default:
         throw new Error(`Unsupported CLI tool: ${cliTool}`)
     }
-  }
-
-  /**
-   * Get the command to execute claude-code.
-   *
-   * Since @anthropic-ai/claude-code ships a native binary (bin/claude.exe) instead of
-   * a JavaScript file, it cannot be executed via Bun. The official cli-wrapper.cjs is
-   * a JS launcher that locates and spawns the correct platform-specific binary.
-   * We use Bun to run cli-wrapper.cjs, which works on all platforms.
-   */
-  private async getClaudeCodeCommand(bunPath: string): Promise<string> {
-    const globalInstallDir = application.getPath('feature.cli.install_global')
-    const cliWrapperPath = path.join(
-      globalInstallDir,
-      'node_modules',
-      '@anthropic-ai',
-      'claude-code',
-      'cli-wrapper.cjs'
-    )
-
-    if (fs.existsSync(cliWrapperPath)) {
-      logger.debug(`Using cli-wrapper.cjs for claude-code: ${cliWrapperPath}`)
-      return `"${bunPath}" "${cliWrapperPath}"`
-    }
-
-    // Fallback: try to execute the binary directly (works if postinstall ran correctly)
-    const binDir = application.getPath('cherry.bin')
-    const executableName = await this.getCliExecutableName(codeCLI.claudeCode)
-    const executablePath = path.join(binDir, executableName + (isWin ? '.exe' : ''))
-    logger.warn(`cli-wrapper.cjs not found at ${cliWrapperPath}, falling back to direct execution: ${executablePath}`)
-    return `"${executablePath}"`
-  }
-
-  /**
-   * Prefer OpenCode's package-local executable on Windows.
-   *
-   * Bun global bins can fail with "Bun failed to remap this bin" after updates,
-   * while opencode-ai's postinstall places the real executable under the package.
-   */
-  private async getOpenCodeCommand(): Promise<string> {
-    const globalInstallDir = application.getPath('feature.cli.install_global')
-    const openCodeExecutablePath = path.join(globalInstallDir, 'node_modules', 'opencode-ai', 'bin', 'opencode.exe')
-
-    if (fs.existsSync(openCodeExecutablePath)) {
-      logger.debug(`Using package-local executable for opencode: ${openCodeExecutablePath}`)
-      return `"${openCodeExecutablePath}"`
-    }
-
-    // Fallback: try to execute the Bun global bin directly.
-    const binDir = application.getPath('cherry.bin')
-    const executableName = await this.getCliExecutableName(codeCLI.openCode)
-    const executablePath = path.join(binDir, executableName + (isWin ? '.exe' : ''))
-    logger.warn(
-      `opencode package-local executable not found at ${openCodeExecutablePath}, falling back to direct execution: ${executablePath}`
-    )
-    return `"${executablePath}"`
   }
 
   /**
@@ -516,11 +521,11 @@ export class CodeCliService extends BaseService {
   private async checkWindowsTerminalAvailability(terminal: TerminalConfig): Promise<TerminalConfig | null> {
     try {
       switch (terminal.id) {
-        case terminalApps.cmd:
+        case TerminalApp.CMD:
           // CMD is always available on Windows
           return terminal
 
-        case terminalApps.powershell:
+        case TerminalApp.POWERSHELL:
           // Check for PowerShell in PATH
           try {
             await execAsync('powershell -Command "Get-Host"', {
@@ -536,7 +541,7 @@ export class CodeCliService extends BaseService {
             }
           }
 
-        case terminalApps.windowsTerminal:
+        case TerminalApp.WINDOWS_TERMINAL:
           // Check for Windows Terminal via where command (doesn't launch the terminal)
           try {
             await execAsync('where wt', { timeout: 3000 })
@@ -545,7 +550,7 @@ export class CodeCliService extends BaseService {
             return null
           }
 
-        case terminalApps.wsl:
+        case TerminalApp.WSL:
           // Check for WSL
           try {
             await execAsync('wsl --status', { timeout: 3000 })
@@ -572,7 +577,7 @@ export class CodeCliService extends BaseService {
     const customPath = this.customTerminalPaths.get(terminal.id)
     if (customPath && fs.existsSync(customPath)) {
       try {
-        await execFileAsync(customPath, ['--version'], { timeout: 3000 })
+        await execAsync(`"${customPath}" --version`, { timeout: 3000 })
         return { ...terminal, customPath }
       } catch {
         return null
@@ -581,26 +586,11 @@ export class CodeCliService extends BaseService {
 
     // Fallback to PATH check
     try {
-      const command = terminal.id === terminalApps.alacritty ? 'alacritty' : 'wezterm'
-      await execFileAsync(command, ['--version'], { timeout: 3000 })
+      const command = terminal.id === TerminalApp.ALACRITTY ? 'alacritty' : 'wezterm'
+      await execAsync(`${command} --version`, { timeout: 3000 })
       return terminal
     } catch {
       return null
-    }
-  }
-
-  private async withTerminalCheckTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-    let timeout: NodeJS.Timeout | undefined
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeout = setTimeout(() => reject(new Error('timeout')), timeoutMs)
-    })
-
-    try {
-      return await Promise.race([promise, timeoutPromise])
-    } finally {
-      if (timeout) {
-        clearTimeout(timeout)
-      }
     }
   }
 
@@ -654,14 +644,18 @@ export class CodeCliService extends BaseService {
 
     try {
       // Wait for all checks to complete with a global timeout
-      const results = await Promise.allSettled(terminalPromises.map((p) => this.withTerminalCheckTimeout(p, 5000)))
+      const results = await Promise.allSettled(
+        terminalPromises.map((p) =>
+          Promise.race([p, new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))])
+        )
+      )
 
       const availableTerminals: TerminalConfig[] = []
       results.forEach((result, index) => {
         if (result.status === 'fulfilled' && result.value) {
-          availableTerminals.push(result.value)
+          availableTerminals.push(result.value as TerminalConfig)
         } else if (result.status === 'rejected') {
-          logger.debug(`Terminal check failed for ${terminalList[index].id}:`, result.reason)
+          logger.debug(`Terminal check failed for ${MACOS_TERMINALS[index].id}:`, result.reason)
         }
       })
 
@@ -690,7 +684,7 @@ export class CodeCliService extends BaseService {
   private async getTerminalConfig(terminalId?: string): Promise<TerminalConfigWithCommand> {
     const availableTerminals = await this.getAvailableTerminals()
     const terminalCommands = isWin ? WINDOWS_TERMINALS_WITH_COMMANDS : MACOS_TERMINALS_WITH_COMMANDS
-    const defaultTerminal = isWin ? terminalApps.cmd : terminalApps.systemDefault
+    const defaultTerminal = isWin ? TerminalApp.CMD : TerminalApp.SYSTEM_DEFAULT
 
     if (terminalId) {
       let requestedTerminal = terminalCommands.find(
@@ -744,79 +738,43 @@ export class CodeCliService extends BaseService {
     }
   }
 
-  private async isPackageInstalled(cliTool: string): Promise<boolean> {
-    const executableName = await this.getCliExecutableName(cliTool)
-    const binDir = application.getPath('cherry.bin')
-    const executablePath = path.join(binDir, executableName + (isWin ? '.exe' : ''))
-
-    // Ensure bin directory exists
-    if (!fs.existsSync(binDir)) {
-      fs.mkdirSync(binDir, { recursive: true })
-    }
-
-    return fs.existsSync(executablePath)
-  }
-
-  public async getInstalledVersion(
-    cliTool: string,
-    options: { skipInstalledCheck?: boolean } = {}
-  ): Promise<string | null> {
-    if (!options.skipInstalledCheck && !(await this.isPackageInstalled(cliTool))) {
-      logger.info(`${cliTool} is not installed`)
-      return null
-    }
-
-    logger.info(`${cliTool} is installed, getting current version`)
-    try {
-      let versionCommand: string
-
-      // claude-code ships a native binary that cannot be executed via Bun.
-      // Use cli-wrapper.cjs (via Bun) to run --version reliably on all platforms.
-      if (cliTool === codeCLI.claudeCode) {
-        const bunPath = await this.getBunPath()
-        versionCommand = await this.getClaudeCodeCommand(bunPath)
-      } else if (cliTool === codeCLI.openCode) {
-        versionCommand = await this.getOpenCodeCommand()
-      } else {
-        const executableName = await this.getCliExecutableName(cliTool)
-        const binDir = application.getPath('cherry.bin')
-        const executablePath = path.join(binDir, executableName + (isWin ? '.exe' : ''))
-        versionCommand = `"${executablePath}"`
-      }
-
-      const { stdout } = await execAsync(`${versionCommand} --version`, {
-        timeout: 10000
-      })
-      // Extract version number from output (format may vary by tool)
-      const versionMatch = stdout.trim().match(/\d+\.\d+\.\d+/)
-      const installedVersion = versionMatch ? versionMatch[0] : stdout.trim().split(' ')[0]
-      logger.info(`${cliTool} current installed version: ${installedVersion}`)
-      return installedVersion
-    } catch (error) {
-      logger.warn(`Failed to get installed version for ${cliTool}:`, error as Error)
-      return null
-    }
-  }
-
   /**
    * Get version information for a CLI tool
    */
   public async getVersionInfo(cliTool: string): Promise<VersionInfo> {
     logger.info(`Starting version check for ${cliTool}`)
     const packageName = await this.getPackageName(cliTool)
-    const isInstalled = await this.isPackageInstalled(cliTool)
+    const executableName = await this.getCliExecutableName(cliTool)
+    const isInstalled = await isBinaryExists(executableName)
 
     let installedVersion: string | null = null
     let latestVersion: string | null = null
 
     // Get installed version if package is installed
     if (isInstalled) {
-      installedVersion = await this.getInstalledVersion(cliTool, { skipInstalledCheck: true })
+      logger.info(`${cliTool} is installed, getting current version`)
+      try {
+        const execPath = await getBinaryPath(executableName)
+        const versionCommand = `"${execPath}"`
+
+        const { stdout } = await execAsync(`${versionCommand} --version`, {
+          env: { ...process.env, ...getBinaryExecutionEnv() },
+          timeout: 10000
+        })
+        // Extract version number from output (format may vary by tool)
+        const versionMatch = stdout.trim().match(/\d+\.\d+\.\d+/)
+        installedVersion = versionMatch ? versionMatch[0] : stdout.trim().split(' ')[0]
+        logger.info(`${cliTool} current installed version: ${installedVersion}`)
+      } catch (error) {
+        logger.warn(`Failed to get installed version for ${cliTool}:`, error as Error)
+      }
     } else {
       logger.info(`${cliTool} is not installed`)
     }
 
-    // Get latest version from npm (with cache)
+    const spec = this.getToolInstallSpec(cliTool)
+
+    // Get latest version from the backend registry (with cache)
     const cacheKey = `${packageName}-latest`
     const cached = this.versionCache.get(cacheKey)
     const now = Date.now()
@@ -825,28 +783,14 @@ export class CodeCliService extends BaseService {
       logger.info(`Using cached latest version for ${packageName}: ${cached.version}`)
       latestVersion = cached.version
     } else {
-      logger.info(`Fetching latest version for ${packageName} from npm`)
+      logger.info(`Fetching latest version for ${packageName}`)
       try {
-        // Get registry URL
-        const registryUrl = await this.getNpmRegistryUrl()
-
-        // Fetch package info directly from npm registry API
-        const packageUrl = `${registryUrl}/${packageName}/latest`
-        const response = await fetch(packageUrl, {
-          signal: AbortSignal.timeout(15000)
-        })
-
-        if (!response.ok) {
-          throw new Error(`Failed to fetch package info: ${response.statusText}`)
-        }
-
-        const packageInfo = await response.json()
-        latestVersion = packageInfo.version
+        latestVersion = await this.fetchLatestVersion(packageName, spec.tool)
         logger.info(`${packageName} latest version: ${latestVersion}`)
 
         // Cache the result
         this.versionCache.set(cacheKey, {
-          version: latestVersion!,
+          version: latestVersion,
           timestamp: now
         })
         logger.debug(`Cached latest version for ${packageName}`)
@@ -872,73 +816,52 @@ export class CodeCliService extends BaseService {
     }
   }
 
+  private async fetchLatestVersion(packageName: string, toolSpec: string): Promise<string> {
+    if (toolSpec.startsWith('pipx:')) {
+      const response = await fetch(`https://pypi.org/pypi/${encodeURIComponent(packageName)}/json`, {
+        signal: AbortSignal.timeout(15000)
+      })
+      if (!response.ok) {
+        throw new Error(`Failed to fetch package info: ${response.statusText}`)
+      }
+      const packageInfo = (await response.json()) as { info?: { version?: string } }
+      if (!packageInfo.info?.version) {
+        throw new Error(`Missing PyPI version for ${packageName}`)
+      }
+      return packageInfo.info.version
+    }
+
+    const registryUrl = await this.getNpmRegistryUrl()
+    const response = await fetch(`${registryUrl}/${packageName}/latest`, {
+      signal: AbortSignal.timeout(15000)
+    })
+    if (!response.ok) {
+      throw new Error(`Failed to fetch package info: ${response.statusText}`)
+    }
+    const packageInfo = (await response.json()) as { version?: string }
+    if (!packageInfo.version) {
+      throw new Error(`Missing npm version for ${packageName}`)
+    }
+    return packageInfo.version
+  }
+
   /**
    * Get npm registry URL based on user location
    */
   private async getNpmRegistryUrl(): Promise<string> {
-    if (!this.npmRegistryUrlPromise) {
-      this.npmRegistryUrlPromise = (async () => {
-        try {
-          const inChina = await isUserInChina()
-          if (inChina) {
-            logger.info('User in China, using Taobao npm mirror')
-            return 'https://registry.npmmirror.com'
-          } else {
-            logger.info('User not in China, using default npm mirror')
-            return 'https://registry.npmjs.org'
-          }
-        } catch (error) {
-          logger.warn('Failed to detect user location, using default npm mirror')
-          return 'https://registry.npmjs.org'
-        }
-      })()
+    try {
+      const inChina = await regionService.isInChina()
+      if (inChina) {
+        logger.info('User in China, using Taobao npm mirror')
+        return 'https://registry.npmmirror.com'
+      } else {
+        logger.info('User not in China, using default npm mirror')
+        return 'https://registry.npmjs.org'
+      }
+    } catch (error) {
+      logger.warn('Failed to detect user location, using default npm mirror')
+      return 'https://registry.npmjs.org'
     }
-
-    return this.npmRegistryUrlPromise
-  }
-
-  private async checkCommandOnPath(command: string): Promise<boolean> {
-    const checkResult = spawn('which', [command], { stdio: 'pipe' })
-
-    return await new Promise((resolve) => {
-      let settled = false
-      const finish = (available: boolean) => {
-        if (settled) return
-        settled = true
-        resolve(available)
-      }
-
-      checkResult.once('error', () => finish(false))
-      checkResult.once('close', (code) => finish(code === 0))
-    })
-  }
-
-  private async waitForTerminalLaunch(child: ChildProcess, timeoutMs = 1000): Promise<Error | null> {
-    let timeout: NodeJS.Timeout | undefined
-
-    return await new Promise((resolve) => {
-      let settled = false
-
-      const cleanup = () => {
-        if (timeout) clearTimeout(timeout)
-        child.off('error', onError)
-        child.off('spawn', onSpawn)
-      }
-
-      const settle = (error: Error | null) => {
-        if (settled) return
-        settled = true
-        cleanup()
-        resolve(error)
-      }
-
-      const onError = (error: Error) => settle(error)
-      const onSpawn = () => settle(null)
-
-      child.once('error', onError)
-      child.once('spawn', onSpawn)
-      timeout = setTimeout(() => settle(null), timeoutMs)
-    })
   }
 
   /**
@@ -953,50 +876,24 @@ export class CodeCliService extends BaseService {
   }
 
   /**
-   * Update a CLI tool to the latest version
+   * Update a CLI tool to the latest version via BinaryManager
    */
   public async updatePackage(cliTool: string): Promise<{ success: boolean; message: string }> {
     logger.info(`Starting update process for ${cliTool}`)
     try {
+      const spec = this.getToolInstallSpec(cliTool)
+      await application.get('BinaryManager').installTool(spec)
+      // Clear version cache so next check fetches fresh data
       const packageName = await this.getPackageName(cliTool)
-      const bunPath = await this.getBunPath()
-      const bunInstallPath = application.getPath('cherry.home')
-      const registryUrl = await this.getNpmRegistryUrl()
-
-      // Get logs directory for update output redirection
-      const logsDir = loggerService.getLogsDir()
-      const updateLogPath = path.join(logsDir, 'cli-tools-update.log').replace(/\\/g, '/')
-
-      const installEnvPrefix = isWin
-        ? `set "BUN_INSTALL=${bunInstallPath}" && set "NPM_CONFIG_REGISTRY=${registryUrl}" &&`
-        : `export BUN_INSTALL="${bunInstallPath}" && export NPM_CONFIG_REGISTRY="${registryUrl}" &&`
-
-      // Use > to truncate log file on each update
-      const updateCommand = `${installEnvPrefix} "${bunPath}" install -g ${packageName} > "${updateLogPath}" 2>&1`
-      logger.info(`Executing update command: ${updateCommand}`)
-
-      await execAsync(updateCommand, { timeout: 60000 })
-      logger.info(`Successfully executed update command for ${cliTool}`)
-
-      // Clear version cache for this package
-      const cacheKey = `${packageName}-latest`
-      this.versionCache.delete(cacheKey)
-      logger.debug(`Cleared version cache for ${packageName}`)
-
+      this.versionCache.delete(`${packageName}-latest`)
       const successMessage = `Successfully updated ${cliTool} to the latest version`
       logger.info(successMessage)
-      return {
-        success: true,
-        message: successMessage
-      }
+      return { success: true, message: successMessage }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
       const failureMessage = `Failed to update ${cliTool}: ${errorMessage}`
       logger.error(failureMessage, error as Error)
-      return {
-        success: false,
-        message: failureMessage
-      }
+      return { success: false, message: failureMessage }
     }
   }
 
@@ -1006,9 +903,10 @@ export class CodeCliService extends BaseService {
     _model: string,
     directory: string,
     env: Record<string, string>,
-    options: { autoUpdateToLatest?: boolean; terminal?: string } = {}
+    options: { autoUpdateToLatest?: boolean; terminal?: string; loginFlow?: boolean } = {}
   ): Promise<CodeToolsRunResult> {
     logger.info(`Starting CLI tool launch: ${cliTool} in directory: ${directory}`)
+    env = { ...getBinaryExecutionEnv(), ...env }
     logger.debug(`Environment variables:`, Object.keys(env))
     logger.debug(`Options:`, options)
 
@@ -1023,54 +921,50 @@ export class CodeCliService extends BaseService {
       }
     }
 
-    const packageName = await this.getPackageName(cliTool)
-    const bunPath = await this.getBunPath()
     const executableName = await this.getCliExecutableName(cliTool)
-    const binDir = application.getPath('cherry.bin')
-    const executablePath = path.join(binDir, executableName + (isWin ? '.exe' : ''))
+    const spec = this.getToolInstallSpec(cliTool)
 
-    logger.debug(`Package name: ${packageName}`)
-    logger.debug(`Bun path: ${bunPath}`)
     logger.debug(`Executable name: ${executableName}`)
-    logger.debug(`Executable path: ${executablePath}`)
+    logger.debug(`Tool install spec: ${spec.tool}`)
 
     // Check if package is already installed
-    const isInstalled = await this.isPackageInstalled(cliTool)
+    let isInstalled = await isBinaryExists(executableName)
 
-    // Check for updates and auto-update if requested
-    let updateMessage = ''
-    let installedVersion: string | null = null
-
-    // Get installed version if package is installed (needed for qwen-code auth-type check)
-    if (isInstalled) {
+    // Install via BinaryManager if not present
+    if (!isInstalled) {
+      logger.info(`${cliTool} not installed, installing via BinaryManager...`)
       try {
-        if (cliTool === codeCLI.qwenCode) {
-          installedVersion = await this.getInstalledVersion(cliTool, { skipInstalledCheck: true })
-        }
-
-        // Handle auto-update if enabled
-        if (options.autoUpdateToLatest) {
-          logger.info(`Auto update to latest enabled for ${cliTool}`)
-          const versionInfo = await this.getVersionInfo(cliTool)
-          installedVersion = versionInfo.installed ?? installedVersion
-
-          if (versionInfo.needsUpdate) {
-            logger.info(`Update available for ${cliTool}: ${versionInfo.installed} -> ${versionInfo.latest}`)
-            logger.info(`Auto-updating ${cliTool} to latest version`)
-            updateMessage = ` && echo "Updating ${escapeBatchText(cliTool)} from ${escapeBatchText(versionInfo.installed || '')} to ${escapeBatchText(versionInfo.latest || '')}..."`
-            const updateResult = await this.updatePackage(cliTool)
-            if (updateResult.success) {
-              logger.info(`Update completed successfully for ${cliTool}`)
-              updateMessage += ` && echo "Update completed successfully"`
-            } else {
-              logger.error(`Update failed for ${cliTool}: ${updateResult.message}`)
-              updateMessage += ` && echo "Update failed: ${escapeBatchText(updateResult.message)}"`
-            }
-          }
-        }
+        await application.get('BinaryManager').installTool(spec)
+        isInstalled = true
+        logger.info(`${cliTool} installed successfully`)
       } catch (error) {
-        logger.warn(`Failed to check version for ${cliTool}:`, error as Error)
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        logger.error(`Failed to install ${cliTool}:`, error as Error)
+        return { success: false, message: `Failed to install ${cliTool}: ${errorMessage}`, command: '' }
       }
+    }
+
+    // Re-verify the binary is on disk before spawning. getBinaryPath() below
+    // silently falls back to the bare name when the file is missing, so without
+    // this guard we'd launch a phantom (or a same-named binary on PATH) and
+    // still report success.
+    if (!(await isBinaryExists(executableName))) {
+      const message = `${cliTool} is not available after install`
+      logger.error(message)
+      return { success: false, message, command: '' }
+    }
+
+    // Get installed version (needed for qwen-code auth-type check and optional auto-update)
+    let installedVersion: string | null = null
+    try {
+      const versionInfo = await this.getVersionInfo(cliTool)
+      installedVersion = versionInfo.installed
+      if (options.autoUpdateToLatest && versionInfo.needsUpdate) {
+        logger.info(`Auto-updating ${cliTool} from ${versionInfo.installed} to ${versionInfo.latest}`)
+        await this.updatePackage(cliTool)
+      }
+    } catch (error) {
+      logger.warn(`Failed to check version for ${cliTool}:`, error as Error)
     }
 
     // Select different terminal based on operating system
@@ -1118,25 +1012,11 @@ export class CodeCliService extends BaseService {
       }
     }
 
-    let baseCommand: string
+    const executablePath = await getBinaryPath(executableName)
+    let baseCommand = `"${executablePath}"`
 
-    // claude-code ships a native binary that cannot be executed via Bun.
-    // Use cli-wrapper.cjs (via Bun) on all platforms for reliable execution.
-    if (cliTool === codeCLI.claudeCode) {
-      baseCommand = await this.getClaudeCodeCommand(bunPath)
-    } else if (cliTool === codeCLI.openCode) {
-      baseCommand = await this.getOpenCodeCommand()
-    } else if (cliTool === codeCLI.qoderCli) {
-      // Qoder's ESM bundle fails under Bun; run the bin shim directly so its
-      // `#!/usr/bin/env node` shebang launches it with Node.
-      baseCommand = `"${executablePath}"`
-    } else if (isWin) {
-      baseCommand = `"${executablePath}"`
-    } else {
-      baseCommand = `"${bunPath}" "${executablePath}"`
-    }
-
-    if (cliTool === codeCLI.qwenCode) {
+    // Special handling for qwen-code: add --auth-type openai for version >= 0.12.3
+    if (cliTool === CodeCli.QWEN_CODE) {
       // Use semver for proper version comparison (handles v-prefix, prereleases, etc.)
       const coerced = semver.coerce(installedVersion)
       const needsAuthType = installedVersion && coerced && semver.gte(coerced, '0.12.3')
@@ -1149,7 +1029,7 @@ export class CodeCliService extends BaseService {
     }
 
     // Add configuration parameters for OpenAI Codex using command line args
-    if (cliTool === codeCLI.openaiCodex && env.CHERRY_CODEX_PROVIDER_ID) {
+    if (cliTool === CodeCli.OPENAI_CODEX && env.CHERRY_CODEX_PROVIDER_ID) {
       const providerId = env.CHERRY_CODEX_PROVIDER_ID
       const providerName = env.CHERRY_CODEX_PROVIDER_NAME || providerId
       const normalizedBaseUrl = env.CHERRY_CODEX_BASE_URL.replace(/\/$/, '')
@@ -1168,7 +1048,7 @@ export class CodeCliService extends BaseService {
     }
 
     // Special handling for OpenCode: generate config file and add --model flag
-    if (cliTool === codeCLI.openCode) {
+    if (cliTool === CodeCli.OPEN_CODE) {
       const baseUrl = env.OPENCODE_BASE_URL
       const modelId = _model
       const modelName = env.OPENCODE_MODEL_NAME || modelId
@@ -1196,42 +1076,13 @@ export class CodeCliService extends BaseService {
       baseCommand = `${baseCommand} --model Cherry-${providerName}/${modelId}`
     }
 
-    const bunInstallPath = application.getPath('cherry.home')
-
-    if (isInstalled) {
-      // If already installed, run executable directly (with optional update message)
-      if (updateMessage) {
-        // updateMessage already has escaped dynamic content, && connectors are intentional
-        baseCommand = `echo "Checking ${cliTool} version..."${updateMessage} && ${baseCommand}`
-      }
-    } else {
-      // If not installed, install first then run
-      const registryUrl = await this.getNpmRegistryUrl()
-      const installEnvPrefix =
-        platform === 'win32'
-          ? `set "BUN_INSTALL=${bunInstallPath}" && set "NPM_CONFIG_REGISTRY=${registryUrl}" &&`
-          : `export BUN_INSTALL="${bunInstallPath}" && export NPM_CONFIG_REGISTRY="${registryUrl}" &&`
-
-      // Windows: Redirect bun output to log file to prevent cmd.exe from
-      // misinterpreting multiline output as separate commands
-      // macOS/Linux: Keep output visible in terminal (handles multiline correctly)
-      let installCommand: string
-      if (platform === 'win32') {
-        const logsDir = loggerService.getLogsDir()
-        // Use forward slashes for cmd.exe compatibility
-        const installLogPath = path.join(logsDir, 'cli-tools-install.log').replace(/\\/g, '/')
-
-        // Ensure logs directory exists
-        if (!fs.existsSync(logsDir)) {
-          fs.mkdirSync(logsDir, { recursive: true })
-        }
-
-        installCommand = `${installEnvPrefix} "${bunPath}" install -g ${packageName} >> "${installLogPath}" 2>&1`
-      } else {
-        installCommand = `${installEnvPrefix} "${bunPath}" install -g ${packageName}`
-      }
-
-      baseCommand = `echo "Installing ${packageName}..." && ${installCommand} && echo "Installation complete, starting ${cliTool}..." && ${baseCommand}`
+    // The Claude Code settings panel lands its terminal on the login flow rather
+    // than a bare REPL. Modeled as a fixed boolean, NOT a free-form arg string:
+    // this command is assembled into a shell string (and a Windows .bat), and
+    // CodeCli_Run has no sender validation, so a renderer-supplied string would
+    // be a shell-injection surface. A plain launch from the CLI page is unaffected.
+    if (options.loginFlow) {
+      baseCommand = `${baseCommand} /login`
     }
 
     switch (platform) {
@@ -1258,7 +1109,7 @@ export class CodeCliService extends BaseService {
         const command = envPrefix ? `${envPrefix} && ${baseCommand}` : baseCommand
 
         // Create temp bat file for debugging and avoid complex command line escaping issues
-        const tempDir = path.join(os.tmpdir(), 'cherrystudio')
+        const tempDir = application.getPath('feature.cli.temp')
         const timestamp = Date.now()
         const batFileName = `launch_${cliTool}_${timestamp}.bat`
         const batFilePath = path.join(tempDir, batFileName)
@@ -1393,9 +1244,20 @@ export class CodeCliService extends BaseService {
         let foundTerminal = 'xterm' // Default to xterm
 
         for (const terminal of linuxTerminals) {
-          if (await this.checkCommandOnPath(terminal)) {
-            foundTerminal = terminal
-            break
+          try {
+            // Check if terminal exists
+            const checkResult = spawn('which', [terminal], { stdio: 'pipe' })
+            await new Promise((resolve) => {
+              checkResult.on('close', (code) => {
+                if (code === 0) {
+                  foundTerminal = terminal
+                }
+                resolve(code)
+              })
+            })
+            if (foundTerminal === terminal) break
+          } catch (error) {
+            // Continue trying next terminal
           }
         }
 
@@ -1429,25 +1291,13 @@ export class CodeCliService extends BaseService {
       logger.debug(`Working directory: ${directory}`)
       logger.debug(`Process environment keys: ${Object.keys(processEnv)}`)
 
-      const terminalProcess = spawn(terminalCommand, terminalArgs, {
+      spawn(terminalCommand, terminalArgs, {
         detached: true,
         stdio: 'ignore',
         cwd: directory,
         env: processEnv,
         shell: isWin
       })
-      const launchError = await this.waitForTerminalLaunch(terminalProcess)
-      terminalProcess.unref()
-
-      if (launchError) {
-        const failureMessage = `Failed to launch terminal: ${launchError.message}`
-        logger.error(failureMessage, launchError)
-        return {
-          success: false,
-          message: failureMessage,
-          command: `${terminalCommand} ${terminalArgs.join(' ')}`
-        }
-      }
 
       const successMessage = `Launched ${cliTool} in new terminal window`
       logger.info(successMessage)

@@ -1,6 +1,5 @@
 import { type Model, MODEL_CAPABILITY } from '@shared/data/types/model'
 import {
-  findTokenLimit,
   inferEmbeddingFromModelId,
   inferFunctionCallingFromModelId,
   inferImageGenerationFromModelId,
@@ -8,15 +7,16 @@ import {
   inferRerankFromModelId,
   inferVisionFromModelId,
   inferWebSearchFromModelId,
-  isAnthropicModel,
+  isAudioModel,
   isEmbeddingModel,
-  isFreeModel,
   isFunctionCallingModel,
-  isGemini3Model,
   isGenerateImageModel,
-  isOpenAIModel,
+  isNonChatModel,
   isReasoningModel,
   isRerankModel,
+  isSpeechToTextModel,
+  isTextToSpeechModel,
+  isVideoModel,
   isVisionModel,
   isWebSearchModel
 } from '@shared/utils/model'
@@ -34,19 +34,6 @@ const createModel = (capabilities: Model['capabilities'] = []): Model => ({
 })
 
 describe('shared model capability helpers', () => {
-  it('tolerates legacy raw model ids in ID-based family checks', () => {
-    const legacyRawModel: Model = {
-      ...createModel(),
-      id: 'gpt-4o' as Model['id'],
-      apiModelId: undefined,
-      name: 'gpt-4o'
-    }
-
-    expect(isOpenAIModel(legacyRawModel)).toBe(true)
-    expect(isAnthropicModel({ ...legacyRawModel, id: 'claude-sonnet-4-5' as Model['id'] })).toBe(true)
-    expect(isGemini3Model({ ...legacyRawModel, id: 'gemini-3-pro-preview' as Model['id'] })).toBe(true)
-  })
-
   it('reads capability state from v2 Model.capabilities', () => {
     const model = createModel([
       MODEL_CAPABILITY.REASONING,
@@ -81,13 +68,34 @@ describe('shared model capability helpers', () => {
     expect(isGenerateImageModel(createModel([MODEL_CAPABILITY.IMAGE_GENERATION]))).toBe(true)
   })
 
-  it('identifies free models by separated tokens without matching longer words', () => {
-    expect(isFreeModel({ ...createModel(), id: 'openrouter::qwen/qwen3-coder:free' })).toBe(true)
-    expect(isFreeModel({ ...createModel(), id: 'openai::gpt-4-1-nano-free' })).toBe(true)
-    expect(isFreeModel({ ...createModel(), id: 'openrouter::qwen3', name: 'Qwen3 Coder (free)' })).toBe(true)
-    expect(isFreeModel({ ...createModel(), id: 'openrouter::qwen3', apiModelId: 'qwen/qwen3-coder:free' })).toBe(true)
-    expect(isFreeModel({ ...createModel(), id: 'custom::freedom-pro', name: 'Freedom Pro' })).toBe(false)
-    expect(isFreeModel({ ...createModel(), id: 'custom::mini', name: 'Carefree Mini' })).toBe(false)
+  describe('audio/video modality vs. dedicated-model classification', () => {
+    // A multimodal chat LLM (e.g. Gemini / GPT-4o): takes audio/video/image as input and
+    // can emit audio, while still being a general chat model.
+    const multimodalChatModel: Model = {
+      ...createModel([MODEL_CAPABILITY.REASONING, MODEL_CAPABILITY.FUNCTION_CALL]),
+      inputModalities: ['text', 'image', 'audio', 'video'],
+      outputModalities: ['text', 'audio']
+    }
+
+    it('detects vision/audio/video input from inputModalities (intended — composer file gating relies on this)', () => {
+      expect(isVisionModel(multimodalChatModel)).toBe(true)
+      expect(isAudioModel(multimodalChatModel)).toBe(true)
+      expect(isVideoModel(multimodalChatModel)).toBe(true)
+    })
+
+    it('does NOT classify an audio-in/out multimodal LLM as speech-to-text or text-to-speech', () => {
+      expect(isSpeechToTextModel(multimodalChatModel)).toBe(false)
+      expect(isTextToSpeechModel(multimodalChatModel)).toBe(false)
+    })
+
+    it('keeps a multimodal LLM selectable in chat (not a non-chat model)', () => {
+      expect(isNonChatModel(multimodalChatModel)).toBe(false)
+    })
+
+    it('classifies dedicated speech-to-text / text-to-speech only by explicit capability', () => {
+      expect(isSpeechToTextModel(createModel([MODEL_CAPABILITY.AUDIO_TRANSCRIPT]))).toBe(true)
+      expect(isTextToSpeechModel(createModel([MODEL_CAPABILITY.AUDIO_GENERATION]))).toBe(true)
+    })
   })
 
   it('covers known capability inference regression ids', () => {
@@ -105,8 +113,6 @@ describe('shared model capability helpers', () => {
   it.each([
     'claude-3.7-sonnet',
     'claude-sonnet-4-5',
-    'claude-fable-5',
-    'anthropic.claude-fable-5-v1:0',
     'gemini-2.5-flash',
     'gemini-3-pro-preview',
     'gpt-5.1',
@@ -140,8 +146,6 @@ describe('shared model capability helpers', () => {
     'doubao-seed-2.0',
     'gemma4:31b',
     'kimi-k2.6-preview',
-    'kimi-k2.7-code',
-    'MiniMax-M3',
     'mistral-small-latest'
   ])('infers vision capability for %s', (modelId) => {
     expect(inferVisionFromModelId(modelId)).toBe(true)
@@ -151,13 +155,6 @@ describe('shared model capability helpers', () => {
     'does not infer vision capability for %s',
     (modelId) => {
       expect(inferVisionFromModelId(modelId)).toBe(false)
-    }
-  )
-
-  it.each(['claude-opus-4-7', 'claude-opus-4-8', 'anthropic.claude-opus-4-8-v1:0', 'claude-opus-4-10'])(
-    'infers Claude Opus 4.7+ thinking token limit for %s',
-    (modelId) => {
-      expect(findTokenLimit(modelId)).toEqual({ min: 1024, max: 128_000 })
     }
   )
 

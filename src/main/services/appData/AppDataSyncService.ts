@@ -36,7 +36,7 @@ import {
   WebDavOperationError
 } from '@main/services/WebDavRetry'
 import { getDataPath } from '@main/utils'
-import { getNotesDir } from '@main/utils/file'
+import { getNotesDir } from '@main/utils/legacyFile'
 import { readResponseTextWithinLimit } from '@main/utils/readResponseText'
 import { isUniqueModelId, parseUniqueModelId } from '@shared/data/types/model'
 import type { WebDavConfig } from '@shared/types/backup'

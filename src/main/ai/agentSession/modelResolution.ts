@@ -27,11 +27,21 @@ function selectSingleModelMatch(agentId: string, storedModelId: string, models: 
   throw new Error(`Agent ${agentId} model "${storedModelId}" is ambiguous; candidates: ${candidates}`)
 }
 
+function normalizeUniqueModelId(model: Model | null, storedModelId: UniqueModelId): Model | null {
+  if (!model) return null
+  if (isUniqueModelId(model.id)) return model
+
+  // Older tests/restored rows may only contain the API model id even though the lookup already
+  // identified the provider/model pair. Keep the stricter runtime invariant by synthesizing the
+  // missing unique id from the caller's stored provider::model value.
+  return { ...model, id: storedModelId }
+}
+
 async function resolveUniqueStoredModel(agentId: string, storedModelId: UniqueModelId): Promise<Model | null> {
   const { providerId, modelId } = parseUniqueModelId(storedModelId)
 
   try {
-    return await modelService.getByKey(providerId, modelId)
+    return normalizeUniqueModelId(await modelService.getByKey(providerId, modelId), storedModelId)
   } catch {
     // Keep going: some restored/legacy rows store provider::apiModelId while
     // user_model.id uses a provider-specific canonical id.

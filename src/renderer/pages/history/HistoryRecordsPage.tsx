@@ -26,9 +26,9 @@ import type {
 } from '@renderer/pages/home/Tabs/components/topicContextMenuActions'
 import { sortTopicsForDisplayGroups } from '@renderer/pages/home/Tabs/components/topicsHelpers'
 import { createTopicActionContext, useTopicMenuPreset } from '@renderer/pages/home/Tabs/components/useTopicMenuActions'
-import { fetchMessagesSummary } from '@renderer/services/ApiService'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import type { Topic as RendererTopic } from '@renderer/types/topic'
+import { fetchMessagesSummary } from '@renderer/utils/aiGeneration'
 import type { AgentSessionEntity } from '@shared/data/api/schemas/agentSessions'
 import type { Topic as ApiTopic } from '@shared/data/types/topic'
 import { Bot, ChevronLeft } from 'lucide-react'
@@ -656,7 +656,10 @@ const AgentHistoryRecordsContent = ({ activeRecordId, onClose, onRecordSelect }:
       const trimmedName = name.trim()
       if (!session || !trimmedName || trimmedName === session.name) return
 
-      const updatedSession = await updateSession({ id, name: trimmedName }, { showSuccessToast: false })
+      const updatedSession = await updateSession(
+        { id, name: trimmedName, isNameManuallyEdited: true },
+        { showSuccessToast: false }
+      )
       if (updatedSession) {
         window.toast.success(t('common.saved'))
       }

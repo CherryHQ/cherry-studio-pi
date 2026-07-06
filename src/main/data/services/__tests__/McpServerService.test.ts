@@ -1,17 +1,12 @@
 import { mcpServerTable } from '@data/db/schemas/mcpServer'
 import { McpServerService, mcpServerService } from '@data/services/McpServerService'
-import { DataApiError, ErrorCode } from '@shared/data/api'
+import { DataApiError, ErrorCode } from '@shared/data/api/errors'
 import { setupTestDatabase } from '@test-helpers/db'
-import { MockMainDbServiceExport } from '@test-mocks/main/DbService'
 import { eq } from 'drizzle-orm'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
 describe('McpServerService', () => {
   const dbh = setupTestDatabase()
-
-  beforeEach(() => {
-    MockMainDbServiceExport.dbService.withWriteTx.mockClear()
-  })
 
   async function seedServer(overrides: Partial<typeof mcpServerTable.$inferInsert> = {}) {
     const values: typeof mcpServerTable.$inferInsert = {
@@ -37,18 +32,22 @@ describe('McpServerService', () => {
     it('should return a server when found', async () => {
       await seedServer()
 
-      const result = await mcpServerService.getById('srv-1')
+      const result = mcpServerService.getById('srv-1')
       expect(result.id).toBe('srv-1')
       expect(result.name).toBe('test-server')
       expect(result.isActive).toBe(false)
       expect(typeof result.createdAt).toBe('string')
     })
 
-    it('should throw NOT_FOUND when server does not exist', async () => {
-      await expect(mcpServerService.getById('non-existent')).rejects.toThrow(DataApiError)
-      await expect(mcpServerService.getById('non-existent')).rejects.toMatchObject({
-        code: ErrorCode.NOT_FOUND
-      })
+    it('should throw NOT_FOUND when server does not exist', () => {
+      let err: unknown
+      try {
+        mcpServerService.getById('non-existent')
+      } catch (e) {
+        err = e
+      }
+      expect(err).toBeInstanceOf(DataApiError)
+      expect(err).toMatchObject({ code: ErrorCode.NOT_FOUND })
     })
   })
 
@@ -57,7 +56,7 @@ describe('McpServerService', () => {
       await seedServer({ id: 'srv-1', name: 'first' })
       await seedServer({ id: 'srv-2', name: 'second' })
 
-      const result = await mcpServerService.list({})
+      const result = mcpServerService.list({})
       expect(result.items).toHaveLength(2)
       expect(result.total).toBe(2)
     })
@@ -66,7 +65,7 @@ describe('McpServerService', () => {
       await seedServer({ id: 'srv-a', isActive: true })
       await seedServer({ id: 'srv-b', isActive: false })
 
-      const result = await mcpServerService.list({ isActive: true })
+      const result = mcpServerService.list({ isActive: true })
       expect(result.items).toHaveLength(1)
       expect(result.items[0].isActive).toBe(true)
     })
@@ -75,7 +74,7 @@ describe('McpServerService', () => {
       await seedServer({ id: 'srv-stdio', type: 'stdio' })
       await seedServer({ id: 'srv-sse', type: 'sse' })
 
-      const result = await mcpServerService.list({ type: 'sse' })
+      const result = mcpServerService.list({ type: 'sse' })
       expect(result.items).toHaveLength(1)
       expect(result.items[0].type).toBe('sse')
     })
@@ -83,28 +82,26 @@ describe('McpServerService', () => {
 
   describe('create', () => {
     it('should create and return server', async () => {
-      const result = await mcpServerService.create({ name: 'test-server', command: 'npx' })
+      const result = mcpServerService.create({ name: 'test-server', command: 'npx' })
       expect(result.name).toBe('test-server')
 
       const rows = await dbh.db.select().from(mcpServerTable)
       expect(rows).toHaveLength(1)
     })
 
-    it('should throw validation error when name is empty', async () => {
-      await expect(mcpServerService.create({ name: '' })).rejects.toThrow(DataApiError)
-      await expect(mcpServerService.create({ name: '' })).rejects.toMatchObject({
-        code: ErrorCode.VALIDATION_ERROR
-      })
+    it('should throw validation error when name is empty', () => {
+      let err: unknown
+      try {
+        mcpServerService.create({ name: '' })
+      } catch (e) {
+        err = e
+      }
+      expect(err).toBeInstanceOf(DataApiError)
+      expect(err).toMatchObject({ code: ErrorCode.VALIDATION_ERROR })
     })
 
-    it('should throw validation error when name is whitespace only', async () => {
-      await expect(mcpServerService.create({ name: '   ' })).rejects.toThrow(DataApiError)
-    })
-
-    it('should route server creation through the serialized write transaction helper', async () => {
-      await mcpServerService.create({ name: 'serialized-server', command: 'npx' })
-
-      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
+    it('should throw validation error when name is whitespace only', () => {
+      expect(() => mcpServerService.create({ name: '   ' })).toThrow(DataApiError)
     })
   })
 
@@ -112,43 +109,33 @@ describe('McpServerService', () => {
     it('should update and return server', async () => {
       await seedServer()
 
-      const result = await mcpServerService.update('srv-1', { name: 'updated-name' })
+      const result = mcpServerService.update('srv-1', { name: 'updated-name' })
       expect(result.name).toBe('updated-name')
 
       const [row] = await dbh.db.select().from(mcpServerTable).where(eq(mcpServerTable.id, 'srv-1'))
       expect(row.name).toBe('updated-name')
     })
 
-    it('should clear a custom timeout when timeout is set to null', async () => {
-      await seedServer({ timeout: 120 })
-
-      const result = await mcpServerService.update('srv-1', { timeout: null })
-      expect(result.timeout).toBeUndefined()
-
-      const [row] = await dbh.db.select().from(mcpServerTable).where(eq(mcpServerTable.id, 'srv-1'))
-      expect(row.timeout).toBeNull()
-    })
-
-    it('should throw NOT_FOUND when updating non-existent server', async () => {
-      await expect(mcpServerService.update('non-existent', { name: 'x' })).rejects.toMatchObject({
-        code: ErrorCode.NOT_FOUND
-      })
+    it('should throw NOT_FOUND when updating non-existent server', () => {
+      let err: unknown
+      try {
+        mcpServerService.update('non-existent', { name: 'x' })
+      } catch (e) {
+        err = e
+      }
+      expect(err).toMatchObject({ code: ErrorCode.NOT_FOUND })
     })
 
     it('should throw validation error when name is set to empty', async () => {
       await seedServer()
 
-      await expect(mcpServerService.update('srv-1', { name: '' })).rejects.toMatchObject({
-        code: ErrorCode.VALIDATION_ERROR
-      })
-    })
-
-    it('should route server updates through the serialized write transaction helper', async () => {
-      await seedServer()
-
-      await mcpServerService.update('srv-1', { name: 'serialized-update' })
-
-      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
+      let err: unknown
+      try {
+        mcpServerService.update('srv-1', { name: '' })
+      } catch (e) {
+        err = e
+      }
+      expect(err).toMatchObject({ code: ErrorCode.VALIDATION_ERROR })
     })
   })
 
@@ -156,24 +143,20 @@ describe('McpServerService', () => {
     it('should delete an existing server', async () => {
       await seedServer()
 
-      await expect(mcpServerService.delete('srv-1')).resolves.toBeUndefined()
+      expect(mcpServerService.delete('srv-1')).toBeUndefined()
 
       const rows = await dbh.db.select().from(mcpServerTable)
       expect(rows).toHaveLength(0)
     })
 
-    it('should throw NOT_FOUND when deleting non-existent server', async () => {
-      await expect(mcpServerService.delete('non-existent')).rejects.toMatchObject({
-        code: ErrorCode.NOT_FOUND
-      })
-    })
-
-    it('should route server deletion through the serialized write transaction helper', async () => {
-      await seedServer()
-
-      await mcpServerService.delete('srv-1')
-
-      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
+    it('should throw NOT_FOUND when deleting non-existent server', () => {
+      let err: unknown
+      try {
+        mcpServerService.delete('non-existent')
+      } catch (e) {
+        err = e
+      }
+      expect(err).toMatchObject({ code: ErrorCode.NOT_FOUND })
     })
   })
 
@@ -181,7 +164,7 @@ describe('McpServerService', () => {
     it('should return server when found by id', async () => {
       await seedServer()
 
-      const result = await mcpServerService.findByIdOrName('srv-1')
+      const result = mcpServerService.findByIdOrName('srv-1')
       expect(result).toBeDefined()
       expect(result!.id).toBe('srv-1')
     })
@@ -189,13 +172,13 @@ describe('McpServerService', () => {
     it('should fall back to name lookup when id not found', async () => {
       await seedServer({ id: 'srv-x', name: 'my-server' })
 
-      const result = await mcpServerService.findByIdOrName('my-server')
+      const result = mcpServerService.findByIdOrName('my-server')
       expect(result).toBeDefined()
       expect(result!.name).toBe('my-server')
     })
 
     it('should return undefined when not found by id or name', async () => {
-      const result = await mcpServerService.findByIdOrName('non-existent')
+      const result = mcpServerService.findByIdOrName('non-existent')
       expect(result).toBeUndefined()
     })
   })
@@ -206,7 +189,7 @@ describe('McpServerService', () => {
       await seedServer({ id: 'srv-b', name: 'B', sortOrder: 0 })
       await seedServer({ id: 'srv-c', name: 'C', sortOrder: 0 })
 
-      await mcpServerService.reorder(['srv-c', 'srv-a', 'srv-b'])
+      mcpServerService.reorder(['srv-c', 'srv-a', 'srv-b'])
 
       const rows = await dbh.db.select().from(mcpServerTable)
       const byId = new Map(rows.map((r) => [r.id, r]))
@@ -215,18 +198,8 @@ describe('McpServerService', () => {
       expect(byId.get('srv-b')!.sortOrder).toBe(2)
     })
 
-    it('should handle empty array', async () => {
-      await expect(mcpServerService.reorder([])).resolves.toBeUndefined()
-      expect(MockMainDbServiceExport.dbService.withWriteTx).not.toHaveBeenCalled()
-    })
-
-    it('should route reorder through the serialized write transaction helper', async () => {
-      await seedServer({ id: 'srv-a', name: 'A', sortOrder: 0 })
-      await seedServer({ id: 'srv-b', name: 'B', sortOrder: 0 })
-
-      await mcpServerService.reorder(['srv-b', 'srv-a'])
-
-      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
+    it('should handle empty array', () => {
+      expect(mcpServerService.reorder([])).toBeUndefined()
     })
   })
 })

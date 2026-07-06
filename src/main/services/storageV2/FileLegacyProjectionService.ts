@@ -4,7 +4,7 @@ import path from 'node:path'
 
 import type { Client, Row } from '@libsql/client'
 import { loggerService } from '@logger'
-import { getFilesDir } from '@main/utils/file'
+import { getFilesDir } from '@main/utils/legacyFile'
 
 import { storageV2DataRootService } from './DataRootService'
 import { getAvailablePathSync, movePathSync } from './SafeFileMove'

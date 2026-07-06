@@ -3,7 +3,7 @@ import path from 'node:path'
 
 import { application } from '@application'
 import { notifyMainProcessDataSyncLocalChange } from '@main/services/appData/DataSyncLocalChangeNotifier'
-import { getName, getNotesDir } from '@main/utils/file'
+import { getName, getNotesDir } from '@main/utils/legacyFile'
 
 import { readRendererStoreValue } from '../rendererBridge'
 import type { AppCapabilityDefinition } from '../types'

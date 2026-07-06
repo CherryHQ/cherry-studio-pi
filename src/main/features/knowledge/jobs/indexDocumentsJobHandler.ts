@@ -6,6 +6,7 @@ import { knowledgeItemService } from '@data/services/KnowledgeItemService'
 import { loggerService } from '@logger'
 import type { JobContext, JobHandler } from '@main/core/job/types'
 import type { KnowledgeBase } from '@shared/data/types/knowledge'
+import { isCompletedVectorKnowledgeBase } from '@shared/data/types/knowledge'
 
 import type { KnowledgeLockManager } from '../KnowledgeLockManager'
 import { loadKnowledgeItemDocuments } from '../readers/KnowledgeReader'
@@ -20,7 +21,7 @@ import { fetchKnowledgeWebPage } from '../utils/sources/url'
 import { captureUrlSnapshotFile } from '../utils/sources/urlSnapshot'
 import { collectKnowledgeReservedRelativePaths } from '../utils/storage/pathStorage'
 import { hashEmbeddingText } from '../vectorstore/indexStore/hashing'
-import type { RebuildMaterialInput } from '../vectorstore/indexStore/model'
+import type { RebuildMaterialEmbeddingInput, RebuildMaterialInput } from '../vectorstore/indexStore/model'
 import type { KnowledgeIndexDocumentsPayload } from './jobTypes'
 import { isDataApiNotFoundError, markKnowledgeItemFailedOnSettled } from './utils/settled'
 
@@ -36,7 +37,9 @@ export function createIndexDocumentsJobHandler(
   knowledgeLockManager: KnowledgeLockManager
 ): JobHandler<KnowledgeIndexDocumentsPayload> {
   return {
-    recovery: 'retry',
+    // Don't auto-resume on restart — a deliberate app quit must not re-spend the
+    // embedding API; the item is parked at `failed` and reindexed on demand.
+    recovery: 'abandon',
     defaultQueue: (input) => knowledgeQueueName(toKnowledgeBaseId(input.baseId)),
     defaultConcurrency: 5,
     defaultRetryPolicy: {
@@ -50,27 +53,24 @@ export function createIndexDocumentsJobHandler(
     async execute(ctx) {
       ctx.signal.throwIfAborted()
       // Validate the target before side effects; missing/deleting items can happen after async delete.
-      const input = await loadIndexDocumentsInputOrSkip(ctx)
+      const input = loadIndexDocumentsInputOrSkip(ctx)
       if (!input) {
         return
       }
       const { base, item } = input
 
       // Mark reading before file/network IO so the UI reflects the current long-running phase.
+      // No base mutation lock: this only writes the main app DB (knowledge_item), not the
+      // per-base index.sqlite the lock protects, and updateStatus's own 'deleting' guard
+      // (KnowledgeItemService.updateStatus) already covers the race the lock would.
       reportKnowledgeProgress(ctx, 0, { stage: 'reading', currentFile: 0, totalFiles: 1 })
-      await knowledgeLockManager.withBaseMutationLock(ctx.input.baseId, async () => {
-        await knowledgeItemService.updateStatus(ctx.input.itemId, 'reading')
-      })
+      knowledgeItemService.updateStatus(ctx.input.itemId, 'reading')
 
       // Capture a url's or note's snapshot on first index (a url fetches outside
       // the lock, a note writes its in-hand content; both persist a relativePath
       // under it), then read every item from disk. Read and chunk outside the base
       // lock; these phases can be slow and do not mutate shared state.
-      const readableItem = await ensureNoteSnapshot(
-        ctx,
-        await ensureUrlSnapshot(ctx, item, knowledgeLockManager),
-        knowledgeLockManager
-      )
+      const readableItem = await ensureSnapshot(ctx, item, knowledgeLockManager)
       const documents = await readItemDocuments(ctx, readableItem)
       const chunked = chunkItemDocuments(base, documents)
       if (chunked.chunks.length === 0) {
@@ -85,10 +85,9 @@ export function createIndexDocumentsJobHandler(
       }
 
       // Mark embedding separately so the UI reflects the current long-running phase.
+      // No base mutation lock here either — same reasoning as the 'reading' status above.
       reportKnowledgeProgress(ctx, 40, { stage: 'embedding', currentFile: 0, totalFiles: 1 })
-      await knowledgeLockManager.withBaseMutationLock(ctx.input.baseId, () =>
-        knowledgeItemService.updateStatus(ctx.input.itemId, 'embedding')
-      )
+      knowledgeItemService.updateStatus(ctx.input.itemId, 'embedding')
 
       // Use readableItem, not item: for a freshly captured url it carries the snapshot
       // relativePath, so the material's relative_path is the real `raw/` snapshot path
@@ -108,14 +107,14 @@ export function createIndexDocumentsJobHandler(
   }
 }
 
-async function loadIndexDocumentsInputOrSkip(
+function loadIndexDocumentsInputOrSkip(
   ctx: JobContext<KnowledgeIndexDocumentsPayload>
-): Promise<LoadedIndexDocumentsInput | null> {
+): LoadedIndexDocumentsInput | null {
   const { baseId, itemId } = ctx.input
 
   try {
-    const base = await knowledgeBaseService.getById(baseId)
-    const item = await knowledgeItemService.getById(itemId)
+    const base = knowledgeBaseService.getById(baseId)
+    const item = knowledgeItemService.getById(itemId)
 
     if (item.status === 'deleting') {
       logger.info('Skipping index-documents for deleting item', { baseId, itemId, jobId: ctx.jobId })
@@ -151,82 +150,90 @@ async function readItemDocuments(
   return await loadKnowledgeItemDocuments(item)
 }
 
-/**
- * Ensure a URL item has an on-disk snapshot before it is read. A URL without a
- * `relativePath` (freshly added or migrated from v1) is fetched once here, the
- * markdown written to a base file, and its `relativePath` persisted — so this
- * and every later reindex read the snapshot offline. The fetch runs outside the
- * base mutation lock; only the name allocation, file write, and persistence run
- * under it, so concurrent captures in the same base cannot pick the same path.
- * Non-URL items, and URLs that already have a snapshot, pass straight through.
- */
-async function ensureUrlSnapshot(
-  ctx: JobContext<KnowledgeIndexDocumentsPayload>,
-  item: IndexableKnowledgeItem,
-  knowledgeLockManager: KnowledgeLockManager
-): Promise<IndexableKnowledgeItem> {
-  if (item.type !== 'url' || item.data.relativePath) {
-    return item
-  }
-
-  const markdown = await fetchKnowledgeWebPage(item.data.url, ctx.signal)
-  if (!markdown) {
-    throw new Error(`Knowledge URL returned empty markdown: ${item.data.url}`)
-  }
-
-  return await knowledgeLockManager.withBaseMutationLock(ctx.input.baseId, async () => {
-    const latest = await knowledgeItemService.getById(ctx.input.itemId)
-    if (latest.type !== 'url' || latest.data.relativePath) {
-      // Another job captured the snapshot (or the item changed) while we fetched.
-      return isIndexableKnowledgeItem(latest) ? latest : item
-    }
-    const reservedPaths = collectKnowledgeReservedRelativePaths(
-      await knowledgeItemService.getItemsByBaseId(ctx.input.baseId)
-    )
-    const relativePath = await captureUrlSnapshotFile(item.baseId, item.data.url, markdown, reservedPaths)
-    const updated = await knowledgeItemService.updateSnapshotRelativePath(ctx.input.itemId, 'url', relativePath)
-    return isIndexableKnowledgeItem(updated) ? updated : item
-  })
+type SnapshotCaptureSpec = {
+  type: 'url' | 'note'
+  /** Produce the snapshot markdown OUTSIDE the base mutation lock; rejects empty input. */
+  produce: (signal: AbortSignal) => Promise<string>
+  /** Write the produced markdown to a base file under the lock, returning its relativePath. */
+  capture: (markdown: string, reservedPaths: Set<string>) => Promise<string>
 }
 
 /**
- * Ensure a note item has an on-disk snapshot before it is read. A note without a
- * `relativePath` (freshly added or migrated from v1) has its in-hand content
- * written to a base file here and its `relativePath` persisted — so this and
- * every later reindex read the snapshot from disk. Unlike a url there is no
- * network fetch (the content is already on the item), so the whole capture runs
- * under the base mutation lock; the name allocation, file write, and persistence
- * stay serialized, so concurrent captures in the same base cannot pick the same
- * path. Non-note items, and notes that already have a snapshot, pass straight
- * through.
+ * Resolve how to capture a url/note snapshot, or null when the item needs none
+ * (a file leaf, or a url/note that already has a snapshot). url and note differ
+ * only in how the markdown is produced (network fetch vs in-hand content) and
+ * written — the lock, re-read, name reservation, and persistence are shared by
+ * {@link ensureSnapshot}, so a future cloud source is just another spec.
  */
-async function ensureNoteSnapshot(
+function resolveSnapshotCaptureSpec(item: IndexableKnowledgeItem): SnapshotCaptureSpec | null {
+  if (item.type === 'url' && !item.data.relativePath) {
+    const { baseId } = item
+    const { url } = item.data
+    return {
+      type: 'url',
+      produce: async (signal) => {
+        const markdown = await fetchKnowledgeWebPage(url, signal)
+        if (!markdown) {
+          throw new Error(`Knowledge URL returned empty markdown: ${url}`)
+        }
+        return markdown
+      },
+      capture: (markdown, reservedPaths) => captureUrlSnapshotFile(baseId, url, markdown, reservedPaths)
+    }
+  }
+
+  if (item.type === 'note' && !item.data.relativePath) {
+    const { baseId } = item
+    const { source, content } = item.data
+    return {
+      type: 'note',
+      // The content is already in hand, so there is no network step — but still
+      // reject empty/whitespace-only content here (before the lock, like the url
+      // empty-markdown guard): an empty note would otherwise write a
+      // frontmatter-only snapshot and complete with an empty index.
+      produce: async () => {
+        if (content.trim() === '') {
+          throw new Error(`Knowledge note has empty content: ${source}`)
+        }
+        return content
+      },
+      capture: (markdown, reservedPaths) => captureNoteSnapshotFile(baseId, source, markdown, reservedPaths)
+    }
+  }
+
+  return null
+}
+
+/**
+ * Ensure a url or note item has an on-disk snapshot before it is read. An item
+ * without a `relativePath` (freshly added or migrated from v1) is captured once
+ * here: its markdown is produced outside the base mutation lock (a url fetches
+ * over the network, a note returns its in-hand content), then the name
+ * allocation, file write, and `relativePath` persistence run under the lock so
+ * concurrent captures in the same base cannot pick the same path. file items, and
+ * url/note items that already have a snapshot, pass straight through.
+ */
+async function ensureSnapshot(
   ctx: JobContext<KnowledgeIndexDocumentsPayload>,
   item: IndexableKnowledgeItem,
   knowledgeLockManager: KnowledgeLockManager
 ): Promise<IndexableKnowledgeItem> {
-  if (item.type !== 'note' || item.data.relativePath) {
+  const spec = resolveSnapshotCaptureSpec(item)
+  if (!spec) {
     return item
   }
 
-  // Mirrors ensureUrlSnapshot's empty-markdown guard (here also rejecting
-  // whitespace-only content): an empty note would otherwise write a
-  // frontmatter-only snapshot and complete with an empty index. Fail loudly.
-  if (item.data.content.trim() === '') {
-    throw new Error(`Knowledge note has empty content: ${item.data.source}`)
-  }
+  const markdown = await spec.produce(ctx.signal)
 
   return await knowledgeLockManager.withBaseMutationLock(ctx.input.baseId, async () => {
-    const latest = await knowledgeItemService.getById(ctx.input.itemId)
-    if (latest.type !== 'note' || latest.data.relativePath) {
-      // Another job captured the snapshot (or the item changed) while we waited.
+    const latest = knowledgeItemService.getById(ctx.input.itemId)
+    if (latest.type !== spec.type || latest.data.relativePath) {
+      // Another job captured the snapshot (or the item changed) while we produced.
       return isIndexableKnowledgeItem(latest) ? latest : item
     }
-    const reservedPaths = collectKnowledgeReservedRelativePaths(
-      await knowledgeItemService.getItemsByBaseId(ctx.input.baseId)
-    )
-    const relativePath = await captureNoteSnapshotFile(item.baseId, item.data.source, item.data.content, reservedPaths)
-    const updated = await knowledgeItemService.updateSnapshotRelativePath(ctx.input.itemId, 'note', relativePath)
+    const reservedPaths = collectKnowledgeReservedRelativePaths(knowledgeItemService.getItemsByBaseId(ctx.input.baseId))
+    const relativePath = await spec.capture(markdown, reservedPaths)
+    const updated = knowledgeItemService.updateSnapshotRelativePath(ctx.input.itemId, spec.type, relativePath)
     return isIndexableKnowledgeItem(updated) ? updated : item
   })
 }
@@ -253,19 +260,25 @@ async function buildRebuildMaterialInput(
     bodyByHash.set(hashEmbeddingText(chunk.text), chunk.text)
   }
 
-  // Decision A4: reuse vectors already stored for unchanged chunks — only embed
-  // the hashes the index does not have yet, so reindexing unchanged content does
-  // not re-spend the paid embedding API. Existing hashes resolve to their stored
-  // vector at query time; rebuildMaterial keeps them.
-  const vectorStoreService = application.get('KnowledgeVectorStoreService')
-  const store = await vectorStoreService.getIndexStore(base)
-  const existingHashes = await store.listExistingEmbeddingHashes([...bodyByHash.keys()])
-  const missing = [...bodyByHash.entries()].filter(([hash]) => !existingHashes.has(hash))
-  const vectors = await embedKnowledgeTexts(
-    base,
-    missing.map(([, body]) => body),
-    ctx.signal
-  )
+  // A BM25-only base (no embedding model) indexes lexically: store the FTS text
+  // and skip embedding entirely. A vector base embeds only the chunk bodies the
+  // index does not already have (decision A4: reuse vectors stored for unchanged
+  // chunks so reindexing does not re-spend the paid embedding API; existing hashes
+  // resolve to their stored vector at query time and rebuildMaterial keeps them).
+  const usesEmbeddings = isCompletedVectorKnowledgeBase(base)
+  let embeddings: RebuildMaterialEmbeddingInput[] = []
+  if (usesEmbeddings) {
+    const vectorStoreService = application.get('KnowledgeVectorStoreService')
+    const store = await vectorStoreService.getIndexStore(base)
+    const existingHashes = await store.listExistingEmbeddingHashes([...bodyByHash.keys()])
+    const missing = [...bodyByHash.entries()].filter(([hash]) => !existingHashes.has(hash))
+    const vectors = await embedKnowledgeTexts(
+      base,
+      missing.map(([, body]) => body),
+      ctx.signal
+    )
+    embeddings = missing.map(([embeddingTextHash], index) => ({ embeddingTextHash, vector: vectors[index] }))
+  }
 
   return {
     material: {
@@ -280,7 +293,8 @@ async function buildRebuildMaterialInput(
       charStart: chunk.charStart,
       charEnd: chunk.charEnd
     })),
-    embeddings: missing.map(([embeddingTextHash], index) => ({ embeddingTextHash, vector: vectors[index] }))
+    usesEmbeddings,
+    embeddings
   }
 }
 
@@ -294,7 +308,7 @@ async function writeItemMaterial(
 
   await knowledgeLockManager.withBaseMutationLock(baseId, async () => {
     ctx.signal.throwIfAborted()
-    const latestItem = await knowledgeItemService.getById(itemId)
+    const latestItem = knowledgeItemService.getById(itemId)
     if (latestItem.status === 'deleting') {
       logger.info('Skipping material rebuild for deleting item', { baseId, itemId, jobId: ctx.jobId })
       return
@@ -303,6 +317,6 @@ async function writeItemMaterial(
     const vectorStoreService = application.get('KnowledgeVectorStoreService')
     const store = await vectorStoreService.getIndexStore(base)
     await store.rebuildMaterial(itemId, input)
-    await knowledgeItemService.updateStatus(itemId, 'completed')
+    knowledgeItemService.updateStatus(itemId, 'completed')
   })
 }

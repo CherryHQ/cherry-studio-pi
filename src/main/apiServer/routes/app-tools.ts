@@ -14,7 +14,8 @@ import {
 import { readRendererStoreValue } from '@main/services/appCapabilities/rendererBridge'
 import { navigateApp, pickPath, sanitizeForAgent } from '@main/services/appCapabilities/utils'
 import { notifyMainProcessDataSyncLocalChange } from '@main/services/appData/DataSyncLocalChangeNotifier'
-import { getName, getNotesDir, isPathInside } from '@main/utils/file'
+import { isPathInside } from '@main/utils/file'
+import { getName, getNotesDir } from '@main/utils/legacyFile'
 import express from 'express'
 
 const logger = loggerService.withContext('ApiServer:AppTools')

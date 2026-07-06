@@ -1,6 +1,7 @@
 import { loggerService } from '@logger'
-import { isMac, isWin } from '@main/core/platform'
-import { toAsarUnpackedPath } from '@main/utils'
+import { isWin } from '@main/core/platform'
+import { getBinaryExecutionEnv } from '@main/utils/binaryEnv'
+import { getBinaryPath } from '@main/utils/binaryResolver'
 import { spawn } from 'child_process'
 import fs from 'fs/promises'
 import os from 'os'
@@ -13,8 +14,6 @@ export const MAX_LINE_LENGTH = 2000
 export const DEFAULT_READ_LIMIT = 2000
 export const MAX_FILES_LIMIT = 100
 export const MAX_GREP_MATCHES = 100
-export const RIPGREP_DEFAULT_TIMEOUT_MS = 30_000
-export const RIPGREP_MAX_STDOUT_BYTES = 1024 * 1024
 
 // Common types
 export interface FileInfo {
@@ -630,76 +629,73 @@ export interface RipgrepRunOptions {
   maxStdoutBytes?: number
 }
 
-export function getRipgrepBinaryPath(): string {
-  const pkgJsonPath = require.resolve('@cherrystudio/ripgrep/package.json')
-  const pkgRoot = path.dirname(pkgJsonPath)
-  const platform = isMac ? 'darwin' : isWin ? 'win32' : 'linux'
-  const arch = process.arch === 'arm64' ? 'arm64' : 'x64'
-  const executable = isWin ? 'rg.exe' : 'rg'
-  return toAsarUnpackedPath(path.join(pkgRoot, 'vendor', 'ripgrep', `${arch}-${platform}`, executable))
+export async function getRipgrepBinaryPath(): Promise<string> {
+  return getBinaryPath('rg')
 }
 
 export async function runRipgrep(args: string[], options: RipgrepRunOptions = {}): Promise<RipgrepResult> {
-  const ripgrepBinaryPath = getRipgrepBinaryPath()
-  const timeoutMs = Math.max(1, Math.trunc(options.timeoutMs ?? RIPGREP_DEFAULT_TIMEOUT_MS))
-  const maxStdoutBytes = Math.max(1, Math.trunc(options.maxStdoutBytes ?? RIPGREP_MAX_STDOUT_BYTES))
+  const ripgrepBinaryPath = await getRipgrepBinaryPath()
 
   return new Promise((resolve) => {
     const child = spawn(ripgrepBinaryPath, args, {
       cwd: process.cwd(),
+      env: { ...process.env, ...getBinaryExecutionEnv() },
       stdio: ['ignore', 'pipe', 'pipe']
     })
 
     let stdout = ''
     let stdoutBytes = 0
     let settled = false
-    let timeoutHandle: ReturnType<typeof setTimeout> | null = null
+    const timeoutMs = options.timeoutMs ?? 30_000
+    const maxStdoutBytes = options.maxStdoutBytes ?? 16 * 1024 * 1024
+
+    const stopProcess = () => {
+      if (!child.killed) {
+        child.kill('SIGKILL')
+      }
+    }
 
     const settle = (result: RipgrepResult) => {
       if (settled) return
       settled = true
-      if (timeoutHandle) {
-        clearTimeout(timeoutHandle)
-        timeoutHandle = null
-      }
+      if (timeout) clearTimeout(timeout)
       resolve(result)
     }
 
-    const killChild = () => {
-      try {
-        child.kill('SIGKILL')
-      } catch {
-        // The process may already have exited.
-      }
-    }
-
-    timeoutHandle = setTimeout(() => {
-      killChild()
-      settle({ ok: true, stdout, exitCode: null, truncated: true, timedOut: true })
-    }, timeoutMs)
-    timeoutHandle.unref?.()
+    const timeout =
+      timeoutMs > 0
+        ? setTimeout(() => {
+            stopProcess()
+            settle({ ok: true, stdout, exitCode: null, truncated: true, timedOut: true })
+          }, timeoutMs)
+        : undefined
+    timeout?.unref?.()
 
     child.stdout?.on('data', (chunk) => {
-      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+      if (settled) return
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk))
       const remainingBytes = maxStdoutBytes - stdoutBytes
+
       if (remainingBytes <= 0) {
-        killChild()
+        stopProcess()
         settle({ ok: true, stdout, exitCode: 0, truncated: true })
         return
       }
 
-      const accepted = buffer.byteLength > remainingBytes ? buffer.subarray(0, remainingBytes) : buffer
-      stdout += accepted.toString('utf-8')
-      stdoutBytes += accepted.byteLength
-
-      if (buffer.byteLength > remainingBytes || stdoutBytes >= maxStdoutBytes) {
-        killChild()
+      if (buffer.byteLength > remainingBytes) {
+        stdout += buffer.subarray(0, remainingBytes).toString('utf-8')
+        stdoutBytes = maxStdoutBytes
+        stopProcess()
         settle({ ok: true, stdout, exitCode: 0, truncated: true })
+        return
       }
+
+      stdout += buffer.toString('utf-8')
+      stdoutBytes += buffer.byteLength
     })
 
     child.on('error', () => {
-      settle({ ok: false, stdout, exitCode: null })
+      settle({ ok: false, stdout: '', exitCode: null })
     })
 
     child.on('close', (code) => {

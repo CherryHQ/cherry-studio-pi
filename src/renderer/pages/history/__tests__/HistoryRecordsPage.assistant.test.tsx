@@ -65,7 +65,7 @@ vi.mock('@renderer/components/VirtualList', () => ({
   )
 }))
 
-vi.mock('@renderer/components/resource/dialogs', () => ({
+vi.mock('@renderer/components/resourceCatalog/dialogs/edit', () => ({
   ResourceEditDialogHost: ({ target }: { target: { kind: string; id: string } | null }) =>
     target ? <div data-testid="resource-edit-dialog-host" data-kind={target.kind} data-id={target.id} /> : null
 }))
@@ -135,7 +135,7 @@ vi.mock('@renderer/hooks/useNotesSettings', () => ({
   useNotesSettings: () => ({ notesPath: '/notes' })
 }))
 
-vi.mock('@renderer/services/ApiService', () => ({
+vi.mock('@renderer/utils/aiGeneration', () => ({
   fetchMessagesSummary: vi.fn().mockResolvedValue({ text: 'Auto title' })
 }))
 
@@ -162,12 +162,12 @@ vi.mock('@renderer/components/Popups/SaveToKnowledgePopup', () => ({
   default: { showForTopic: hookMocks.saveToKnowledge }
 }))
 
-vi.mock('@renderer/utils/copy', () => ({
+vi.mock('@renderer/services/copy', () => ({
   copyTopicAsMarkdown: vi.fn(),
   copyTopicAsPlainText: vi.fn()
 }))
 
-vi.mock('@renderer/utils/export', () => ({
+vi.mock('@renderer/services/ExportService', () => ({
   exportMarkdownToJoplin: vi.fn(),
   exportMarkdownToSiyuan: vi.fn(),
   exportMarkdownToYuque: vi.fn(),

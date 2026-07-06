@@ -15,29 +15,31 @@
  * --------------------------------------------------------------------------
  */
 import type { Stats } from 'node:fs'
-import { fileURLToPath } from 'node:url'
 
 import { application } from '@application'
 import { loggerService } from '@logger'
 import { WindowType } from '@main/core/window/types'
+import { isPathInside, resolveAndValidatePath } from '@main/utils/legacyFile'
 import { IpcChannel } from '@shared/IpcChannel'
 import type { S3Config, WebDavConfig } from '@shared/types/backup'
-import { sanitizeFilename } from '@shared/utils/file'
-import archiver from 'archiver'
+import { ZipArchive } from 'archiver'
 import { app } from 'electron'
 import * as fs from 'fs-extra'
 import StreamZip from 'node-stream-zip'
 import * as path from 'path'
 import type { CreateDirectoryOptions, FileStat } from 'webdav'
 
-import { isPathInside, resolveAndValidatePath } from '../utils/file'
 import S3Storage from './S3Storage'
 import WebDav from './WebDav'
 
 const logger = loggerService.withContext('BackupManager')
-const DIRECT_BACKUP_APP_NAME = 'Cherry Studio Pi'
-const LEGACY_DIRECT_BACKUP_APP_NAMES = new Set([DIRECT_BACKUP_APP_NAME, 'Cherry Studio'])
-const DEFAULT_DIRECT_BACKUP_FILE_NAME = 'cherry-studio-pi.backup.zip'
+
+export function sanitizeBackupFileName(input: string): string {
+  const normalized = input.replace(/\\/g, '/').trim()
+  const baseName = path.posix.basename(normalized)
+  const safeName = baseName && baseName !== '.' && baseName !== '..' ? baseName : 'cherry-studio-pi.backup.zip'
+  return safeName.toLowerCase().endsWith('.zip') ? safeName : `${safeName}.zip`
+}
 
 interface CopyDirOptions {
   dereferenceSymlinks: boolean
@@ -55,89 +57,9 @@ interface ProgressData {
   total: number
 }
 
-const TEMP_APP_DIR = 'cherry-studio-pi'
-const LEGACY_TEMP_APP_DIR = 'cherry-studio'
-const URL_SCHEME_PATTERN = /^[a-zA-Z][a-zA-Z\d+\-.]*:/
-const WINDOWS_DRIVE_PATH_PATTERN = /^[a-zA-Z]:(?:[\\/]|$)/
-
-function getErrorMessage(error: unknown, fallback: string): string {
-  if (error instanceof Error && error.message) return error.message
-  if (typeof error === 'string' && error.trim()) return error
-  if (error && typeof error === 'object' && 'message' in error) {
-    const message = (error as { message?: unknown }).message
-    if (typeof message === 'string' && message.trim()) return message
-  }
-  return fallback
-}
-
-function getLoggableError(error: unknown, fallback: string): Error {
-  return error instanceof Error ? error : new Error(getErrorMessage(error, fallback))
-}
-
-function assertZipEntriesWithin(entryNames: string[], baseDir: string): void {
-  const root = path.resolve(baseDir)
-
-  for (const name of entryNames) {
-    const normalizedName = String(name ?? '').replace(/\\/g, '/')
-    if (
-      !normalizedName ||
-      normalizedName.includes('\0') ||
-      path.posix.isAbsolute(normalizedName) ||
-      path.win32.isAbsolute(name)
-    ) {
-      throw new Error(`Unsafe backup entry path: ${name}`)
-    }
-
-    const target = path.resolve(root, normalizedName.split('/').join(path.sep))
-    if (target !== root && !target.startsWith(root + path.sep)) {
-      throw new Error(`Unsafe backup entry path: ${name}`)
-    }
-  }
-}
-
-function normalizeLocalBackupPath(pathOrUrl: string): string {
-  if (typeof pathOrUrl !== 'string' || pathOrUrl.trim().length === 0) {
-    throw new Error('Invalid backup path: empty path')
-  }
-
-  if (pathOrUrl.includes('\0')) {
-    throw new Error('Invalid backup path: NUL bytes are not allowed')
-  }
-
-  const trimmedInput = pathOrUrl.trimStart()
-  if (trimmedInput.startsWith('file://')) {
-    const url = new URL(trimmedInput)
-    if (url.protocol !== 'file:') {
-      throw new Error('Invalid backup path: only file:// URLs are allowed')
-    }
-    return fileURLToPath(url)
-  }
-
-  if (URL_SCHEME_PATTERN.test(trimmedInput) && !WINDOWS_DRIVE_PATH_PATTERN.test(trimmedInput)) {
-    throw new Error('Invalid backup path: URL schemes are not allowed')
-  }
-
-  return pathOrUrl
-}
-
-export function sanitizeBackupFileName(fileName: string | null | undefined): string {
-  const rawName = String(fileName ?? '')
-    .split('\u0000')
-    .join('')
-    .trim()
-  const baseName = path.win32.basename(path.posix.basename(rawName))
-  if (!baseName || baseName === '.' || baseName === '..') {
-    return DEFAULT_DIRECT_BACKUP_FILE_NAME
-  }
-  const sanitized = sanitizeFilename(baseName, '_').trim()
-  const safeName = !sanitized || sanitized === '.' || sanitized === '..' ? DEFAULT_DIRECT_BACKUP_FILE_NAME : sanitized
-  const clippedName = safeName.slice(0, 180)
-
-  return clippedName.toLowerCase().endsWith('.zip') ? clippedName : `${clippedName}.zip`
-}
-
 class BackupManager {
-  private backupDir = path.join(app.getPath('temp'), TEMP_APP_DIR, 'backup')
+  private tempDir = path.join(app.getPath('temp'), 'cherry-studio', 'backup', 'temp')
+  private backupDir = path.join(app.getPath('temp'), 'cherry-studio', 'backup')
 
   // Cached instance to avoid recreating
   private s3Storage: S3Storage | null = null
@@ -160,11 +82,6 @@ class BackupManager {
     webdavPath?: string
   } | null = null
 
-  private async createTempWorkspace(prefix: string): Promise<string> {
-    await fs.ensureDir(this.backupDir)
-    return await fs.promises.mkdtemp(path.join(this.backupDir, prefix))
-  }
-
   /**
    * Handle backup restoration on app startup
    * Called after window is created but before renderer is loaded
@@ -176,7 +93,7 @@ class BackupManager {
     // path registry — every path it touches is hand-rolled from
     // app.getPath('userData'). Two reasons:
     //
-    //   1. handleStartupRestore (this method) runs from src/main/index.ts
+    //   1. handleStartupRestore (this method) runs from src/main/main.ts
     //      BEFORE application.bootstrap() — it has to move restore markers
     //      off disk before any service grabs file handles. Calling
     //      application.getPath() pre-bootstrap throws.
@@ -252,7 +169,7 @@ class BackupManager {
     return {
       version: 6,
       timestamp: Date.now(),
-      appName: DIRECT_BACKUP_APP_NAME,
+      appName: 'Cherry Studio',
       appVersion: app.getVersion(),
       platform: process.platform,
       arch: process.arch
@@ -275,10 +192,9 @@ class BackupManager {
     skipBackupFile: boolean = false
   ): Promise<string> {
     const onProgress = this.onProgress(IpcChannel.BackupProgress, true)
-    const tempDir = await this.createTempWorkspace('backup-')
-    const safeFileName = sanitizeBackupFileName(fileName)
 
     try {
+      await fs.ensureDir(this.tempDir)
       onProgress({ stage: 'preparing', progress: 0, total: 100 })
 
       const userDataPath = app.getPath('userData')
@@ -289,7 +205,7 @@ class BackupManager {
       logger.debug('[backupDirect] Copying database directories...')
 
       const indexedDBSource = path.join(userDataPath, 'IndexedDB')
-      const indexedDBDest = path.join(tempDir, 'IndexedDB')
+      const indexedDBDest = path.join(this.tempDir, 'IndexedDB')
       if (await fs.pathExists(indexedDBSource)) {
         await fs.copy(indexedDBSource, indexedDBDest)
       } else {
@@ -297,7 +213,7 @@ class BackupManager {
       }
 
       const localStorageSource = path.join(userDataPath, 'Local Storage')
-      const localStorageDest = path.join(tempDir, 'Local Storage')
+      const localStorageDest = path.join(this.tempDir, 'Local Storage')
       if (await fs.pathExists(localStorageSource)) {
         await fs.copy(localStorageSource, localStorageDest)
       } else {
@@ -309,13 +225,13 @@ class BackupManager {
 
       // Step 3: Write metadata.json
       const metadata = this.createDirectBackupMetadata()
-      await fs.writeJson(path.join(tempDir, 'metadata.json'), metadata, { spaces: 2 })
+      await fs.writeJson(path.join(this.tempDir, 'metadata.json'), metadata, { spaces: 2 })
       onProgress({ stage: 'copying_database', progress: 52, total: 100 })
 
       // Step 4: Copy Data directory (if not skipped)
       if (!skipBackupFile) {
         const sourcePath = path.join(userDataPath, 'Data')
-        const tempDataDir = path.join(tempDir, 'Data')
+        const tempDataDir = path.join(this.tempDir, 'Data')
 
         if (await fs.pathExists(sourcePath)) {
           const totalSize = await this.getDirSize(sourcePath, { dereferenceSymlinks: true })
@@ -329,21 +245,20 @@ class BackupManager {
         }
       } else {
         logger.debug('[backupDirect] Skip the backup of the file')
-        await fs.promises.mkdir(path.join(tempDir, 'Data'))
+        await fs.promises.mkdir(path.join(this.tempDir, 'Data'))
       }
       onProgress({ stage: 'compressing', progress: 80, total: 100 })
 
       // Step 5: Create ZIP archive
-      const backupedFilePath = path.join(destinationPath, safeFileName)
+      const backupedFilePath = path.join(destinationPath, fileName)
       const output = fs.createWriteStream(backupedFilePath)
-      const archive = archiver('zip', {
+      const archive = new ZipArchive({
         zlib: { level: 1 }, // Use lowest compression level for speed (same as legacy backup)
         zip64: true
       })
 
       await new Promise<void>((resolve, reject) => {
         output.on('close', () => resolve())
-        output.on('error', reject)
         archive.on('error', reject)
         archive.on('warning', (err: any) => {
           if (err.code !== 'ENOENT') {
@@ -351,19 +266,19 @@ class BackupManager {
           }
         })
         archive.pipe(output)
-        archive.directory(tempDir, false)
+        archive.directory(this.tempDir, false)
         archive.finalize()
       })
 
       // Clean up temp directory
-      await fs.remove(tempDir)
+      await fs.remove(this.tempDir)
       onProgress({ stage: 'completed', progress: 100, total: 100 })
 
       logger.info('[backupDirect] Backup completed successfully')
       return backupedFilePath
     } catch (error) {
       logger.error('[backupDirect] Backup failed:', error as Error)
-      await fs.remove(tempDir).catch(() => {})
+      await fs.remove(this.tempDir).catch(() => {})
 
       throw error
     }
@@ -387,14 +302,13 @@ class BackupManager {
     skipBackupFile: boolean = false
   ): Promise<string> {
     const onProgress = this.onProgress(IpcChannel.BackupProgress, true)
-    const tempDir = await this.createTempWorkspace('legacy-backup-')
-    const safeFileName = sanitizeBackupFileName(fileName)
 
     try {
+      await fs.ensureDir(this.tempDir)
       onProgress({ stage: 'preparing', progress: 0, total: 100 })
 
       // Write data.json using streaming
-      const tempDataPath = path.join(tempDir, 'data.json')
+      const tempDataPath = path.join(this.tempDir, 'data.json')
 
       await new Promise<void>((resolve, reject) => {
         const writeStream = fs.createWriteStream(tempDataPath)
@@ -412,7 +326,7 @@ class BackupManager {
       if (!skipBackupFile) {
         // Copy Data directory to temp directory
         const sourcePath = path.join(app.getPath('userData'), 'Data')
-        const tempDataDir = path.join(tempDir, 'Data')
+        const tempDataDir = path.join(this.tempDir, 'Data')
 
         // Get total size of source directory
         const totalSize = await this.getDirSize(sourcePath, { dereferenceSymlinks: true })
@@ -428,15 +342,15 @@ class BackupManager {
         onProgress({ stage: 'preparing_compression', progress: 50, total: 100 })
       } else {
         logger.debug('Skip the backup of the file')
-        await fs.promises.mkdir(path.join(tempDir, 'Data')) // Creating empty Data dir is required, otherwise restore will fail
+        await fs.promises.mkdir(path.join(this.tempDir, 'Data')) // Creating empty Data dir is required, otherwise restore will fail
       }
 
       // Create output file stream
-      const backupedFilePath = path.join(destinationPath, safeFileName)
+      const backupedFilePath = path.join(destinationPath, fileName)
       const output = fs.createWriteStream(backupedFilePath)
 
       // Create archiver instance, enable ZIP64 support
-      const archive = archiver('zip', {
+      const archive = new ZipArchive({
         zlib: { level: 1 }, // Use lowest compression level for speed
         zip64: true // Enable ZIP64 support for large files
       })
@@ -467,7 +381,7 @@ class BackupManager {
         }
       }
 
-      await calculateTotals(tempDir)
+      await calculateTotals(this.tempDir)
 
       // Listen for file entry events
       archive.on('entry', () => {
@@ -499,7 +413,6 @@ class BackupManager {
           onProgress({ stage: 'compressing', progress: 100, total: 100 })
           resolve()
         })
-        output.on('error', reject)
         archive.on('error', reject)
         archive.on('warning', (err: any) => {
           if (err.code !== 'ENOENT') {
@@ -511,14 +424,14 @@ class BackupManager {
         archive.pipe(output)
 
         // Add entire temp directory to archive
-        archive.directory(tempDir, false)
+        archive.directory(this.tempDir, false)
 
         // Finalize compression
         archive.finalize()
       })
 
       // Clean up temp directory
-      await fs.remove(tempDir)
+      await fs.remove(this.tempDir)
       onProgress({ stage: 'completed', progress: 100, total: 100 })
 
       logger.info('Backup completed successfully')
@@ -526,7 +439,7 @@ class BackupManager {
     } catch (error) {
       logger.error('[BackupManager] Backup failed:', error as Error)
       // Ensure temp directory is cleaned up
-      await fs.remove(tempDir).catch(() => {})
+      await fs.remove(this.tempDir).catch(() => {})
       throw error
     }
   }
@@ -562,7 +475,7 @@ class BackupManager {
    * @returns Result from WebDAV upload operation
    */
   async backupToWebdav(_: Electron.IpcMainInvokeEvent, webdavConfig: WebDavConfig) {
-    const filename = sanitizeBackupFileName(webdavConfig.fileName || DEFAULT_DIRECT_BACKUP_FILE_NAME)
+    const filename = webdavConfig.fileName || 'cherry-studio.backup.zip'
     const backupedFilePath = await this.backup(_, filename, undefined, webdavConfig.skipBackupFile)
     const webdavClient = this.getWebDavInstance(webdavConfig)
     try {
@@ -599,9 +512,7 @@ class BackupManager {
       .toISOString()
       .replace(/[-:T.Z]/g, '')
       .slice(0, 14)
-    const filename = sanitizeBackupFileName(
-      s3Config.fileName || `cherry-studio-pi.backup.${deviceName}.${timestamp}.zip`
-    )
+    const filename = s3Config.fileName || `cherry-studio.backup.${deviceName}.${timestamp}.zip`
 
     logger.debug(`[backupToS3] Starting S3 backup to ${filename}`)
 
@@ -630,36 +541,29 @@ class BackupManager {
    * @returns For legacy backup: the data string from data.json. For direct backup: void (app will relaunch)
    */
   async restore(_: Electron.IpcMainInvokeEvent, backupPath: string): Promise<string | void> {
-    const normalizedBackupPath = normalizeLocalBackupPath(backupPath)
     const onProgress = this.onProgress(IpcChannel.RestoreProgress, true)
-    const tempDir = await this.createTempWorkspace('restore-')
 
     try {
+      // Create temp directory
+      await fs.ensureDir(this.tempDir)
       onProgress({ stage: 'preparing', progress: 0, total: 100 })
 
-      logger.debug(`step 1: unzip backup file: ${tempDir}`)
+      logger.debug(`step 1: unzip backup file: ${this.tempDir}`)
 
-      const zip = new StreamZip.async({ file: normalizedBackupPath })
+      const zip = new StreamZip.async({ file: backupPath })
       onProgress({ stage: 'extracting', progress: 15, total: 100 })
-      try {
-        assertZipEntriesWithin(Object.keys(await zip.entries()), tempDir)
-        await zip.extract(null, tempDir)
-      } finally {
-        await zip.close().catch((error: unknown) => {
-          logger.warn('[BackupManager] Failed to close restore zip handle:', error as Error)
-        })
-      }
+      await zip.extract(null, this.tempDir)
       onProgress({ stage: 'extracted', progress: 20, total: 100 })
 
       // Check for backup type: direct (version 6+) or legacy (version <= 5)
-      const metadataPath = path.join(tempDir, 'metadata.json')
+      const metadataPath = path.join(this.tempDir, 'metadata.json')
       const isDirectBackup = await fs.pathExists(metadataPath)
 
       if (isDirectBackup) {
         // Direct backup format (version 6+)
         logger.debug('Detected direct backup format (version 6+)')
         // Note: tempDir is NOT cleaned up here - restoreDirect will use and clean it
-        await this.restoreDirect(tempDir)
+        await this.restoreDirect()
         // Direct restore doesn't return data - app needs to relaunch
         return
       }
@@ -667,12 +571,12 @@ class BackupManager {
       // Legacy backup format (version <= 5)
       logger.debug('Detected legacy backup format (version <= 5)')
 
-      const data = await this.restoreLegacy(tempDir)
+      const data = await this.restoreLegacy()
 
       return data
     } catch (error) {
       logger.error('Restore failed:', error as Error)
-      await fs.remove(tempDir).catch(() => {})
+      await fs.remove(this.tempDir).catch(() => {})
       throw error
     }
   }
@@ -681,9 +585,9 @@ class BackupManager {
    * Restore from direct backup format (version 6+).
    * Writes to `*.restore` directories; `handleStartupRestore` performs the atomic
    * swap on next launch, before any DB connection or window opens. Avoids
-   * overwriting live IndexedDB / libsql files (issue #14774).
+   * overwriting live IndexedDB / SQLite database files (issue #14774).
    */
-  private async restoreDirect(tempDir: string): Promise<void> {
+  private async restoreDirect(): Promise<void> {
     const onProgress = this.onProgress(IpcChannel.RestoreProgress, true)
 
     const userDataPath = app.getPath('userData')
@@ -693,13 +597,12 @@ class BackupManager {
 
     try {
       // Read and validate metadata
-      const metadataPath = path.join(tempDir, 'metadata.json')
+      const metadataPath = path.join(this.tempDir, 'metadata.json')
       const metadata = await fs.readJson(metadataPath)
 
-      // Validate appName to ensure backup is from Cherry Studio Pi while keeping
-      // old Cherry Studio direct backups restorable.
-      if (!LEGACY_DIRECT_BACKUP_APP_NAMES.has(metadata.appName)) {
-        throw new Error('This backup file is not from Cherry Studio Pi and cannot be restored')
+      // Validate appName to ensure backup is from Cherry Studio
+      if (metadata.appName !== 'Cherry Studio') {
+        throw new Error('This backup file is not from Cherry Studio and cannot be restored')
       }
 
       // Warn about cross-platform restore
@@ -714,8 +617,8 @@ class BackupManager {
       onProgress({ stage: 'restoring_database', progress: 30, total: 100 })
 
       // IndexedDB & Local Storage Path
-      const indexedDBSource = path.join(tempDir, 'IndexedDB')
-      const localStorageSource = path.join(tempDir, 'Local Storage')
+      const indexedDBSource = path.join(this.tempDir, 'IndexedDB')
+      const localStorageSource = path.join(this.tempDir, 'Local Storage')
 
       logger.debug('[restoreDirect] Staging database directories...')
 
@@ -732,7 +635,7 @@ class BackupManager {
       onProgress({ stage: 'restoring_database', progress: 65, total: 100 })
 
       //  Restore Data directory
-      const dataSource = path.join(tempDir, 'Data')
+      const dataSource = path.join(this.tempDir, 'Data')
       const dataExists = await fs.pathExists(dataSource)
       const dataFiles = dataExists ? await fs.readdir(dataSource) : []
 
@@ -754,7 +657,7 @@ class BackupManager {
       }
 
       // Clean up
-      await fs.remove(tempDir)
+      await fs.remove(this.tempDir)
       onProgress({ stage: 'completed', progress: 100, total: 100 })
 
       logger.info('[restoreDirect] Restore staged successfully, relaunching app to apply...')
@@ -763,7 +666,7 @@ class BackupManager {
     } catch (error) {
       logger.error('[restoreDirect] Restore failed:', error as Error)
       await Promise.all([
-        fs.remove(tempDir).catch(() => {}),
+        fs.remove(this.tempDir).catch(() => {}),
         fs.remove(indexedDBDest).catch(() => {}),
         fs.remove(localStorageDest).catch(() => {}),
         fs.remove(dataDest).catch(() => {})
@@ -778,21 +681,21 @@ class BackupManager {
    * @param onProgress - Callback function to report restore progress
    * @returns The data string read from data.json
    */
-  private async restoreLegacy(tempDir: string): Promise<string> {
+  private async restoreLegacy(): Promise<string> {
     const onProgress = this.onProgress(IpcChannel.RestoreProgress, false)
 
     try {
       logger.debug('[restoreLegacy] read data.json')
 
       // Read data.json
-      const dataPath = path.join(tempDir, 'data.json')
+      const dataPath = path.join(this.tempDir, 'data.json')
       const data = await fs.readFile(dataPath, 'utf-8')
       onProgress({ stage: 'reading_data', progress: 35, total: 100 })
 
       logger.debug('[restoreLegacy] restore Data directory')
 
       const userDataPath = app.getPath('userData')
-      const dataSourcePath = path.join(tempDir, 'Data')
+      const dataSourcePath = path.join(this.tempDir, 'Data')
       const dataDestPath = path.join(userDataPath, 'Data.restore')
 
       const dataExists = await fs.pathExists(dataSourcePath)
@@ -817,7 +720,7 @@ class BackupManager {
 
       // Clean up temp directory
       logger.debug('[restoreLegacy] clean up temp directory')
-      await fs.remove(tempDir)
+      await fs.remove(this.tempDir)
 
       onProgress({ stage: 'completed', progress: 100, total: 100 })
 
@@ -826,7 +729,7 @@ class BackupManager {
       return data
     } catch (error) {
       logger.error('[restoreLegacy] Restore failed:', error as Error)
-      await fs.remove(tempDir).catch(() => {})
+      await fs.remove(this.tempDir).catch(() => {})
       throw error
     }
   }
@@ -861,11 +764,11 @@ class BackupManager {
    * @returns Result from restore operation
    */
   async restoreFromWebdav(_: Electron.IpcMainInvokeEvent, webdavConfig: WebDavConfig) {
-    const filename = sanitizeBackupFileName(webdavConfig.fileName || DEFAULT_DIRECT_BACKUP_FILE_NAME)
+    const filename = webdavConfig.fileName || 'cherry-studio.backup.zip'
     const webdavClient = this.getWebDavInstance(webdavConfig)
-    const backupedFilePath = path.join(this.backupDir, filename)
     try {
       const retrievedFile = await webdavClient.getFileContents(filename)
+      const backupedFilePath = path.join(this.backupDir, filename)
 
       if (!fs.existsSync(this.backupDir)) {
         fs.mkdirSync(this.backupDir, { recursive: true })
@@ -882,11 +785,9 @@ class BackupManager {
       })
 
       return await this.restore(_, backupedFilePath)
-    } catch (error) {
-      logger.error('Failed to restore from WebDAV:', getLoggableError(error, 'Failed to restore backup file'))
-      throw new Error(getErrorMessage(error, 'Failed to restore backup file'))
-    } finally {
-      await fs.remove(backupedFilePath).catch(() => {})
+    } catch (error: any) {
+      logger.error('Failed to restore from WebDAV:', error)
+      throw new Error(error.message || 'Failed to restore backup file')
     }
   }
 
@@ -898,14 +799,14 @@ class BackupManager {
    * @returns Result from restore operation
    */
   async restoreFromS3(_: Electron.IpcMainInvokeEvent, s3Config: S3Config) {
-    const filename = sanitizeBackupFileName(s3Config.fileName || DEFAULT_DIRECT_BACKUP_FILE_NAME)
+    const filename = s3Config.fileName || 'cherry-studio.backup.zip'
 
     logger.debug(`Starting restore from S3: ${filename}`)
 
     const s3Client = this.getS3Storage(s3Config)
-    const backupedFilePath = path.join(this.backupDir, filename)
     try {
       const retrievedFile = await s3Client.getFileContents(filename)
+      const backupedFilePath = path.join(this.backupDir, filename)
       if (!fs.existsSync(this.backupDir)) {
         fs.mkdirSync(this.backupDir, { recursive: true })
       }
@@ -919,14 +820,9 @@ class BackupManager {
 
       logger.info(`S3 restore file downloaded successfully: ${filename}`)
       return await this.restore(_, backupedFilePath)
-    } catch (error) {
-      logger.error(
-        '[BackupManager] Failed to restore from S3:',
-        getLoggableError(error, 'Failed to restore backup file')
-      )
-      throw new Error(getErrorMessage(error, 'Failed to restore backup file'))
-    } finally {
-      await fs.remove(backupedFilePath).catch(() => {})
+    } catch (error: any) {
+      logger.error('[BackupManager] Failed to restore from S3:', error)
+      throw new Error(error.message || 'Failed to restore backup file')
     }
   }
 
@@ -1028,7 +924,7 @@ class BackupManager {
 
   /**
    * Stage an empty Data directory; handleStartupRestore swaps it in on next launch.
-   * Avoids races with libsql / MemoryService / KnowledgeService recreating files
+   * Avoids races with the SQLite DB / MemoryService / KnowledgeService recreating files
    * before relaunch.
    */
   public async resetData() {
@@ -1109,9 +1005,9 @@ class BackupManager {
           size: file.size
         }))
         .sort((a, b) => new Date(b.modifiedTime).getTime() - new Date(a.modifiedTime).getTime())
-    } catch (error) {
-      logger.error('Failed to list WebDAV files:', getLoggableError(error, 'Failed to list backup files'))
-      throw new Error(getErrorMessage(error, 'Failed to list backup files'))
+    } catch (error: any) {
+      logger.error('Failed to list WebDAV files:', error)
+      throw new Error(error.message || 'Failed to list backup files')
     }
   }
 
@@ -1280,9 +1176,9 @@ class BackupManager {
     try {
       const webdavClient = this.getWebDavInstance(webdavConfig)
       return await webdavClient.deleteFile(fileName)
-    } catch (error) {
-      logger.error('Failed to delete WebDAV file:', getLoggableError(error, 'Failed to delete backup file'))
-      throw new Error(getErrorMessage(error, 'Failed to delete backup file'))
+    } catch (error: any) {
+      logger.error('Failed to delete WebDAV file:', error)
+      throw new Error(error.message || 'Failed to delete backup file')
     }
   }
 
@@ -1364,8 +1260,8 @@ class BackupManager {
       .replace(/[-:T.Z]/g, '')
       .slice(0, 14)
 
-    const fileName = `cherry-studio-pi.${timestamp}.zip`
-    const tempPath = path.join(app.getPath('temp'), TEMP_APP_DIR, 'lan-transfer')
+    const fileName = `cherry-studio.${timestamp}.zip`
+    const tempPath = path.join(app.getPath('temp'), 'cherry-studio', 'lan-transfer')
     const targetPath = destinationPath || tempPath
 
     // Ensure temp directory exists
@@ -1385,17 +1281,11 @@ class BackupManager {
   async deleteLanTransferBackup(_: Electron.IpcMainInvokeEvent, filePath: string): Promise<boolean> {
     try {
       // Security check: only allow deletion within temp directory
-      const tempBases = [
-        path.normalize(path.join(app.getPath('temp'), TEMP_APP_DIR, 'lan-transfer')),
-        path.normalize(path.join(app.getPath('temp'), LEGACY_TEMP_APP_DIR, 'lan-transfer'))
-      ]
+      const tempBase = path.normalize(path.join(app.getPath('temp'), 'cherry-studio', 'lan-transfer'))
       const resolvedPath = path.normalize(path.resolve(filePath))
 
       // Use normalized paths with trailing separator to prevent prefix attacks (e.g., /temp-evil)
-      const isAllowedTempPath = tempBases.some(
-        (tempBase) => resolvedPath.startsWith(tempBase + path.sep) || resolvedPath === tempBase
-      )
-      if (!isAllowedTempPath) {
+      if (!resolvedPath.startsWith(tempBase + path.sep) && resolvedPath !== tempBase) {
         logger.warn(`[BackupManager] Attempted to delete file outside temp directory: ${filePath}`)
         return false
       }
@@ -1500,9 +1390,9 @@ class BackupManager {
         })
 
       return files.sort((a, b) => new Date(b.modifiedTime).getTime() - new Date(a.modifiedTime).getTime())
-    } catch (error) {
-      logger.error('Failed to list S3 files:', getLoggableError(error, 'Failed to list backup files'))
-      throw new Error(getErrorMessage(error, 'Failed to list backup files'))
+    } catch (error: any) {
+      logger.error('Failed to list S3 files:', error)
+      throw new Error(error.message || 'Failed to list backup files')
     }
   }
 
@@ -1517,9 +1407,9 @@ class BackupManager {
     try {
       const s3Client = this.getS3Storage(s3Config)
       return await s3Client.deleteFile(fileName)
-    } catch (error) {
-      logger.error('Failed to delete S3 file:', getLoggableError(error, 'Failed to delete backup file'))
-      throw new Error(getErrorMessage(error, 'Failed to delete backup file'))
+    } catch (error: any) {
+      logger.error('Failed to delete S3 file:', error)
+      throw new Error(error.message || 'Failed to delete backup file')
     }
   }
 }
