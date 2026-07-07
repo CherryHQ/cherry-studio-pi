@@ -1,13 +1,49 @@
 import { loggerService } from '@logger'
 import type { Disposable } from '@main/core/lifecycle'
-import { toDataApiError } from '@shared/data/api/errors'
-import type { DataRequest, DataResponse } from '@shared/data/api/types'
+import { DataApiErrorFactory, ErrorCode, toDataApiError } from '@shared/data/api/errors'
+import type { DataRequest, DataResponse, HttpMethod } from '@shared/data/api/types'
 import { IpcChannel } from '@shared/IpcChannel'
 import { ipcMain } from 'electron'
 
 import type { ApiServer } from '../ApiServer'
 
 const logger = loggerService.withContext('DataApi:IpcAdapter')
+const HTTP_METHODS = new Set<HttpMethod>(['GET', 'POST', 'PUT', 'DELETE', 'PATCH'])
+const MALFORMED_REQUEST_ID = 'malformed-data-api-request'
+
+function extractRequestId(request: unknown): string {
+  if (request && typeof request === 'object' && typeof (request as Record<string, unknown>).id === 'string') {
+    return (request as Record<string, string>).id
+  }
+
+  return MALFORMED_REQUEST_ID
+}
+
+function isDataRequest(request: unknown): request is DataRequest {
+  if (!request || typeof request !== 'object') return false
+
+  const candidate = request as Record<string, unknown>
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.path === 'string' &&
+    typeof candidate.method === 'string' &&
+    HTTP_METHODS.has(candidate.method as HttpMethod)
+  )
+}
+
+function createBadRequestResponse(request: unknown): DataResponse {
+  const apiError = DataApiErrorFactory.create(ErrorCode.BAD_REQUEST, 'Malformed Data API request')
+
+  return {
+    id: extractRequestId(request),
+    status: apiError.status,
+    error: apiError.toJSON(),
+    metadata: {
+      duration: 0,
+      timestamp: Date.now()
+    }
+  }
+}
 
 /**
  * IPC transport adapter for Electron environment.
@@ -44,17 +80,24 @@ export class IpcAdapter implements Disposable {
     }
 
     // Main data request handler
-    ipcMain.handle(IpcChannel.DataApi_Request, async (_event, request: DataRequest): Promise<DataResponse> => {
+    ipcMain.handle(IpcChannel.DataApi_Request, async (_event, request: unknown): Promise<DataResponse> => {
       try {
+        if (!isDataRequest(request)) {
+          return createBadRequestResponse(request)
+        }
+
         const response = await this.apiServer.handleRequest(request)
 
         return response
       } catch (error) {
-        logger.error(`Data request failed: ${request.method} ${request.path}`, error as Error)
+        const requestContext = isDataRequest(request)
+          ? `${request.method} ${request.path}`
+          : 'malformed Data API request'
+        logger.error(`Data request failed: ${requestContext}`, error as Error)
 
-        const apiError = toDataApiError(error, `${request.method} ${request.path}`)
+        const apiError = toDataApiError(error, requestContext)
         const errorResponse: DataResponse = {
-          id: request.id,
+          id: extractRequestId(request),
           status: apiError.status,
           error: apiError.toJSON(), // Serialize for IPC transmission
           metadata: {

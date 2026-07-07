@@ -88,18 +88,15 @@ describe('modelMatchesDisplayTag — "free" tag', () => {
     expect(modelMatchesDisplayTag(model, 'free')).toBe(true)
   })
 
-  it('uses the shared free-model check instead of selector-only apiModelId matching', () => {
+  it('uses the shared free-model check, including tokenized apiModelId matching', () => {
     const model = makeModel({ name: 'Llama-3', apiModelId: 'llama-3:free' })
 
-    expect(modelMatchesDisplayTag(model, 'free')).toBe(false)
+    expect(modelMatchesDisplayTag(model, 'free')).toBe(true)
   })
 
-  it('accepts the substring even when embedded in a longer word (known false-positive surface)', () => {
-    // "freedom" / "carefree" will match. Locking this in explicitly so a
-    // future tightening of the predicate surfaces as a test change rather
-    // than a silent UX regression.
-    expect(modelMatchesDisplayTag(makeModel({ name: 'freedom-pro' }), 'free')).toBe(true)
-    expect(modelMatchesDisplayTag(makeModel({ name: 'carefree-mini' }), 'free')).toBe(true)
+  it('requires "free" as a token instead of matching it inside a longer word', () => {
+    expect(modelMatchesDisplayTag(makeModel({ name: 'freedom-pro' }), 'free')).toBe(false)
+    expect(modelMatchesDisplayTag(makeModel({ name: 'carefree-mini' }), 'free')).toBe(false)
   })
 
   it('returns false when no field contains "free" and provider is not cherryai', () => {

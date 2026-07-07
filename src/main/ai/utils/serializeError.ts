@@ -23,6 +23,18 @@ function toSerializable(value: unknown): Serializable {
   }
 }
 
+function toSerializableArray(value: unknown): Serializable[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => toSerializable(item))
+  }
+
+  if (value == null) {
+    return []
+  }
+
+  return [toSerializable(value)]
+}
+
 /** Serialize any Error to a plain object safe for IPC / JSON.
  *  Detects AI SDK error types and extracts their specific fields
  *  (statusCode, responseBody, etc.) so Renderer can use type guards.
@@ -68,13 +80,13 @@ export function serializeError(error: unknown): SerializedError {
     if ('availableTools' in e) serialized.availableTools = (e.availableTools as string[]) ?? null
     if ('reason' in e) serialized.reason = e.reason as string
     if ('lastError' in e) serialized.lastError = toSerializable(e.lastError)
-    if ('errors' in e) serialized.errors = (e.errors as unknown[]).map((err) => toSerializable(err))
+    if ('errors' in e) serialized.errors = toSerializableArray(e.errors)
     if ('originalError' in e) serialized.originalError = serializeError(e.originalError) as Serializable
     if ('functionality' in e) serialized.functionality = e.functionality as string
     if ('provider' in e) serialized.provider = e.provider as string
     if ('responses' in e) serialized.responses = e.responses as string[]
     if ('maxEmbeddingsPerCall' in e) serialized.maxEmbeddingsPerCall = (e.maxEmbeddingsPerCall as number) ?? null
-    if ('values' in e) serialized.values = (e.values as unknown[]).map((v) => toSerializable(v))
+    if ('values' in e) serialized.values = toSerializableArray(e.values)
 
     return serialized
   }
